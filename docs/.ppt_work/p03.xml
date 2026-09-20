@@ -1,0 +1,66 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="32" width="828" height="52">
+      <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">开发里程碑（M0 – M5）</p>
+      </content>
+    </shape>
+    <line startX="66" startY="88" endX="160" endY="88">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+    <table topLeftX="66" topLeftY="104" width="828" height="380">
+      <colgroup>
+        <col width="150"/>
+        <col width="360"/>
+        <col width="318"/>
+      </colgroup>
+      <tr height="36">
+        <td>
+          <fill><fillColor color="rgba(79,70,229,1)"/></fill>
+          <content textType="body" fontSize="14" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>里程碑</p></content>
+        </td>
+        <td>
+          <fill><fillColor color="rgba(79,70,229,1)"/></fill>
+          <content textType="body" fontSize="14" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>内容</p></content>
+        </td>
+        <td>
+          <fill><fillColor color="rgba(79,70,229,1)"/></fill>
+          <content textType="body" fontSize="14" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>完成的硬标准（Definition of Done）</p></content>
+        </td>
+      </tr>
+      <tr height="56">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>M0 跑起来</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>下载 pose_landmarker_full.task + .wasm 放本地；静态托管 frontend_dis/；摄像头点亮</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>浏览器里出画面，控制台无报错</p></content></td>
+      </tr>
+      <tr height="56">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>M1 出数据</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>MediaPipe Tasks PoseLandmarker 放 Web Worker + GPU delegate；拿到 33 world landmarks</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>每帧能打印 33 个 (x,y,z)</p></content></td>
+      </tr>
+      <tr height="64">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>M2 归一化</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>写 contract.js（§2 骨骼索引 + §1 坐标轴标定），把 landmark 转成 9 条骨骼单位向量</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>标定测试：右手抬起 → upper_arm_r 的 y 变大；转身/侧身不镜像</p></content></td>
+      </tr>
+      <tr height="50">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>M3 画火柴人</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>2D canvas 画 9 条骨骼连线</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>30fps 不卡，画面跟手</p></content></td>
+      </tr>
+      <tr height="56">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>M4 消抖</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>加一个轻量滤波（EMA 或 One Euro），别用重 Kalman</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>肉眼：手静止时线不抖，挥手时线不"拖尾巴"</p></content></td>
+      </tr>
+      <tr height="62">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>M5 发布接口</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>暴露 startPoseStream({ onFrame })，产出契约 §3 帧</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>队友能拿到一帧 {t, bones, rootYaw, conf}</p></content></td>
+      </tr>
+    </table>
+  </data>
+</slide>

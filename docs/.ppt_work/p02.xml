@@ -1,0 +1,18 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="36" width="828" height="56">
+      <content textType="headline" fontSize="36" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">整体思路</p>
+      </content>
+    </shape>
+    <line startX="66" startY="98" endX="160" endY="98">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+    <img src="QgcpbLbhWoquLQx42dycx84SnLd" topLeftX="340" topLeftY="92" width="280" height="416">
+      <crop leftOffset="0" rightOffset="0" topOffset="0" bottomOffset="0"/>
+    </img>
+  </data>
+</slide>

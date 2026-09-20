@@ -1,0 +1,58 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="32" width="828" height="52">
+      <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">MediaPipe 媒体管道</p>
+      </content>
+    </shape>
+    <line startX="66" startY="88" endX="160" endY="88">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+    <shape type="text" topLeftX="66" topLeftY="108" width="490" height="380">
+      <content textType="body" fontSize="15" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left" lineSpacing="multiple:1.5">
+        <ul>
+          <li><p><strong>pose_landmarker_full.task（8.96 MB）</strong>：Google MediaPipe 官方的"人体姿态检测"模型。</p></li>
+          <li><p><strong>MediaPipe</strong>：Google 的"设备端 AI"框架，专门做轻量、能在浏览器/手机本地跑的模型。</p></li>
+          <li><p><strong>底层叫 BlazePose</strong>：Google 专门为人体姿态设计的神经网络。</p></li>
+          <li><p><strong>.task 是一种打包格式</strong>：把模型本身 + 输入输出规格 + 元数据打成一个文件，浏览器里用 WebAssembly + WebGL 就能加载运行，不需要服务器、不需要 Python。</p></li>
+          <li><p><strong>它干一件事</strong>：输入一张图片（或一帧视频），输出人体上的 33 个关键点。</p></li>
+        </ul>
+      </content>
+    </shape>
+    <shape type="text" topLeftX="590" topLeftY="118" width="310" height="30">
+      <content textType="body" fontSize="15" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left">
+        <p>三个档位对比</p>
+      </content>
+    </shape>
+    <table topLeftX="590" topLeftY="156" width="310" height="200">
+      <colgroup>
+        <col width="120"/>
+        <col width="80"/>
+        <col width="110"/>
+      </colgroup>
+      <tr height="38">
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>版本</p></content></td>
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="center"><p>大小</p></content></td>
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>特点</p></content></td>
+      </tr>
+      <tr height="54">
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>lite</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="center"><p>~5 MB</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>快，精度低</p></content></td>
+      </tr>
+      <tr height="54">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" bold="true" color="rgba(30,27,75,1)" textAlign="left"><p>full（当前）</p></content></td>
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" bold="true" color="rgba(30,27,75,1)" textAlign="center"><p>~9 MB</p></content></td>
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" bold="true" color="rgba(30,27,75,1)" textAlign="left"><p>精度/速度平衡</p></content></td>
+      </tr>
+      <tr height="54">
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>heavy</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="center"><p>~26 MB</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>最准，最慢</p></content></td>
+      </tr>
+    </table>
+  </data>
+</slide>

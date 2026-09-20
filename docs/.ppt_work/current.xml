@@ -1,0 +1,853 @@
+<presentation id="W808sg1FXlvm5kdaZcycwqojnqf" xmlns="https://www.larkoffice.com/sml/2.0" width="960" height="540">
+  <title>笔记</title>
+  <theme>
+    <background>
+      <fillColor color="rgba(255, 255, 255, 1)"/>
+    </background>
+    <textStyles>
+      <headline fontColor="rgba(31, 35, 41, 1)"/>
+      <sub-headline fontColor="rgba(31, 35, 41, 1)"/>
+      <body fontColor="rgba(31, 35, 41, 1)"/>
+      <caption fontColor="rgba(155, 158, 162, 1)" fontSize="14"/>
+    </textStyles>
+  </theme>
+  <slide id="pQQ">
+    <style>
+      <fill id="fQQ">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="720" height="188" topLeftX="120" topLeftY="88.37503937007875" type="text" id="bjj">
+        <content verticalAlign="bottom" textType="headline" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="60" fontFamily="Calibri" color="rgba(0, 0, 0, 1)" bold="false" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="center" defaultTabSize="72">
+          <p textAlign="center" lineSpacing="multiple:1.1" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="60" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">AI Dance</span></p>
+        </content>
+      </shape>
+      <shape width="720" height="130.37496062992125" topLeftX="120" topLeftY="283.62503937007875" type="text" id="bjn">
+        <content verticalAlign="top" textType="sub-headline" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="24" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="false" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="center" autoFit="normal-auto-fit" defaultTabSize="72"/>
+      </shape>
+    </data>
+  </slide>
+  <slide id="pQE">
+    <style>
+      <fill id="fQE">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="104.37503937007874" topLeftX="66" topLeftY="28.750000000000007" type="text" id="bjv">
+        <content textType="headline" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="44" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="false" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="left" autoFit="normal-auto-fit" defaultTabSize="72">
+          <p textAlign="left" lineSpacing="multiple:1.1" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="44" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">思路</span></p>
+        </content>
+      </shape>
+      <img id="bje" src="QgcpbLbhWoquLQx42dycx84SnLd" width="342.3955118110236" height="508.20732283464565" topLeftX="232.6587401574803" topLeftY="28.75">
+        <crop leftOffset="0" rightOffset="0" topOffset="0" bottomOffset="0"/>
+      </img>
+    </data>
+  </slide>
+  <slide id="pQx">
+    <style>
+      <fill id="fQx">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="104.37503937007874" topLeftX="66" topLeftY="28.750000000000007" type="text" id="bjt">
+        <content textType="headline" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="44" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="false" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="left" autoFit="normal-auto-fit" defaultTabSize="72"/>
+      </shape>
+      <table id="bjz" width="828" height="294.66647919010126" topLeftX="66" topLeftY="192.48496062992126">
+        <colgroup>
+          <col span="1" width="267.6992125984252"/>
+          <col span="2" width="280.1503937007874"/>
+        </colgroup>
+        <tr height="35.02215973003375">
+          <td id="bjU">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">里程碑</span></p>
+            </content>
+          </td>
+          <td id="bjh">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">内容</span></p>
+            </content>
+          </td>
+          <td id="bjS">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">完成的硬标准(Definition of Done)</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="47.4">
+          <td id="bjA">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">M0 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">跑起来</span></p>
+            </content>
+          </td>
+          <td id="bji">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">下载 </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">pose_landmarker_full.task</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> + </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">.wasm</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">放本地</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">;</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">静态托管</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">frontend_dis/</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">;</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">摄像头点亮</span></p>
+            </content>
+          </td>
+          <td id="bjr">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">浏览器里出画面,控制台无报错</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="47.4">
+          <td id="bjO">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">M1 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">出数据</span></p>
+            </content>
+          </td>
+          <td id="bjQ">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">MediaPipe Tasks </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">PoseLandmarker</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">放</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> Web Worker + GPU delegate;</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">拿到</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 33 world landmarks</span></p>
+            </content>
+          </td>
+          <td id="bjX">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">每帧能打印 33 个 (x,y,z)</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="47.4">
+          <td id="bjM">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">M2 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">归一化</span></p>
+            </content>
+          </td>
+          <td id="bjd">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">写 </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">contract.js</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">§</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">2 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">骨骼索引</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> + </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">§</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">1 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">坐标轴标定</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">),</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">把</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> landmark </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">转成</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 9 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">条骨骼单位向量</span></p>
+            </content>
+          </td>
+          <td id="bjm">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">标定测试:右手抬起 → </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">upper_arm_r</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">的</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> y </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">变大</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">;</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">转身</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">/</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">侧身不镜像</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="35.02215973003375">
+          <td id="bjN">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">M3 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">画火柴人</span></p>
+            </content>
+          </td>
+          <td id="bjV">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">2D canvas </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">画</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 9 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">条骨骼连线</span></p>
+            </content>
+          </td>
+          <td id="bjW">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">30fps </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">不卡</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">画面跟手</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="35.02215973003375">
+          <td id="bjx">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">M4 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">消抖</span></p>
+            </content>
+          </td>
+          <td id="bjs">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">加一个轻量滤波(EMA 或 One Euro),别用重 Kalman</span></p>
+            </content>
+          </td>
+          <td id="bjc">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">肉眼:手静止时线不抖,挥手时线不&quot;拖尾巴&quot;</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="47.4">
+          <td id="bja">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">M5 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">发布接口</span></p>
+            </content>
+          </td>
+          <td id="bjy">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">暴露 </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">startPoseStream({ onFrame })</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">产出契约</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">§</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">3 </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">帧</span></p>
+            </content>
+          </td>
+          <td id="bjI">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">队友能拿到一帧 </span><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">{t, bones, rootYaw, conf}</span></p>
+            </content>
+          </td>
+        </tr>
+      </table>
+    </data>
+  </slide>
+  <slide id="pQt">
+    <style>
+      <fill id="fQt">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <img id="bjF" src="RtbFbWN9HoYMO1xognJcJs2gnMb" width="330.01692913385824" height="237.51220472440946" topLeftX="27.456062992125993" topLeftY="32.48779527559054">
+        <crop leftOffset="0" rightOffset="0" topOffset="0" bottomOffset="0"/>
+      </img>
+      <shape width="372.8812598425197" height="50.892204724409446" topLeftX="476.12905511811016" topLeftY="103.58708661417322" type="text" id="bjE">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)" textAlign="left" autoFit="shape-auto-fit" wrap="false">
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">pose_landmarker_full.task(8.96 MB)</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">是</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false">Google MediaPipe </span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" italic="false" strikethrough="false" underline="false">官方的</span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false">&quot;</span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" italic="false" strikethrough="false" underline="false">人体姿态检测</span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false">&quot;</span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" italic="false" strikethrough="false" underline="false">模型</span></strong></p>
+        </content>
+      </shape>
+      <shape width="1233.751811023622" height="181.75779527559055" topLeftX="494.70968503937" topLeftY="196.02582677165356" type="text" id="bjw">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)" textAlign="left" autoFit="shape-auto-fit" wrap="false">
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false">MediaPipe</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> = Google </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">的</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">设备端</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> AI&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">框架</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">专门做轻量、能在浏览器</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">/</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">手机本地跑的模型。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">这个模型的底层叫 </span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false">BlazePose</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">——Google </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">专门为</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">人体姿态</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">设计的神经网络。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">.task </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">是一种打包格式</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">把模型本身</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> + </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">输入输出规格</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> + </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">元数据打成一个文件</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">浏览器里用</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> WebAssembly + WebGL </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">就能加载运行</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">不需要服务器、不需要 Python</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">它干一件事</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">输入一张图片</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">或一帧视频</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">),</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">输出人体上的</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 33 </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">个关键点。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"/>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">它有三个档位</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">：</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"/>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span></p>
+        </content>
+      </shape>
+      <table id="bjk" width="409.08377952755905" height="159.94692913385825" topLeftX="527.6902362204725" topLeftY="330.58228346456696">
+        <colgroup>
+          <col span="1" width="132.26015748031497"/>
+          <col span="2" width="138.41181102362205"/>
+        </colgroup>
+        <tr height="39.914566929133855">
+          <td id="bjG">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">版本</span></p>
+            </content>
+          </td>
+          <td id="bjT">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">大小</span></p>
+            </content>
+          </td>
+          <td id="bjp">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">特点</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="40.0107874015748">
+          <td id="bjK">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">lite</span></p>
+            </content>
+          </td>
+          <td id="bjL">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">~5 MB</span></p>
+            </content>
+          </td>
+          <td id="bjP">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">快,精度低</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="40.0107874015748">
+          <td id="bjJ">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">full(</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">你现在用的</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">)</span></p>
+            </content>
+          </td>
+          <td id="bjb">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">~9 MB</span></p>
+            </content>
+          </td>
+          <td id="bjC">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">精度/速度平衡</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="40.0107874015748">
+          <td id="bjf">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">heavy</span></p>
+            </content>
+          </td>
+          <td id="bjR">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">~26 MB</span></p>
+            </content>
+          </td>
+          <td id="bjq">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">最准,最慢</span></p>
+            </content>
+          </td>
+        </tr>
+      </table>
+    </data>
+  </slide>
+  <slide id="pQM">
+    <style>
+      <fill id="fQM">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <table id="bjZ" width="828" height="86.1" topLeftX="66" topLeftY="381.4312598425197">
+        <colgroup>
+          <col span="1" width="267.6992125984252"/>
+          <col span="2" width="280.1503937007874"/>
+        </colgroup>
+        <tr height="28.7">
+          <td id="bnn">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">类型</span></p>
+            </content>
+          </td>
+          <td id="bne">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">坐标</span></p>
+            </content>
+          </td>
+          <td id="bjH">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">含义</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="28.7">
+          <td id="bju">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">landmarks</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">归一化</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">)</span></p>
+            </content>
+          </td>
+          <td id="bjB">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">x,y ∈ [0,1],z </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">是相对值</span></p>
+            </content>
+          </td>
+          <td id="bnj">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">贴在 2D 画面上的位置</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="28.7">
+          <td id="bnv">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="9.75" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">worldLandmarks</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">世界坐标</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">)</span></p>
+            </content>
+          </td>
+          <td id="bnC">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">x,y,z </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">单位是米</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">原点在髋中点</span></p>
+            </content>
+          </td>
+          <td id="bjl">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">模型估计的&quot;真实 3D 姿态&quot;</span></p>
+            </content>
+          </td>
+        </tr>
+      </table>
+      <shape width="480.07732283464566" height="377.96535433070864" topLeftX="59.8064566929134" topLeftY="48.61732283464568" type="text" id="bjY">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)" textAlign="left" autoFit="shape-auto-fit">
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:24.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false">33 </span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" italic="false" strikethrough="false" underline="false">个</span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" italic="false" strikethrough="false" underline="false"> world landmark </span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" italic="false" strikethrough="false" underline="false">从哪来、代表什么</span></strong></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">代表什么</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:33 </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">个点是人体解剖位置</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">——</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">鼻子、眼睛、耳朵、肩膀、手肘、手腕、指尖、髋、膝盖、脚踝、脚。每个点有固定编号</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(0–32),</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">比如右肩</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> = 12</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">、右肘</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> = 14</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">、右腕</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> = 16</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">从哪来</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">——</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">分两步</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span></p>
+          <ol listStyle="arabic-period">
+            <li>
+              <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginLeft="27" marginRight="0" indent="-27" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">先找人在哪</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">一个</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">人体检测器</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">在画面里框出这个人</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">;</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:4.50" afterLineSpacing="fixed:12.00" marginLeft="27" marginRight="0" indent="-27" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">再在框里估 33 个点</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">另一个网络在这个人身上回归出</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 33 </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">个关键点的位置。</span></p>
+            </li>
+          </ol>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">关键点来了:同一个模型输出&quot;两套坐标&quot;:</span></strong></p>
+        </content>
+      </shape>
+      <shape width="343.741968503937" height="142.9828346456693" topLeftX="589.9355118110236" topLeftY="71.11244094488188" type="text" id="bjg">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)" textAlign="left" autoFit="shape-auto-fit">
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">单目摄像头只能拍到 2D,模型怎么给出&quot;米&quot;为单位的 3D?</span></strong></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">答案是:BlazePose 内部套了一个</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">统计人体模型(GHUM)</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">。它被喂过海量的真人</span><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 3D </span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">动捕数据</span><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">学会了</span><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">一个合理的人体</span><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 3D </span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">姿势长什么样</span><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">所以它拿到 2D 的点之后,会</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">把这些 2D 点&apos;抬&apos;到 3D</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">即拟合到一个它认为最可能的人体</span><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 3D </span><span color="rgba(0, 0, 0, 1)" fontSize="14" bold="false" italic="false" strikethrough="false" underline="false">姿态上。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="14" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span></p>
+        </content>
+      </shape>
+    </data>
+  </slide>
+  <slide id="pQV">
+    <style>
+      <fill id="fQV">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="104.37503937007874" topLeftX="66" topLeftY="28.750000000000007" type="text" id="bjD">
+        <content textType="headline" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="44" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="false" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="left" autoFit="normal-auto-fit" defaultTabSize="72">
+          <p textAlign="left" lineSpacing="multiple:1.1" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="44" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">归一化</span></p>
+        </content>
+      </shape>
+      <shape width="828" height="342.62503937007875" topLeftX="66" topLeftY="143.75" type="text" id="bjo">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="19.600000381469727" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="true" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:0.7" textAlign="left" autoFit="normal-auto-fit" defaultTabSize="72">
+          <ul listStyle="pptx-bullet">
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">什么是&quot;归一化&quot;</span></strong></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">归一化</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">在这里有具体含义</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">把原始坐标,变成&quot;骨骼方向单位向量&quot;</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">举个具体例子,upper_arm_r(右肩→右肘):</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">原始数据:右肩坐标 (0.3, 1.4, -0.2),右肘 (0.35, 1.1, -0.18)——这些是&quot;米&quot;为单位的绝对位置。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">算向量:右肘 − 右肩 = (0.05, −0.3, 0.02)。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">除以这个向量的长度</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">得到长度为</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 1 </span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">的向量</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">单位向量</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">)</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">为什么要做第 3 步?因为它让数据获得</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">两个关键的不变性</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">平移不变</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">两个人相减</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">消掉了</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">人站在画面哪个位置</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">的影响。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">缩放不变</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">除以长度</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">消掉了</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">人高矮、离镜头远近</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">的影响。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">结果就是:</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">一个 1.9 米的人、站得近,和一个 1.6 米的人、站得远,只要做同样的挥手动作,</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">upper_arm_r</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" italic="false" strikethrough="false" underline="false"> </span></strong><strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" italic="false" strikethrough="false" underline="false">这个向量几乎一样</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">。评分就能公平地比</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">动作像不像</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;,</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">而不是比</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">谁站得近、谁长得高</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="19.6" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" marginLeft="18" indent="-18" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">一句话:归一化 = 把&quot;绝对位置(会被身高、距离污染)&quot;转成&quot;骨骼指向(只看姿势)&quot;。</span></p>
+            </li>
+          </ul>
+          <p textAlign="left" lineSpacing="multiple:0.7" beforeLineSpacing="fixed:10.00" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="19.6" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> </span></p>
+        </content>
+      </shape>
+    </data>
+  </slide>
+  <slide id="pQo">
+    <style>
+      <fill id="fQo">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <table id="bnF" width="636.348346456693" height="114.8" topLeftX="57.17417322834643" topLeftY="409.10330708661417">
+        <colgroup>
+          <col span="1" width="205.73669291338584"/>
+          <col span="2" width="215.30582677165356"/>
+        </colgroup>
+        <tr height="28.7">
+          <td id="bnR">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">轴</span></p>
+            </content>
+          </td>
+          <td id="bnb">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">MediaPipe </span><span color="rgba(0, 0, 0, 1)" fontSize="11.25" bold="false" italic="false" strikethrough="false" underline="false">原始</span></p>
+            </content>
+          </td>
+          <td id="bnW">
+            <borderTop color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">我们想要的(Canonical)</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="28.7">
+          <td id="bnf">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">y</span></p>
+            </content>
+          </td>
+          <td id="bnE">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">朝下(所以手臂下垂时 y≈+0.9)</span></p>
+            </content>
+          </td>
+          <td id="bnJ">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">朝上</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="28.7">
+          <td id="bnK">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">x</span></p>
+            </content>
+          </td>
+          <td id="bnP">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">朝表演者左侧</span></p>
+            </content>
+          </td>
+          <td id="bnp">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">朝表演者右侧</span></p>
+            </content>
+          </td>
+        </tr>
+        <tr height="28.7">
+          <td id="bnk">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderLeft color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingLeft="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">z</span></p>
+            </content>
+          </td>
+          <td id="bnw">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">朝远离镜头</span></p>
+            </content>
+          </td>
+          <td id="bnq">
+            <borderRight color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <borderBottom color="rgba(255, 255, 255, 1)" lineJoin="miter" miterLimit="10"/>
+            <fill>
+              <fillColor color="rgba(233, 236, 246, 1)"/>
+            </fill>
+            <content paddingTop="5" paddingBottom="5" paddingRight="7.2" fontSize="14" fontFamily="思源黑体" textAlign="left">
+              <p textAlign="left" lineSpacing="multiple:1.7" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="11.25" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">朝镜头</span></p>
+            </content>
+          </td>
+        </tr>
+      </table>
+      <shape width="831.5999212598425" height="366.14102362204727" topLeftX="48.1935433070866" topLeftY="22.781574803149596" type="text" id="bnT">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)" textAlign="left" autoFit="shape-auto-fit">
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:24.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">什么是&quot;标定&quot;,为什么要&quot;锁定&quot;</span></strong></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">归一化解决了&quot;长度/位置&quot;的问题,但还剩一个更隐蔽的问题:</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">方向</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">我们做实验发现:MediaPipe 给出来的原始世界坐标,它的 x、y、z 三个轴的方向和我们想要的是</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">全反的</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">标定</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">就是</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">通过物理实验</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">抬右手、伸右手</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">),</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">确定每个轴到底朝哪</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">,</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">然后把需要翻转的轴记录下来。</span></p>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">锁定</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">就是</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">把</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> {x:-1, y:-1, z:-1} </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">写进</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">唯一一个地方</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(contract.js </span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">的</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> AXIS_FLIP),</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">并且约定</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">:</span></p>
+          <ul listStyle="pptx-bullet">
+            <li>
+              <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginLeft="27" marginRight="0" indent="-27" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">你的实时管线用这个翻转;</span></p>
+            </li>
+            <li>
+              <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:4.50" afterLineSpacing="fixed:12.00" marginLeft="27" marginRight="0" indent="-27" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">队友的离线参考管线</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">也必须用同样的翻转</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+            </li>
+          </ul>
+          <p textAlign="left" lineSpacing="multiple:1.2" beforeLineSpacing="fixed:12.00" afterLineSpacing="fixed:12.00" marginRight="0" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">为什么必须&quot;锁定&quot;?因为如果两边不统一,你抬右手,在评分系统看来是&quot;抬左手还往下&quot;,</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">评分直接全错</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">。所以标定不是</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">调对了就行</span><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;,</span><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">而是要固化成一条</span><strong><span color="rgba(0, 0, 0, 1)" fontSize="18" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">双方都必须遵守的合同条款</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="18" bold="false" italic="false" strikethrough="false" underline="false">。</span></p>
+        </content>
+      </shape>
+    </data>
+  </slide>
+  <slide id="pQu">
+    <style>
+      <fill id="fQu">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="104.37503937007874" topLeftX="66" topLeftY="28.750000000000007" type="text" id="bnL">
+        <content textType="headline" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="44" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="false" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="left" autoFit="normal-auto-fit" defaultTabSize="72">
+          <p textAlign="left" lineSpacing="multiple:1.1" defaultTabSize="72"><span color="rgba(0, 0, 0, 1)" fontSize="44" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">以上工作：</span></p>
+        </content>
+      </shape>
+      <shape width="828" height="342.62503937007875" topLeftX="66" topLeftY="143.75" type="text" id="bnG">
+        <content verticalAlign="top" paddingTop="3.6" paddingBottom="3.6" paddingLeft="7.2" paddingRight="7.2" fontSize="28" fontFamily="思源黑体" color="rgba(0, 0, 0, 1)" bold="true" italic="false" underline="false" strikethrough="false" lineSpacing="multiple:1.1" textAlign="left" autoFit="normal-auto-fit" defaultTabSize="72">
+          <p textAlign="left" lineSpacing="multiple:1.1" beforeLineSpacing="fixed:10.00" defaultTabSize="72"><strong><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">模型</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">(Google </span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">的</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> BlazePose)</span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">从</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 2D </span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">画面</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">猜</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false">&quot;</span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">出</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 33 </span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">个</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> 3D </span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">点</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> → </span><span color="rgba(0, 0, 0, 1)" fontSize="28" bold="false" italic="false" strikethrough="false" underline="false">我们取其中一部分算骨骼</span><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="Calibri" bold="false" italic="false" strikethrough="false" underline="false"> → </span><strong><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">标定</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">统一坐标轴方向 → </span><strong><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="微软雅黑" italic="false" strikethrough="false" underline="false">归一化</span></strong><span color="rgba(0, 0, 0, 1)" fontSize="28" fontFamily="微软雅黑" bold="false" italic="false" strikethrough="false" underline="false">把每根骨头压成单位向量 → 得到一份&quot;只看姿势、不受身高距离朝向影响&quot;的契约帧。</span></p>
+        </content>
+      </shape>
+    </data>
+  </slide>
+</presentation>

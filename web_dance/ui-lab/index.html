@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HIT LAB — 命中判定动效实验台</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <canvas id="fx"></canvas>
+
+    <div id="shake-layer">
+      <header id="topbar">
+        <div id="logo">HIT<span>LAB</span></div>
+        <div id="subtitle">命中判定动效实验台 · 音游手感样板 · 调参 → 复制配方 → 回填</div>
+        <div id="top-actions">
+          <a class="btn ghost sm" href="../index.html">← 回主页面</a>
+        </div>
+      </header>
+
+      <div id="workspace">
+        <main id="lab">
+          <div id="judge-zone">
+            <div id="hit-stage">
+              <div id="hit-glow"></div>
+              <div id="hit-circle"></div>
+            </div>
+            <div id="combo-box">
+              <span id="combo-num">0</span>
+              <span id="combo-label">COMBO</span>
+              <div id="heat">热度 ×1.00</div>
+            </div>
+          </div>
+
+          <div id="fire-bar">
+            <button class="grade-btn gold" data-grade="perfect">PERFECT</button>
+            <button class="grade-btn cyan" data-grade="great">GREAT</button>
+            <button class="grade-btn red" data-grade="miss">MISS</button>
+            <span class="sep"></span>
+            <button id="btn-auto" class="btn ghost sm">自动连打</button>
+            <button id="btn-reset" class="btn ghost sm">重置</button>
+          </div>
+          <div id="hint">按键 P / G / M 触发判定 · 空格 自动连打</div>
+        </main>
+
+        <aside id="tuner">
+          <h3>配方参数</h3>
+          <div class="field">
+            <label>Juice 总控 <b id="v-juice"></b></label>
+            <input type="range" id="p-juice" min="0" max="10" step="0.5" />
+          </div>
+          <div class="field">
+            <label>震屏 <b id="v-shakeMul"></b></label>
+            <input type="range" id="p-shakeMul" min="0" max="2" step="0.1" />
+          </div>
+          <div class="field">
+            <label>hit-stop <b id="v-hitStopMul"></b></label>
+            <input type="range" id="p-hitStopMul" min="0" max="2" step="0.1" />
+          </div>
+          <div class="field">
+            <label>火花 <b id="v-sparksMul"></b></label>
+            <input type="range" id="p-sparksMul" min="0" max="2" step="0.1" />
+          </div>
+          <div class="field">
+            <label>冲击波尺寸 <b id="v-ringMul"></b></label>
+            <input type="range" id="p-ringMul" min="0.6" max="1.6" step="0.05" />
+          </div>
+          <div class="field">
+            <label>里程碑间隔 <b id="v-milestone"></b></label>
+            <input type="range" id="p-milestone" min="5" max="50" step="5" />
+          </div>
+          <button id="copy-recipe" class="btn primary block">复制配方</button>
+          <pre id="recipe-out"></pre>
+        </aside>
+      </div>
+
+      <div id="judge-text"></div>
+    </div>
+
+    <div id="toast" class="hidden">已复制配方</div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

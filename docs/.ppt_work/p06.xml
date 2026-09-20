@@ -1,0 +1,41 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="32" width="828" height="52">
+      <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">归一化</p>
+      </content>
+    </shape>
+    <line startX="66" startY="88" endX="160" endY="88">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+    <shape type="text" topLeftX="66" topLeftY="104" width="470" height="380">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left" lineSpacing="multiple:1.5">
+        <p><strong>什么是"归一化"</strong>：把原始坐标，变成"骨骼方向单位向量"。</p>
+        <p><strong>举个具体例子，upper_arm_r（右肩→右肘）：</strong></p>
+        <ol>
+          <li><p>原始数据：右肩 (0.3, 1.4, -0.2)，右肘 (0.35, 1.1, -0.18)——这些是"米"为单位的绝对位置；</p></li>
+          <li><p>算向量：右肘 − 右肩 = (0.05, -0.3, 0.02)；</p></li>
+          <li><p>除以这个向量的长度，得到长度为 1 的向量（单位向量）。</p></li>
+        </ol>
+      </content>
+    </shape>
+    <shape type="rect" topLeftX="560" topLeftY="104" width="334" height="380">
+      <fill><fillColor color="rgba(238,242,255,1)"/></fill>
+      <border color="rgba(199,210,254,1)" width="1"/>
+    </shape>
+    <shape type="text" topLeftX="578" topLeftY="118" width="298" height="352">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left" lineSpacing="multiple:1.5">
+        <p><strong>为什么要做第 3 步？</strong>因为它让数据获得两个关键的不变性：</p>
+        <ul>
+          <li><p><strong>平移不变</strong>：两个人相减，消掉了"人站在画面哪个位置"的影响。</p></li>
+          <li><p><strong>缩放不变</strong>：除以长度，消掉了"人高矮、离镜头远近"的影响。</p></li>
+        </ul>
+        <p>结果就是：一个 1.9 米的人站得近，和一个 1.6 米的人站得远，只要做同样的挥手动作，upper_arm_r 这个向量几乎一样。评分就能公平地比"动作像不像"，而不是比"谁站得近、谁长得高"。</p>
+        <p><strong>一句话</strong>：归一化 = 把"绝对位置（会被身高、距离污染）"转成"骨骼指向（只看姿势）"。</p>
+      </content>
+    </shape>
+  </data>
+</slide>

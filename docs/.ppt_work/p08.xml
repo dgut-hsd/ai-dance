@@ -1,0 +1,75 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="36" width="828" height="52">
+      <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">技术链路总结</p>
+      </content>
+    </shape>
+    <line startX="66" startY="92" endX="160" endY="92">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+
+    <shape type="rect" topLeftX="40" topLeftY="180" width="150" height="130" presetHandlers="12">
+      <fill><fillColor color="rgba(238,242,255,1)"/></fill>
+      <border color="rgba(199,210,254,1)" width="1"/>
+    </shape>
+    <shape type="text" topLeftX="50" topLeftY="198" width="130" height="100">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="center" lineSpacing="multiple:1.3">
+        <p textAlign="center"><strong>① BlazePose</strong></p>
+        <p textAlign="center"><span fontSize="12" color="rgba(71,85,105,1)">从 2D 画面"猜"出 33 个 3D 点</span></p>
+      </content>
+    </shape>
+
+    <shape type="rect" topLeftX="210" topLeftY="180" width="150" height="130" presetHandlers="12">
+      <fill><fillColor color="rgba(238,242,255,1)"/></fill>
+      <border color="rgba(199,210,254,1)" width="1"/>
+    </shape>
+    <shape type="text" topLeftX="220" topLeftY="198" width="130" height="100">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="center" lineSpacing="multiple:1.3">
+        <p textAlign="center"><strong>② 取骨骼</strong></p>
+        <p textAlign="center"><span fontSize="12" color="rgba(71,85,105,1)">取其中一部分算骨骼</span></p>
+      </content>
+    </shape>
+
+    <shape type="rect" topLeftX="380" topLeftY="180" width="150" height="130" presetHandlers="12">
+      <fill><fillColor color="rgba(238,242,255,1)"/></fill>
+      <border color="rgba(199,210,254,1)" width="1"/>
+    </shape>
+    <shape type="text" topLeftX="390" topLeftY="198" width="130" height="100">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="center" lineSpacing="multiple:1.3">
+        <p textAlign="center"><strong>③ 标定轴向</strong></p>
+        <p textAlign="center"><span fontSize="12" color="rgba(71,85,105,1)">统一坐标轴方向</span></p>
+      </content>
+    </shape>
+
+    <shape type="rect" topLeftX="550" topLeftY="180" width="150" height="130" presetHandlers="12">
+      <fill><fillColor color="rgba(238,242,255,1)"/></fill>
+      <border color="rgba(199,210,254,1)" width="1"/>
+    </shape>
+    <shape type="text" topLeftX="560" topLeftY="198" width="130" height="100">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="center" lineSpacing="multiple:1.3">
+        <p textAlign="center"><strong>④ 归一化</strong></p>
+        <p textAlign="center"><span fontSize="12" color="rgba(71,85,105,1)">每根骨头压成单位向量</span></p>
+      </content>
+    </shape>
+
+    <shape type="rect" topLeftX="720" topLeftY="180" width="200" height="130" presetHandlers="12">
+      <fill><fillColor color="rgba(79,70,229,1)"/></fill>
+    </shape>
+    <shape type="text" topLeftX="732" topLeftY="198" width="176" height="100">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(255,255,255,1)" textAlign="center" lineSpacing="multiple:1.3">
+        <p textAlign="center"><strong>⑤ 契约帧</strong></p>
+        <p textAlign="center"><span fontSize="12" color="rgba(224,231,255,1)">只看姿势，不受身高/距离/朝向影响</span></p>
+      </content>
+    </shape>
+
+    <shape type="text" topLeftX="80" topLeftY="380" width="800" height="90">
+      <content textType="body" fontSize="15" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="center" lineSpacing="multiple:1.5">
+        <p textAlign="center">模型（Google 的 BlazePose）从 2D 画面"猜"出 33 个 3D 点 → 我们取其中一部分算骨骼 → 标定统一坐标轴方向 → 归一化把每根骨头压成单位向量 → 得到一份"只看姿势、不受身高距离朝向影响"的契约帧。</p>
+      </content>
+    </shape>
+  </data>
+</slide>

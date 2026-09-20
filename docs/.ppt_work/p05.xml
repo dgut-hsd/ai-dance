@@ -1,0 +1,57 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="30" width="828" height="50">
+      <content textType="headline" fontSize="30" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">33 个 World Landmark 从哪来、代表什么</p>
+      </content>
+    </shape>
+    <line startX="66" startY="84" endX="160" endY="84">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+    <shape type="text" topLeftX="66" topLeftY="100" width="470" height="250">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left" lineSpacing="multiple:1.45">
+        <p><strong>代表什么</strong>：33 个点是人体解剖位置——鼻子、眼睛、耳朵、肩膀、手肘、手腕、指尖、髋、膝盖、脚踝、脚。每个点有固定编号（0–32），比如右肩 = 12、右肘 = 14、右腕 = 16。</p>
+        <p><strong>从哪来——分两步</strong>：</p>
+        <ol>
+          <li><p>先找人在哪：一个"人体检测器"在画面里框出这个人；</p></li>
+          <li><p>再在框里估 33 个点：另一个网络在这个人身上回归出 33 个关键点的位置。</p></li>
+        </ol>
+      </content>
+    </shape>
+    <shape type="rect" topLeftX="560" topLeftY="100" width="334" height="250">
+      <fill><fillColor color="rgba(238,242,255,1)"/></fill>
+      <border color="rgba(199,210,254,1)" width="1"/>
+    </shape>
+    <shape type="text" topLeftX="578" topLeftY="114" width="298" height="224">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left" lineSpacing="multiple:1.45">
+        <p><strong>单目摄像头只能拍到 2D，模型怎么给出"米"为单位的 3D？</strong></p>
+        <p>答案是：BlazePose 内部套了一个统计人体模型（GHUM）。它被喂过海量的真人 3D 动捕数据，学会了"一个合理的人体 3D 姿势长什么样"。所以它拿到 2D 的点之后，会把这些 2D 点"抬"到 3D，即拟合到一个它认为最可能的人体 3D 姿态上。</p>
+      </content>
+    </shape>
+    <table topLeftX="66" topLeftY="368" width="828" height="110">
+      <colgroup>
+        <col width="220"/>
+        <col width="290"/>
+        <col width="318"/>
+      </colgroup>
+      <tr height="38">
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>类型</p></content></td>
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>坐标</p></content></td>
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>含义</p></content></td>
+      </tr>
+      <tr height="36">
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>landmarks（归一化）</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>x,y ∈ [0,1]，z 是相对值</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>贴在 2D 画面上的位置</p></content></td>
+      </tr>
+      <tr height="36">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>worldLandmarks（世界坐标）</p></content></td>
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>x,y,z 单位是米，原点在髋中点</p></content></td>
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(30,27,75,1)" textAlign="left"><p>模型估计的"真实 3D 姿态"</p></content></td>
+      </tr>
+    </table>
+  </data>
+</slide>

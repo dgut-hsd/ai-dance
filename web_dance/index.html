@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DANCE ARENA — 3D 舞蹈动捕</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+    <canvas id="fx"></canvas>
+
+    <!-- 顶栏 -->
+    <header id="topbar">
+      <div id="logo">DANCE<span>ARENA</span></div>
+      <nav id="modes">
+        <button data-mode="free" class="mode-btn active">自由模式</button>
+        <button data-mode="challenge" class="mode-btn">舞蹈挑战</button>
+      </nav>
+      <div id="statusbar">
+        <span id="status">初始化…</span>
+        <span id="fps">-- FPS</span>
+        <span id="delegate"></span>
+      </div>
+    </header>
+
+    <!-- 初始菜单:选舞者 -->
+    <div id="menu" class="overlay">
+      <h1 class="menu-title">选择你的<span>舞者</span></h1>
+      <p class="menu-sub">加载 FBX / GLB 人形模型,或使用内置示例舞者</p>
+      <div class="menu-row">
+        <button id="use-default" class="btn primary lg">使用默认舞者</button>
+        <label class="btn lg">
+          加载本地 FBX / GLB
+          <input type="file" id="model-file" accept=".glb,.gltf,.fbx" hidden />
+        </label>
+      </div>
+      <p id="model-hint">默认舞者来自 three.js 官方示例(需联网)。本地建议用 .glb 或 .fbx,也支持 ReadyPlayerMe 角色。</p>
+      <p id="menu-status" class="menu-status"></p>
+    </div>
+
+    <!-- 游戏 HUD -->
+    <div id="hud" class="hidden">
+      <!-- 左下:摄像头 -->
+      <div id="cam-panel" class="panel">
+        <div class="panel-title">你的动作 <span class="live-dot"></span></div>
+        <div id="cam-wrap">
+          <video id="cam" autoplay playsinline muted></video>
+          <canvas id="cam-stick" width="320" height="240"></canvas>
+        </div>
+        <div id="conf-bar"><div id="conf-fill"></div></div>
+        <div id="conf-label">置信度 --</div>
+      </div>
+
+      <!-- 右上:挑战参考动作 -->
+      <div id="ref-panel" class="panel hidden">
+        <div class="panel-title">目标动作</div>
+        <canvas id="ref-stick" width="240" height="320"></canvas>
+        <div id="beats">
+          <span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <!-- 右下:计分(挑战) -->
+      <div id="score-panel" class="panel hidden">
+        <div id="grade">-</div>
+        <div id="score">0</div>
+        <div id="score-label">SCORE</div>
+        <div id="combo">COMBO <b id="combo-n">0</b></div>
+        <div id="acc-ring">
+          <canvas id="acc-canvas" width="90" height="90"></canvas>
+          <span id="acc-pct">0%</span>
+        </div>
+        <div id="progress"><div id="progress-fill"></div></div>
+      </div>
+
+      <!-- 底部控制条 -->
+      <div id="controls">
+        <button id="btn-start" class="btn primary" disabled>开始</button>
+        <button id="btn-stop" class="btn" disabled>停止</button>
+        <button id="btn-mirror" class="btn" title="左右镜像">镜像:开</button>
+        <button id="btn-flip" class="btn" title="前后朝向">朝向:正</button>
+        <label class="btn">
+          <span id="dance-type-label">全身</span>
+          <select id="dance-type">
+            <option value="full-body">全身舞蹈</option>
+            <option value="gesture">手势舞</option>
+          </select>
+        </label>
+        <button id="btn-load-ref" class="btn hidden">加载参考 JSON</button>
+        <input type="file" id="ref-file" accept="application/json,.json" hidden />
+        <button id="btn-reset" class="btn">重置视角</button>
+      </div>
+    </div>
+
+    <!-- 判定文字(PERFECT / GREAT / MISS / COMBO) -->
+    <div id="judge" class="hidden"></div>
+
+    <!-- 中央提示:倒计时 -->
+    <div id="center-msg" class="hidden"><div id="center-msg-text">3</div></div>
+
+    <!-- 结算 -->
+    <div id="result" class="overlay hidden">
+      <h2 id="result-grade" class="grade-s">S</h2>
+      <p id="result-score">得分 0</p>
+      <p id="result-acc">平均匹配 0%</p>
+      <p id="result-combo">最大连击 0</p>
+      <button id="result-again" class="btn primary lg">再来一次</button>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,50 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="text" topLeftX="66" topLeftY="30" width="828" height="50">
+      <content textType="headline" fontSize="30" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="left" lineSpacing="multiple:1.1">
+        <p textAlign="left">坐标轴标定与锁定</p>
+      </content>
+    </shape>
+    <line startX="66" startY="84" endX="160" endY="84">
+      <border color="rgba(79,70,229,1)" width="3"/>
+    </line>
+    <shape type="text" topLeftX="66" topLeftY="98" width="828" height="230">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left" lineSpacing="multiple:1.45">
+        <p>归一化解决了"长度/位置"的问题，但还剩一个更隐蔽的问题：<strong>方向</strong>。我们做实验发现：MediaPipe 给出来的原始世界坐标，它的 x、y、z 三个轴的方向和我们想要的是全反的。</p>
+        <p><strong>"标定"</strong>：通过物理实验（抬右手、伸右手），确定每个轴到底朝哪，然后把需要翻转的轴记录下来。</p>
+        <p><strong>"锁定"</strong>：把 {x:-1, y:-1, z:-1} 写进唯一一个地方（contract.js 的 AXIS_FLIP），并约定——你的实时管线用这个翻转；队友的离线参考管线也必须用同样的翻转。</p>
+        <p><strong>为什么必须锁定</strong>：如果两边不统一，你抬右手，在评分系统看来是"抬左手还往下"，评分直接全错。标定不是"调对了就行"，而是要固化成一条双方都必须遵守的合同条款。</p>
+      </content>
+    </shape>
+    <table topLeftX="130" topLeftY="340" width="700" height="160">
+      <colgroup>
+        <col width="110"/>
+        <col width="320"/>
+        <col width="270"/>
+      </colgroup>
+      <tr height="40">
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="center"><p>轴</p></content></td>
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>MediaPipe 原始</p></content></td>
+        <td><fill><fillColor color="rgba(79,70,229,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(255,255,255,1)" textAlign="left"><p>我们想要的（Canonical）</p></content></td>
+      </tr>
+      <tr height="40">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(30,27,75,1)" textAlign="center"><p>y</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>朝下（手臂下垂时 y≈+0.9）</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" bold="true" color="rgba(79,70,229,1)" textAlign="left"><p>朝上</p></content></td>
+      </tr>
+      <tr height="40">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(30,27,75,1)" textAlign="center"><p>x</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>朝表演者左侧</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" bold="true" color="rgba(79,70,229,1)" textAlign="left"><p>朝表演者右侧</p></content></td>
+      </tr>
+      <tr height="40">
+        <td><fill><fillColor color="rgba(238,242,255,1)"/></fill><content textType="body" fontSize="13" fontFamily="思源黑体" bold="true" color="rgba(30,27,75,1)" textAlign="center"><p>z</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" color="rgba(51,51,51,1)" textAlign="left"><p>朝远离镜头</p></content></td>
+        <td><fill><fillColor color="rgba(255,255,255,1)"/></fill><content textType="body" fontSize="12" fontFamily="思源黑体" bold="true" color="rgba(79,70,229,1)" textAlign="left"><p>朝镜头</p></content></td>
+      </tr>
+    </table>
+  </data>
+</slide>

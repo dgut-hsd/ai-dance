@@ -1,0 +1,852 @@
+<presentation id="W808sg1FXlvm5kdaZcycwqojnqf" xmlns="https://www.larkoffice.com/sml/2.0" width="960" height="540">
+  <title>笔记</title>
+  <theme>
+    <textStyles>
+      <headline fontColor="rgba(31, 35, 41, 1)"/>
+      <sub-headline fontColor="rgba(31, 35, 41, 1)"/>
+      <body fontColor="rgba(31, 35, 41, 1)"/>
+      <caption fontColor="rgba(155, 158, 162, 1)" fontSize="14"/>
+    </textStyles>
+  </theme>
+  <slide id="pQQ">
+    <style>
+      <fill id="fQQ">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="200" height="6" topLeftX="380" topLeftY="150" presetHandlers="0" type="rect" id="bnt">
+        <fill>
+          <fillColor color="rgba(79, 70, 229, 1)"/>
+        </fill>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="800" height="90" topLeftX="80" topLeftY="180" type="text" id="bni">
+        <content textType="title" fontSize="56" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="center">
+          <p textAlign="center">AI Dance</p>
+        </content>
+      </shape>
+      <shape width="800" height="44" topLeftX="80" topLeftY="285" type="text" id="bnd">
+        <content textType="sub-headline" fontSize="22" fontFamily="思源黑体" color="rgba(79, 70, 229, 1)" bold="true" lineSpacing="multiple:1.2" textAlign="center">
+          <p textAlign="center">实时人体动作捕捉与评分系统</p>
+        </content>
+      </shape>
+      <shape width="800" height="32" topLeftX="80" topLeftY="360" type="text" id="bns">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(120, 120, 130, 1)" lineSpacing="multiple:1.2" textAlign="center">
+          <p textAlign="center">Web 摄像头 · MediaPipe · Three.js · 骨骼归一化与动作评分</p>
+        </content>
+      </shape>
+    </data>
+    <note id="bnx">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQE">
+    <style>
+      <fill id="fQE">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="56" topLeftX="66" topLeftY="36" type="text" id="bnM">
+        <content textType="headline" fontSize="36" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">整体思路</p>
+        </content>
+      </shape>
+      <line id="bnI" startX="66" startY="98" endX="160.00531899844816" endY="98">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <img id="bnA" src="QgcpbLbhWoquLQx42dycx84SnLd" width="280" height="416" topLeftX="340" topLeftY="92">
+        <crop leftOffset="0" rightOffset="0" topOffset="0" bottomOffset="0"/>
+      </img>
+    </data>
+    <note id="bnX">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQx">
+    <style>
+      <fill id="fQx">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="52" topLeftX="66" topLeftY="32" type="text" id="bvT">
+        <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">开发里程碑（M0 – M5）</p>
+        </content>
+      </shape>
+      <line id="bvp" startX="66" startY="88" endX="160.00531899844816" endY="88">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <table id="bvk" width="828" height="380" topLeftX="66" topLeftY="104">
+        <colgroup>
+          <col span="1" width="150"/>
+          <col span="1" width="360"/>
+          <col span="1" width="318"/>
+        </colgroup>
+        <tr height="36">
+          <td id="bnB">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="14" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>里程碑</p>
+            </content>
+          </td>
+          <td id="bvv">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="14" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>内容</p>
+            </content>
+          </td>
+          <td id="bvL">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="14" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>完成的硬标准（Definition of Done）</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="56">
+          <td id="bvP">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>M0 跑起来</p>
+            </content>
+          </td>
+          <td id="bvJ">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>下载 pose_landmarker_full.task + .wasm 放本地；静态托管 frontend_dis/；摄像头点亮</p>
+            </content>
+          </td>
+          <td id="bvK">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>浏览器里出画面，控制台无报错</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="56">
+          <td id="bnY">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>M1 出数据</p>
+            </content>
+          </td>
+          <td id="bvn">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>MediaPipe Tasks PoseLandmarker 放 Web Worker + GPU delegate；拿到 33 world landmarks</p>
+            </content>
+          </td>
+          <td id="bvC">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>每帧能打印 33 个 (x,y,z)</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="64">
+          <td id="bvf">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>M2 归一化</p>
+            </content>
+          </td>
+          <td id="bvR">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>写 contract.js（§2 骨骼索引 + §1 坐标轴标定），把 landmark 转成 9 条骨骼单位向量</p>
+            </content>
+          </td>
+          <td id="bvb">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>标定测试：右手抬起 → upper_arm_r 的 y 变大；转身/侧身不镜像</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="50">
+          <td id="bvW">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>M3 画火柴人</p>
+            </content>
+          </td>
+          <td id="bnu">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>2D canvas 画 9 条骨骼连线</p>
+            </content>
+          </td>
+          <td id="bvj">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>30fps 不卡，画面跟手</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="56">
+          <td id="bvF">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>M4 消抖</p>
+            </content>
+          </td>
+          <td id="bvE">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>加一个轻量滤波（EMA 或 One Euro），别用重 Kalman</p>
+            </content>
+          </td>
+          <td id="bvw">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>肉眼：手静止时线不抖，挥手时线不&quot;拖尾巴&quot;</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="62">
+          <td id="bvq">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>M5 发布接口</p>
+            </content>
+          </td>
+          <td id="bng">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>暴露 startPoseStream({ onFrame })，产出契约 §3 帧</p>
+            </content>
+          </td>
+          <td id="bve">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>队友能拿到一帧 {t, bones, rootYaw, conf}</p>
+            </content>
+          </td>
+        </tr>
+      </table>
+    </data>
+    <note id="bvG">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQt">
+    <style>
+      <fill id="fQt">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="52" topLeftX="66" topLeftY="32" type="text" id="bnN">
+        <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">MediaPipe 媒体管道</p>
+        </content>
+      </shape>
+      <line id="bny" startX="66" startY="88" endX="160.00531899844816" endY="88">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <shape width="490" height="380" topLeftX="66" topLeftY="108" type="text" id="bnD">
+        <content fontSize="15" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" list="bullet" listStyle="circle-hollow-square" textAlign="left">
+          <ul>
+            <li>
+              <p><strong>pose_landmarker_full.task（8.96 MB）</strong>：Google MediaPipe 官方的&quot;人体姿态检测&quot;模型。</p>
+            </li>
+            <li>
+              <p><strong>MediaPipe</strong>：Google 的&quot;设备端 AI&quot;框架，专门做轻量、能在浏览器/手机本地跑的模型。</p>
+            </li>
+            <li>
+              <p><strong>底层叫 BlazePose</strong>：Google 专门为人体姿态设计的神经网络。</p>
+            </li>
+            <li>
+              <p><strong>.task 是一种打包格式</strong>：把模型本身 + 输入输出规格 + 元数据打成一个文件，浏览器里用 WebAssembly + WebGL 就能加载运行，不需要服务器、不需要 Python。</p>
+            </li>
+            <li>
+              <p><strong>它干一件事</strong>：输入一张图片（或一帧视频），输出人体上的 33 个关键点。</p>
+            </li>
+          </ul>
+        </content>
+      </shape>
+      <shape width="310" height="30" topLeftX="590" topLeftY="118" type="text" id="bnO">
+        <content fontSize="15" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" textAlign="left">
+          <p>三个档位对比</p>
+        </content>
+      </shape>
+      <table id="bnQ" width="310" height="200" topLeftX="590" topLeftY="156">
+        <colgroup>
+          <col span="1" width="120"/>
+          <col span="1" width="80"/>
+          <col span="1" width="110"/>
+        </colgroup>
+        <tr height="38">
+          <td id="bnV">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>版本</p>
+            </content>
+          </td>
+          <td id="bnZ">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true">
+              <p>大小</p>
+            </content>
+          </td>
+          <td id="bnr">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>特点</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="54">
+          <td id="bnU">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>lite</p>
+            </content>
+          </td>
+          <td id="bnh">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)">
+              <p>~5 MB</p>
+            </content>
+          </td>
+          <td id="bno">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>快，精度低</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="54">
+          <td id="bnl">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" textAlign="left">
+              <p>full（当前）</p>
+            </content>
+          </td>
+          <td id="bnz">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true">
+              <p>~9 MB</p>
+            </content>
+          </td>
+          <td id="bnc">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" textAlign="left">
+              <p>精度/速度平衡</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="54">
+          <td id="bna">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>heavy</p>
+            </content>
+          </td>
+          <td id="bnS">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)">
+              <p>~26 MB</p>
+            </content>
+          </td>
+          <td id="bnH">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>最准，最慢</p>
+            </content>
+          </td>
+        </tr>
+      </table>
+    </data>
+    <note id="bnm">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQM">
+    <style>
+      <fill id="fQM">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="50" topLeftX="66" topLeftY="30" type="text" id="bvr">
+        <content textType="headline" fontSize="30" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">33 个 World Landmark 从哪来、代表什么</p>
+        </content>
+      </shape>
+      <line id="bvU" startX="66" startY="84" endX="160.00531899844816" endY="84">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <shape width="470" height="250" topLeftX="66" topLeftY="100" type="text" id="bvh">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" lineSpacing="multiple:1.45" textAlign="left">
+          <p><strong>代表什么</strong>：33 个点是人体解剖位置——鼻子、眼睛、耳朵、肩膀、手肘、手腕、指尖、髋、膝盖、脚踝、脚。每个点有固定编号（0–32），比如右肩 = 12、右肘 = 14、右腕 = 16。</p>
+          <p><strong>从哪来——分两步</strong>：</p>
+          <ol>
+            <li>
+              <p>先找人在哪：一个&quot;人体检测器&quot;在画面里框出这个人；</p>
+            </li>
+            <li>
+              <p>再在框里估 33 个点：另一个网络在这个人身上回归出 33 个关键点的位置。</p>
+            </li>
+          </ol>
+        </content>
+      </shape>
+      <shape width="334" height="250" topLeftX="560" topLeftY="100" presetHandlers="0" type="rect" id="bvz">
+        <fill>
+          <fillColor color="rgba(238, 242, 255, 1)"/>
+        </fill>
+        <border color="rgba(199, 210, 254, 1)" width="1"/>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="298" height="224" topLeftX="578" topLeftY="114" type="text" id="bvc">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" lineSpacing="multiple:1.45" textAlign="left">
+          <p><strong>单目摄像头只能拍到 2D，模型怎么给出&quot;米&quot;为单位的 3D？</strong></p>
+          <p>答案是：BlazePose 内部套了一个统计人体模型（GHUM）。它被喂过海量的真人 3D 动捕数据，学会了&quot;一个合理的人体 3D 姿势长什么样&quot;。所以它拿到 2D 的点之后，会把这些 2D 点&quot;抬&quot;到 3D，即拟合到一个它认为最可能的人体 3D 姿态上。</p>
+        </content>
+      </shape>
+      <table id="bva" width="828" height="110" topLeftX="66" topLeftY="368">
+        <colgroup>
+          <col span="1" width="220"/>
+          <col span="1" width="290"/>
+          <col span="1" width="318"/>
+        </colgroup>
+        <tr height="38">
+          <td id="bvS">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>类型</p>
+            </content>
+          </td>
+          <td id="bvs">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>坐标</p>
+            </content>
+          </td>
+          <td id="bvm">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>含义</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="36">
+          <td id="bvN">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>landmarks（归一化）</p>
+            </content>
+          </td>
+          <td id="bvy">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>x,y ∈ [0,1]，z 是相对值</p>
+            </content>
+          </td>
+          <td id="bvd">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>贴在 2D 画面上的位置</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="36">
+          <td id="bvO">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>worldLandmarks（世界坐标）</p>
+            </content>
+          </td>
+          <td id="bvQ">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>x,y,z 单位是米，原点在髋中点</p>
+            </content>
+          </td>
+          <td id="bvV">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+              <p>模型估计的&quot;真实 3D 姿态&quot;</p>
+            </content>
+          </td>
+        </tr>
+      </table>
+    </data>
+    <note id="bvi">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQV">
+    <style>
+      <fill id="fQV">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="52" topLeftX="66" topLeftY="32" type="text" id="bvA">
+        <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">归一化</p>
+        </content>
+      </shape>
+      <line id="bvX" startX="66" startY="88" endX="160.00531899844816" endY="88">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <shape width="470" height="380" topLeftX="66" topLeftY="104" type="text" id="bvM">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+          <p><strong>什么是&quot;归一化&quot;</strong>：把原始坐标，变成&quot;骨骼方向单位向量&quot;。</p>
+          <p><strong>举个具体例子，upper_arm_r（右肩→右肘）：</strong></p>
+          <ol>
+            <li>
+              <p>原始数据：右肩 (0.3, 1.4, -0.2)，右肘 (0.35, 1.1, -0.18)——这些是&quot;米&quot;为单位的绝对位置；</p>
+            </li>
+            <li>
+              <p>算向量：右肘 − 右肩 = (0.05, -0.3, 0.02)；</p>
+            </li>
+            <li>
+              <p>除以这个向量的长度，得到长度为 1 的向量（单位向量）。</p>
+            </li>
+          </ol>
+        </content>
+      </shape>
+      <shape width="334" height="380" topLeftX="560" topLeftY="104" presetHandlers="0" type="rect" id="bvx">
+        <fill>
+          <fillColor color="rgba(238, 242, 255, 1)"/>
+        </fill>
+        <border color="rgba(199, 210, 254, 1)" width="1"/>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="298" height="352" topLeftX="578" topLeftY="118" type="text" id="bvt">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" textAlign="left">
+          <p><strong>为什么要做第 3 步？</strong>因为它让数据获得两个关键的不变性：</p>
+          <ul>
+            <li>
+              <p><strong>平移不变</strong>：两个人相减，消掉了&quot;人站在画面哪个位置&quot;的影响。</p>
+            </li>
+            <li>
+              <p><strong>缩放不变</strong>：除以长度，消掉了&quot;人高矮、离镜头远近&quot;的影响。</p>
+            </li>
+          </ul>
+          <p>结果就是：一个 1.9 米的人站得近，和一个 1.6 米的人站得远，只要做同样的挥手动作，upper_arm_r 这个向量几乎一样。评分就能公平地比&quot;动作像不像&quot;，而不是比&quot;谁站得近、谁长得高&quot;。</p>
+          <p><strong>一句话</strong>：归一化 = 把&quot;绝对位置（会被身高、距离污染）&quot;转成&quot;骨骼指向（只看姿势）&quot;。</p>
+        </content>
+      </shape>
+    </data>
+    <note id="bvI">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQo">
+    <style>
+      <fill id="fQo">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="50" topLeftX="66" topLeftY="30" type="text" id="beI">
+        <content textType="headline" fontSize="30" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">坐标轴标定与锁定</p>
+        </content>
+      </shape>
+      <line id="bef" startX="66" startY="84" endX="160.00531899844816" endY="84">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <shape width="828" height="230" topLeftX="66" topLeftY="98" type="text" id="beJ">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" lineSpacing="multiple:1.45" textAlign="left">
+          <p>归一化解决了&quot;长度/位置&quot;的问题，但还剩一个更隐蔽的问题：<strong>方向</strong>。我们做实验发现：MediaPipe 给出来的原始世界坐标，它的 x、y、z 三个轴的方向和我们想要的是全反的。</p>
+          <p><strong>&quot;标定&quot;</strong>：通过物理实验（抬右手、伸右手），确定每个轴到底朝哪，然后把需要翻转的轴记录下来。</p>
+          <p><strong>&quot;锁定&quot;</strong>：把 {x:-1, y:-1, z:-1} 写进唯一一个地方（contract.js 的 AXIS_FLIP），并约定——你的实时管线用这个翻转；队友的离线参考管线也必须用同样的翻转。</p>
+          <p><strong>为什么必须锁定</strong>：如果两边不统一，你抬右手，在评分系统看来是&quot;抬左手还往下&quot;，评分直接全错。标定不是&quot;调对了就行&quot;，而是要固化成一条双方都必须遵守的合同条款。</p>
+        </content>
+      </shape>
+      <table id="beR" width="700" height="160" topLeftX="130" topLeftY="340">
+        <colgroup>
+          <col span="1" width="110"/>
+          <col span="1" width="320"/>
+          <col span="1" width="270"/>
+        </colgroup>
+        <tr height="40">
+          <td id="beb">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true">
+              <p>轴</p>
+            </content>
+          </td>
+          <td id="beq">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>MediaPipe 原始</p>
+            </content>
+          </td>
+          <td id="beW">
+            <fill>
+              <fillColor color="rgba(79, 70, 229, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" bold="true" textAlign="left">
+              <p>我们想要的（Canonical）</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="40">
+          <td id="beF">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true">
+              <p>y</p>
+            </content>
+          </td>
+          <td id="beE">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>朝下（手臂下垂时 y≈+0.9）</p>
+            </content>
+          </td>
+          <td id="bew">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(79, 70, 229, 1)" bold="true" textAlign="left">
+              <p>朝上</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="40">
+          <td id="bek">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true">
+              <p>x</p>
+            </content>
+          </td>
+          <td id="beG">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>朝表演者左侧</p>
+            </content>
+          </td>
+          <td id="beT">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(79, 70, 229, 1)" bold="true" textAlign="left">
+              <p>朝表演者右侧</p>
+            </content>
+          </td>
+        </tr>
+        <tr height="40">
+          <td id="bep">
+            <fill>
+              <fillColor color="rgba(238, 242, 255, 1)"/>
+            </fill>
+            <content fontSize="13" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true">
+              <p>z</p>
+            </content>
+          </td>
+          <td id="beL">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="left">
+              <p>朝远离镜头</p>
+            </content>
+          </td>
+          <td id="beP">
+            <fill>
+              <fillColor/>
+            </fill>
+            <content fontSize="12" fontFamily="思源黑体" color="rgba(79, 70, 229, 1)" bold="true" textAlign="left">
+              <p>朝镜头</p>
+            </content>
+          </td>
+        </tr>
+      </table>
+    </data>
+    <note id="beK">
+      <content/>
+    </note>
+  </slide>
+  <slide id="pQu">
+    <style>
+      <fill id="fQu">
+        <fillColor color="rgba(255, 255, 255, 1)"/>
+      </fill>
+    </style>
+    <data>
+      <shape width="828" height="52" topLeftX="66" topLeftY="36" type="text" id="bvl">
+        <content textType="headline" fontSize="32" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" bold="true" lineSpacing="multiple:1.1" textAlign="left">
+          <p textAlign="left">技术链路总结</p>
+        </content>
+      </shape>
+      <line id="bvB" startX="66" startY="92" endX="160.00531899844816" endY="92">
+        <border color="rgba(79, 70, 229, 1)" width="3"/>
+      </line>
+      <shape width="150" height="130" topLeftX="40" topLeftY="180" presetHandlers="12" type="rect" id="bvg">
+        <fill>
+          <fillColor color="rgba(238, 242, 255, 1)"/>
+        </fill>
+        <border color="rgba(199, 210, 254, 1)" width="1"/>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="130" height="100" topLeftX="50" topLeftY="198" type="text" id="bee">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" lineSpacing="multiple:1.3" textAlign="center">
+          <p textAlign="center"><strong>① BlazePose</strong></p>
+          <p textAlign="center"><span color="rgba(71, 85, 105, 1)" fontSize="12">从 2D 画面&quot;猜&quot;出 33 个 3D 点</span></p>
+        </content>
+      </shape>
+      <shape width="150" height="130" topLeftX="210" topLeftY="180" presetHandlers="12" type="rect" id="bvo">
+        <fill>
+          <fillColor color="rgba(238, 242, 255, 1)"/>
+        </fill>
+        <border color="rgba(199, 210, 254, 1)" width="1"/>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="130" height="100" topLeftX="220" topLeftY="198" type="text" id="bvZ">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" lineSpacing="multiple:1.3" textAlign="center">
+          <p textAlign="center"><strong>② 取骨骼</strong></p>
+          <p textAlign="center"><span color="rgba(71, 85, 105, 1)" fontSize="12">取其中一部分算骨骼</span></p>
+        </content>
+      </shape>
+      <shape width="150" height="130" topLeftX="380" topLeftY="180" presetHandlers="12" type="rect" id="bej">
+        <fill>
+          <fillColor color="rgba(238, 242, 255, 1)"/>
+        </fill>
+        <border color="rgba(199, 210, 254, 1)" width="1"/>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="130" height="100" topLeftX="390" topLeftY="198" type="text" id="beC">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" lineSpacing="multiple:1.3" textAlign="center">
+          <p textAlign="center"><strong>③ 标定轴向</strong></p>
+          <p textAlign="center"><span color="rgba(71, 85, 105, 1)" fontSize="12">统一坐标轴方向</span></p>
+        </content>
+      </shape>
+      <shape width="150" height="130" topLeftX="550" topLeftY="180" presetHandlers="12" type="rect" id="bvD">
+        <fill>
+          <fillColor color="rgba(238, 242, 255, 1)"/>
+        </fill>
+        <border color="rgba(199, 210, 254, 1)" width="1"/>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="130" height="100" topLeftX="560" topLeftY="198" type="text" id="bvu">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(30, 27, 75, 1)" lineSpacing="multiple:1.3" textAlign="center">
+          <p textAlign="center"><strong>④ 归一化</strong></p>
+          <p textAlign="center"><span color="rgba(71, 85, 105, 1)" fontSize="12">每根骨头压成单位向量</span></p>
+        </content>
+      </shape>
+      <shape width="200" height="130" topLeftX="720" topLeftY="180" presetHandlers="12" type="rect" id="ben">
+        <fill>
+          <fillColor color="rgba(79, 70, 229, 1)"/>
+        </fill>
+        <content fontSize="16" fontFamily="思源黑体" color="rgba(31, 35, 41, 1)"/>
+      </shape>
+      <shape width="176" height="100" topLeftX="732" topLeftY="198" type="text" id="bvH">
+        <content fontSize="14" fontFamily="思源黑体" color="rgba(255, 255, 255, 1)" lineSpacing="multiple:1.3" textAlign="center">
+          <p textAlign="center"><strong>⑤ 契约帧</strong></p>
+          <p textAlign="center"><span color="rgba(224, 231, 255, 1)" fontSize="12">只看姿势，不受身高/距离/朝向影响</span></p>
+        </content>
+      </shape>
+      <shape width="800" height="90" topLeftX="80" topLeftY="380" type="text" id="bvY">
+        <content fontSize="15" fontFamily="思源黑体" color="rgba(51, 51, 51, 1)" textAlign="center">
+          <p textAlign="center">模型（Google 的 BlazePose）从 2D 画面&quot;猜&quot;出 33 个 3D 点 → 我们取其中一部分算骨骼 → 标定统一坐标轴方向 → 归一化把每根骨头压成单位向量 → 得到一份&quot;只看姿势、不受身高距离朝向影响&quot;的契约帧。</p>
+        </content>
+      </shape>
+    </data>
+    <note id="bev">
+      <content/>
+    </note>
+  </slide>
+</presentation>

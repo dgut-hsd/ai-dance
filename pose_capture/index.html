@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pose Capture — 实时 + 导出 + 回放 + 同步预览</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 1rem;
+        font-family: Arial, sans-serif;
+        background-color: #111827;
+        color: #e5e7eb;
+      }
+      h1 { font-size: 1.2rem; }
+      h2 { font-size: 1rem; color: #93c5fd; }
+      section { margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #374151; }
+      #status { color: #fbbf24; }
+      button {
+        background: #3b82f6;
+        border: none;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        font-size: 1rem;
+        margin: 0.25rem 0;
+      }
+      button:disabled { background: #4b5563; cursor: not-allowed; }
+      .row { display: flex; gap: 1rem; margin: 1rem 0; flex-wrap: wrap; }
+      video { width: 320px; background: #000; }
+      #cam { transform: scaleX(-1); }
+      canvas { background: #000; border-radius: 0.5rem; }
+      pre {
+        background: #1f2937;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        max-height: 320px;
+        overflow: auto;
+        font-size: 0.8rem;
+        white-space: pre-wrap;
+      }
+      #perf { color: #34d399; max-height: none; }
+      progress { width: 100%; height: 1rem; }
+      .mode-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0.75rem 0;
+        padding: 0.5rem;
+        background: #1f2937;
+        border-radius: 0.5rem;
+      }
+      select {
+        background: #374151;
+        color: white;
+        border: 1px solid #4b5563;
+        border-radius: 0.25rem;
+        padding: 0.35rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Pose Capture</h1>
+
+    <div class="mode-bar">
+      <label for="mode">舞蹈模式:</label>
+      <select id="mode">
+        <option value="full-body">全身舞蹈</option>
+        <option value="gesture">手势舞</option>
+      </select>
+      <span style="color:#9ca3af;font-size:0.85rem">手势舞只取上半身 + 手型;全身舞蹈取 9 条骨骼。</span>
+    </div>
+
+    <!-- ==================== 实时(摄像头) ==================== -->
+    <section>
+      <h2>实时(摄像头)</h2>
+      <p id="status">未启动</p>
+      <button id="start">启动摄像头</button>
+
+      <div class="row">
+        <video id="cam" playsinline autoplay muted></video>
+        <canvas id="stick" width="480" height="640"></canvas>
+      </div>
+
+      <pre id="perf">(性能数据会显示在这里)</pre>
+      <pre id="frame-json">(最新契约帧会显示在这里)</pre>
+    </section>
+
+    <!-- ==================== 视频导入 -> 导出 + 回放 ==================== -->
+    <section>
+      <h2>视频导入 → 导出参考序列 JSON → 回放</h2>
+      <p>选一段视频,逐帧跑 MediaPipe,导出 dance-sequence/v1(带 danceType 标签),并可回放。</p>
+      <input type="file" id="video-file" accept="video/*" />
+      <button id="export" disabled>导出 JSON</button>
+      <p id="export-status">选择视频后点导出</p>
+      <progress id="export-progress" value="0" max="1"></progress>
+
+      <div class="row">
+        <canvas id="playback" width="480" height="640"></canvas>
+        <div>
+          <button id="play" disabled>播放动画</button>
+          <button id="stop-play" disabled>停止</button>
+          <p id="play-status"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 视频同步预览 ==================== -->
+    <section>
+      <h2>同步预览(一边放视频,一边实时识别火柴人)</h2>
+      <p>选视频后点"同步预览",左侧视频播放,右侧火柴人实时跟随(不落 JSON)。</p>
+      <div class="row">
+        <video id="preview-video" controls muted playsinline></video>
+        <canvas id="preview-stick" width="480" height="640"></canvas>
+      </div>
+      <button id="preview" disabled>同步预览</button>
+      <button id="stop-preview" disabled>停止预览</button>
+      <p id="preview-status"></p>
+    </section>
+
+    <script type="module">
+      import { startPoseStream, startVideoPreviewSync } from "./mocap.js";
+      import { exportVideoToSequence, downloadJSON } from "./export.js";
+      import { playSequence } from "./playback.js";
+      import { BONE_DEFS, UPPER_BONE_DEFS } from "./contract.js";
+
+      const modeSelect = document.getElementById("mode");
+      const currentBoneDefs = () =>
+        modeSelect.value === "gesture" ? UPPER_BONE_DEFS : BONE_DEFS;
+
+      // ---------- 实时(摄像头) ----------
+      const video = document.getElementById("cam");
+      const canvas = document.getElementById("stick");
+      const statusEl = document.getElementById("status");
+      const jsonEl = document.getElementById("frame-json");
+      const perfEl = document.getElementById("perf");
+
+      let frameCount = 0;
+
+      document.getElementById("start").addEventListener("click", async () => {
+        try {
+          await startPoseStream({
+            video,
+            canvas,
+            mode: modeSelect.value,
+            onFrame: (frame) => {
+              if (frameCount++ % 10 !== 0) return;
+              const defs = currentBoneDefs();
+              const labeled = frame.bones
+                .map((b, i) => {
+                  const name = (defs[i]?.name || "?").padEnd(14);
+                  const xyz = b.map((n) => n.toFixed(2)).join(", ");
+                  return `${name} [${xyz}]`;
+                })
+                .join("\n");
+              jsonEl.textContent =
+                "--- 骨骼 ---\n" + labeled +
+                (frame.hands
+                  ? "\n\n--- 手型(手数 " + frame.hands.length + ") ---\n" +
+                    JSON.stringify(frame.hands.map((h) => ({ handedness: h.handedness, points: h.landmarks.length })))
+                  : "") +
+                "\n\n--- 完整帧 ---\n" +
+                JSON.stringify(frame, null, 2);
+            },
+            onStatus: (s) => (statusEl.textContent = s),
+            onError: (e) => (statusEl.textContent = "错误: " + e.message),
+            onPerf: (snap) => {
+              const stages = Object.entries(snap.stages)
+                .map(([k, v]) => `${k} ${v.avgMs}ms(峰值${v.maxMs}ms)`)
+                .join("  ");
+              perfEl.textContent =
+                `FPS: ${snap.fps}  |  delegate: ${snap.delegate}\n` +
+                `各阶段: ${stages || "..."}`;
+            },
+          });
+        } catch (e) {
+          statusEl.textContent = "错误: " + e.message;
+        }
+      });
+
+      // ---------- 共享的"已选文件" ----------
+      const fileInput = document.getElementById("video-file");
+      let selectedFile = null;
+
+      fileInput.addEventListener("change", () => {
+        selectedFile = fileInput.files[0] || null;
+        const hasFile = !!selectedFile;
+        document.getElementById("export").disabled = !hasFile;
+        document.getElementById("preview").disabled = !hasFile;
+      });
+
+      // ---------- 导出 + 回放 ----------
+      const exportBtn = document.getElementById("export");
+      const exportStatus = document.getElementById("export-status");
+      const exportProgress = document.getElementById("export-progress");
+      const playbackCanvas = document.getElementById("playback");
+      const playBtn = document.getElementById("play");
+      const stopBtn = document.getElementById("stop-play");
+      const playStatus = document.getElementById("play-status");
+
+      let exportedSequence = null;
+      let player = null;
+
+      exportBtn.addEventListener("click", async () => {
+        if (!selectedFile) return;
+        exportBtn.disabled = true;
+        exportProgress.value = 0;
+        try {
+          exportedSequence = await exportVideoToSequence({
+            file: selectedFile,
+            mode: modeSelect.value,
+            onStatus: (s) => (exportStatus.textContent = `状态: ${s}`),
+            onProgress: (p) => (exportProgress.value = p),
+            onError: (e) => (exportStatus.textContent = "错误: " + e.message),
+          });
+          downloadJSON(exportedSequence, exportedSequence.danceId + ".json");
+          exportStatus.textContent =
+            `完成: ${exportedSequence.meta.numFrames} 帧 / ${exportedSequence.meta.durationSec}s / ` +
+            `${exportedSequence.meta.boneCount} 骨骼 / ${exportedSequence.meta.danceType}`;
+          playBtn.disabled = false;
+        } catch (e) {
+          exportStatus.textContent = "错误: " + e.message;
+        } finally {
+          exportBtn.disabled = false;
+        }
+      });
+
+      playBtn.addEventListener("click", () => {
+        if (!exportedSequence) return;
+        if (player) player.stop();
+        playBtn.disabled = true;
+        stopBtn.disabled = false;
+        playStatus.textContent = "播放中…";
+        player = playSequence(playbackCanvas, exportedSequence, {
+          onProgress: (p) => (playStatus.textContent = `播放中 ${Math.round(p * 100)}%`),
+          onDone: () => {
+            playStatus.textContent = "播放完成";
+            playBtn.disabled = false;
+            stopBtn.disabled = true;
+          },
+        });
+      });
+
+      stopBtn.addEventListener("click", () => {
+        if (player) {
+          player.stop();
+          player = null;
+        }
+        stopBtn.disabled = true;
+        playBtn.disabled = false;
+        playStatus.textContent = "已停止";
+      });
+
+      // ---------- 视频同步预览 ----------
+      const previewVideo = document.getElementById("preview-video");
+      const previewStick = document.getElementById("preview-stick");
+      const previewBtn = document.getElementById("preview");
+      const stopPreviewBtn = document.getElementById("stop-preview");
+      const previewStatus = document.getElementById("preview-status");
+
+      let previewHandle = null;
+      let previewUrl = null;
+
+      previewBtn.addEventListener("click", async () => {
+        if (!selectedFile) {
+          previewStatus.textContent = "请先选择视频";
+          return;
+        }
+        previewBtn.disabled = true;
+        try {
+          if (previewHandle) {
+            previewHandle.stop();
+            previewHandle = null;
+          }
+          if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = null;
+          }
+          previewVideo.pause();
+          previewVideo.removeAttribute("src");
+          previewVideo.load();
+          previewUrl = URL.createObjectURL(selectedFile);
+          previewVideo.src = previewUrl;
+          previewStatus.textContent = "加载模型…";
+          previewHandle = await startVideoPreviewSync({
+            video: previewVideo,
+            canvas: previewStick,
+            mode: modeSelect.value,
+            onStatus: (s) => (previewStatus.textContent = s),
+            onError: (e) => (previewStatus.textContent = "错误: " + e.message),
+            onPerf: (snap) => {
+              previewStatus.textContent = `播放中 FPS ${snap.fps} / ${snap.delegate}`;
+            },
+          });
+          stopPreviewBtn.disabled = false;
+        } catch (e) {
+          previewStatus.textContent = "错误: " + e.message;
+          previewBtn.disabled = false;
+        }
+      });
+
+      stopPreviewBtn.addEventListener("click", () => {
+        if (previewHandle) {
+          previewHandle.stop();
+          previewHandle = null;
+        }
+        previewVideo.pause();
+        stopPreviewBtn.disabled = true;
+        previewBtn.disabled = false;
+        previewStatus.textContent = "已停止";
+      });
+    </script>
+  </body>
+</html>

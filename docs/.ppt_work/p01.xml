@@ -1,0 +1,25 @@
+<slide xmlns="https://www.larkoffice.com/sml/2.0">
+  <style>
+    <fill><fillColor color="rgba(255,255,255,1)"/></fill>
+  </style>
+  <data>
+    <shape type="rect" topLeftX="380" topLeftY="150" width="200" height="6">
+      <fill><fillColor color="rgba(79,70,229,1)"/></fill>
+    </shape>
+    <shape type="text" topLeftX="80" topLeftY="180" width="800" height="90">
+      <content textType="title" fontSize="56" fontFamily="思源黑体" color="rgba(30,27,75,1)" bold="true" textAlign="center" lineSpacing="multiple:1.1">
+        <p textAlign="center">AI Dance</p>
+      </content>
+    </shape>
+    <shape type="text" topLeftX="80" topLeftY="285" width="800" height="44">
+      <content textType="sub-headline" fontSize="22" fontFamily="思源黑体" color="rgba(79,70,229,1)" textAlign="center" lineSpacing="multiple:1.2">
+        <p textAlign="center">实时人体动作捕捉与评分系统</p>
+      </content>
+    </shape>
+    <shape type="text" topLeftX="80" topLeftY="360" width="800" height="32">
+      <content textType="body" fontSize="14" fontFamily="思源黑体" color="rgba(120,120,130,1)" textAlign="center" lineSpacing="multiple:1.2">
+        <p textAlign="center">Web 摄像头 · MediaPipe · Three.js · 骨骼归一化与动作评分</p>
+      </content>
+    </shape>
+  </data>
+</slide>
