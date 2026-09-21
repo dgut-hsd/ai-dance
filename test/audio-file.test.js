@@ -23,12 +23,14 @@ function assertValidWav(file, expectedDur) {
   assert.ok(Math.abs(duration - expectedDur) < 0.05, `${file} duration=${duration}`);
 }
 
-test("挑战 demo 引用 demo-beat.wav 且文件合法(120BPM)", () => {
+test("挑战 demo 引用 pop-demo.wav 且文件合法(120BPM 流行)", () => {
   const seq = buildDemoSequence();
-  assert.equal(seq.chart.audio, "audio/demo-beat.wav");
-  assertValidWav("demo-beat.wav", 24);
+  assert.equal(seq.chart.audio, "audio/pop-demo.wav");
+  assertValidWav("pop-demo.wav", 24);
 });
 
-test("表演模式 samba-demo.wav 存在且合法(100BPM 桑巴)", () => {
-  assertValidWav("samba-demo.wav", 24);
+test("三轨内置音频都存在且合法", () => {
+  assertValidWav("demo-beat.wav", 24); // 120BPM 鼓组(备用)
+  assertValidWav("samba-demo.wav", 24); // 100BPM 桑巴(备用)
+  assertValidWav("pop-demo.wav", 24); // 120BPM 流行(当前使用)
 });

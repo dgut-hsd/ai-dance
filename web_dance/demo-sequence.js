@@ -124,7 +124,7 @@ export function buildDemoSequence() {
     frames,
     chart: {
       version: "chart/v1",
-      audio: "audio/demo-beat.wav",
+      audio: "audio/pop-demo.wav",
       notes: chartNotes,
     },
   };

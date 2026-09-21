@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>谱面编辑器 — 小白向导</title>
+<style>
+  :root { --bg:#0b0d16; --panel:#141828; --line:#242c42; --accent:#39ffcf; --gold:#ffd54a; --red:#ff5f6d; --blue:#4d7cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:#dbe2f0; font-family:system-ui,-apple-system,"Segoe UI","PingFang SC",sans-serif; line-height:1.55; }
+  header { padding:16px 22px; border-bottom:1px solid var(--line); background:linear-gradient(180deg,#10131f,#0b0d16); }
+  header h1 { margin:0; font-size:20px; }
+  header h1 small { font-weight:normal; color:var(--accent); font-size:14px; }
+  header p { margin:6px 0 0; color:#8a94ad; font-size:13px; }
+  .wrap { max-width:1100px; margin:0 auto; padding:18px 20px 40px; display:flex; flex-direction:column; gap:14px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+
+  .step { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .step h2 { margin:0 0 6px; font-size:16px; }
+  .step h2 .num { display:inline-block; width:22px; height:22px; line-height:22px; text-align:center; border-radius:50%; background:#1c2333; color:#8a94ad; margin-right:8px; font-size:13px; }
+  .step.done h2 .num { background:var(--accent); color:#06241b; }
+  .step.done h2::after { content:" ✓ 完成"; color:var(--accent); font-size:13px; }
+  .step .help { margin:0 0 10px; color:#8a94ad; font-size:13px; }
+  .hint { color:#8a94ad; font-size:12px; }
+  .ok { color:var(--accent); }
+
+  button { background:#1c2333; color:#dbe2f0; border:1px solid var(--line); border-radius:7px; padding:8px 15px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); color:var(--accent); }
+  button.primary { background:#0d3a2e; border-color:var(--accent); color:var(--accent); font-weight:600; }
+  button.big { font-size:15px; padding:10px 20px; }
+  input[type=file] { color:#8a94ad; font-size:13px; }
+
+  .legend { display:flex; flex-wrap:wrap; gap:16px; color:#8a94ad; font-size:12px; padding:8px 2px; }
+  .legend b { font-weight:600; }
+  .sw { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:5px; vertical-align:-1px; }
+  .sw.gold { background:var(--gold); } .sw.gray { background:#3a4258; } .sw.green { background:var(--accent); } .sw.red { background:var(--red); }
+
+  #scroll { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:#0b0d16; }
+  canvas { display:block; }
+  textarea { width:100%; height:110px; background:#0b0d16; color:#cfe3d4; border:1px solid var(--line); border-radius:7px; padding:8px; font-family:ui-monospace,monospace; font-size:12px; }
+  .divider { border:none; border-top:1px dashed var(--line); margin:8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>谱面编辑器 <small>跟着 4 步走,傻瓜式操作</small></h1>
+  <p>谱面 = 一张「在哪些拍子上判分」的清单。下面按 ①→②→③→④ 走一遍,就能给一首歌做出谱面。</p>
+</header>
+
+<div class="wrap">
+
+  <!-- ① 放歌 -->
+  <div class="step" id="step-1">
+    <h2><span class="num">1</span>放一首歌</h2>
+    <p class="help">选一个音频文件(mp3 / wav)。选好后下面会画出<b>波形</b>——波形高的地方就是鼓点/重音。</p>
+    <input type="file" id="audio-file" accept="audio/*" />
+    <div class="hint" id="audio-info">还没选音频</div>
+  </div>
+
+  <!-- ② 定节拍 -->
+  <div class="step" id="step-2">
+    <h2><span class="num">2</span>告诉编辑器「拍子」在哪</h2>
+    <p class="help">二选一:<b>方式 A</b> 选一个 <code>timing.json</code>(用 <code>detect_beats.py</code> 生成的最准);没有的话用 <b>方式 B</b> 边放歌边跟着节奏点「打拍」。</p>
+    <div class="row">
+      <span class="hint">方式 A:</span>
+      <input type="file" id="timing-file" accept=".json,application/json" />
+    </div>
+    <div class="divider"></div>
+    <div class="row">
+      <span class="hint">方式 B:</span>
+      <button id="play-tap-hint" class="primary">先播放</button>
+      <button id="tap">打拍(每拍点一下)</button>
+      <span class="hint" id="tap-info">连点 4 次以上自动算出 BPM</span>
+    </div>
+    <div class="hint" id="timing-info" style="margin-top:8px">还没定节拍</div>
+  </div>
+
+  <!-- ③ 铺音符 -->
+  <div class="step" id="step-3">
+    <h2><span class="num">3</span>决定「哪里判分」(音符)</h2>
+    <p class="help">每个<b>绿点 = 一个音符 = 一个判分点</b>。最省事:点「一键铺满下拍」自动在每个小节的第 1 拍放一个;也可以点时间轴手动加/删。</p>
+    <div class="row">
+      <button id="autofill" class="primary big">⚡ 一键铺满下拍</button>
+      <button id="clear">清空音符</button>
+      <span class="hint">已放 <b id="note-count" style="color:var(--accent)">0</b> 个音符</span>
+    </div>
+  </div>
+
+  <!-- ④ 导出 -->
+  <div class="step" id="step-4">
+    <h2><span class="num">4</span>导出谱面</h2>
+    <p class="help">得到 <code>chart.json</code>。把它和 <code>timing.json</code>、音频一起合并进舞蹈序列,挑战模式就会在你放的音符上判分。</p>
+    <div class="row">
+      <button id="export" class="primary big">⬇ 导出 chart/v1</button>
+      <button id="copy">复制 JSON</button>
+    </div>
+  </div>
+
+  <!-- 时间轴 -->
+  <div class="step">
+    <h2>时间轴 <span class="hint" id="time-label" style="font-weight:normal">0.0s / 0.0s</span></h2>
+    <div class="legend">
+      <span><span class="sw gold"></span><b>金色竖线</b> = 下拍(每小节第 1 拍)</span>
+      <span><span class="sw gray"></span><b>灰竖线</b> = 普通拍</span>
+      <span><span class="sw green"></span><b>绿点</b> = 音符(判分点)</span>
+      <span><span class="sw red"></span><b>红线</b> = 播放位置</span>
+      <span class="hint">点击时间轴 = 在最近的一拍上放/删音符</span>
+    </div>
+    <div class="row" style="margin:6px 0 10px">
+      <button id="play">▶ 播放 / 暂停</button>
+      <button id="stop">■ 停止</button>
+      <span class="hint" id="status">提示信息会显示在这里</span>
+    </div>
+    <div id="scroll"><canvas id="canvas" height="240"></canvas></div>
+  </div>
+
+  <!-- 导出预览 -->
+  <div class="step" id="export-box" style="display:none">
+    <h2>导出结果</h2>
+    <textarea id="export-out" readonly></textarea>
+  </div>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const audio = new Audio();
+let audioBuffer = null;   // 解码后的波形
+let timing = null;
+let notes = [];
+let audioName = null;
+let duration = 0;
+let taps = [];
+const PPS = 90;           // 每秒像素数
+
+const cv = $("canvas");
+const ctx = cv.getContext("2d");
+
+const setHint = (id, text, ok) => { const el = $(id); el.textContent = text; el.style.color = ok ? "var(--accent)" : ""; };
+const stepDone = (n) => $("step-" + n).classList.add("done");
+
+// ---------- ① 放歌 + 波形 ----------
+$("audio-file").onchange = async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  audio.src = URL.createObjectURL(f);
+  audioName = f.name;
+  try {
+    const buf = await f.arrayBuffer();
+    const AC = new (window.AudioContext || window.webkitAudioContext)();
+    audioBuffer = await AC.decodeAudioData(buf);
+    duration = audioBuffer.duration;
+    resize(); draw();
+    setHint("audio-info", `已加载 ${f.name},时长 ${duration.toFixed(1)}s`, true);
+    setHint("status", "第①步完成 → 去第②步定节拍", true);
+    stepDone(1);
+  } catch (err) {
+    setHint("audio-info", "音频读取失败: " + err.message);
+  }
+};
+
+// ---------- ② 定节拍 ----------
+function applyTiming(t) {
+  timing = t;
+  if (!duration) { duration = t.beatTimesSec[t.beatTimesSec.length - 1] + 2; resize(); }
+  setHint("timing-info", `已定节拍:BPM ${t.bpm},${t.beatTimesSec.length} 拍,${(t.downbeatsSec || []).length} 下拍`, true);
+  setHint("status", "第②步完成 → 去第③步铺音符", true);
+  draw();
+  stepDone(2);
+}
+
+$("timing-file").onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const t = JSON.parse(r.result);
+      if (t.version !== "timing/v1") throw new Error(`版本是 "${t.version}",需要 "timing/v1"(可能误选了 chart.json)`);
+      if (!Array.isArray(t.beatTimesSec) || !t.beatTimesSec.length) throw new Error("缺少 beatTimesSec");
+      applyTiming(t);
+    } catch (err) { setHint("timing-info", "解析失败: " + err.message); }
+  };
+  r.readAsText(f);
+};
+
+// 打拍定 BPM
+$("tap").onclick = () => {
+  taps.push(performance.now());
+  if (taps.length < 4) { setHint("tap-info", `已点 ${taps.length} 次,再点 ${4 - taps.length} 次`); return; }
+  const iv = [];
+  for (let i = 1; i < taps.length; i++) iv.push((taps[i] - taps[i - 1]) / 1000);
+  const mean = iv.reduce((a, b) => a + b, 0) / iv.length;
+  const bpm = Math.round(60 / mean);
+  const beats = [];
+  let t = 0;
+  const maxT = duration || 30;
+  while (t <= maxT) { beats.push(+t.toFixed(4)); t += mean; }
+  applyTiming({
+    version: "timing/v1", bpm, offsetSec: 0,
+    tempoMap: [{ t: 0, bpm }], timeSignatures: [{ t: 0, num: 4, den: 4 }],
+    beatTimesSec: beats, downbeatsSec: beats.filter((_, i) => i % 4 === 0),
+  });
+  setHint("tap-info", `BPM ≈ ${bpm}(${taps.length} 次打拍)`, true);
+};
+$("play-tap-hint").onclick = () => audio.play();
+
+// ---------- ③ 音符 ----------
+$("autofill").onclick = () => {
+  if (!timing) { setHint("status", "先完成第②步(定节拍),才能铺音符"); return; }
+  notes = (timing.downbeatsSec || []).map((t) => ({ t: +t.toFixed(3), type: "pose", lane: "body" }));
+  $("note-count").textContent = notes.length;
+  setHint("status", `已在每个下拍铺好 ${notes.length} 个音符,可点时间轴微调`, true);
+  draw();
+  stepDone(3);
+};
+$("clear").onclick = () => { notes = []; $("note-count").textContent = 0; draw(); };
+
+function nearestBeat(t) {
+  if (!timing || !timing.beatTimesSec.length) return t;
+  let best = timing.beatTimesSec[0], bd = Infinity;
+  for (const b of timing.beatTimesSec) { const d = Math.abs(b - t); if (d < bd) { bd = d; best = b; } }
+  return best;
+}
+const isDownbeat = (t) => (timing?.downbeatsSec || []).some((d) => Math.abs(d - t) < 0.001);
+
+function toggleNote(t) {
+  if (!timing) { setHint("status", "先完成第②步(定节拍),再点这里放音符"); return; }
+  const i = notes.findIndex((n) => Math.abs(n.t - t) < 0.001);
+  if (i >= 0) notes.splice(i, 1);
+  else notes.push({ t: Math.round(t * 1000) / 1000, type: "pose", lane: "body" });
+  notes.sort((a, b) => a.t - b.t);
+  $("note-count").textContent = notes.length;
+  draw();
+  if (notes.length) stepDone(3);
+}
+
+cv.onclick = (e) => {
+  const rect = cv.getBoundingClientRect();
+  toggleNote(nearestBeat(timeAtX(e.clientX - rect.left)));
+};
+
+// ---------- 播放 ----------
+$("play").onclick = () => (audio.paused ? audio.play() : audio.pause());
+$("stop").onclick = () => { audio.pause(); audio.currentTime = 0; };
+
+// ---------- 绘制 ----------
+function resize() { cv.width = Math.max(1000, Math.ceil(duration * PPS)); }
+const xAtTime = (t) => t * PPS;
+const timeAtX = (x) => x / PPS;
+
+function drawWaveform() {
+  if (!audioBuffer) return;
+  const data = audioBuffer.getChannelData(0);
+  const w = cv.width, h = cv.height, mid = h / 2;
+  const spp = Math.max(1, Math.floor(data.length / w));
+  ctx.fillStyle = "rgba(90,140,255,0.45)";
+  for (let x = 0; x < w; x++) {
+    const s = x * spp;
+    let mn = 1, mx = -1;
+    for (let k = 0; k < spp; k++) { const v = data[s + k]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    const y1 = mid + mn * mid * 0.92, y2 = mid + mx * mid * 0.92;
+    ctx.fillRect(x, Math.min(y1, y2), 1, Math.max(1, Math.abs(y2 - y1)));
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const H = cv.height, mid = H / 2;
+  drawWaveform();
+  if (timing) {
+    for (const b of timing.beatTimesSec) {
+      const x = xAtTime(b);
+      ctx.strokeStyle = isDownbeat(b) ? "rgba(255,213,74,0.6)" : "rgba(255,255,255,0.10)";
+      ctx.lineWidth = isDownbeat(b) ? 2 : 1;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+  }
+  for (const n of notes) {
+    const x = xAtTime(n.t);
+    ctx.fillStyle = "#39ffcf";
+    ctx.beginPath(); ctx.arc(x, mid, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#0b0d16"; ctx.lineWidth = 2; ctx.stroke();
+  }
+  const px = xAtTime(audio.currentTime);
+  ctx.strokeStyle = "#ff5f6d"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+}
+
+function loop() {
+  draw();
+  $("time-label").textContent = `${audio.currentTime.toFixed(1)}s / ${duration.toFixed(1)}s`;
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---------- ④ 导出 ----------
+function buildChart() {
+  return { version: "chart/v1", audio: audioName || "audio.wav", notes };
+}
+$("export").onclick = () => {
+  const json = JSON.stringify(buildChart(), null, 2);
+  $("export-box").style.display = "";
+  $("export-out").value = json;
+  const blob = new Blob([json], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (audioName || "chart").replace(/\.[^.]+$/, "") + ".chart.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setHint("status", `已导出 ${notes.length} 个音符 ✓ 全流程完成`, true);
+  stepDone(4);
+};
+$("copy").onclick = () => {
+  navigator.clipboard.writeText(JSON.stringify(buildChart(), null, 2)).then(() => setHint("status", "已复制到剪贴板 ✓", true));
+};
+</script>
+</body>
+</html>

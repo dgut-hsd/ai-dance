@@ -192,6 +192,8 @@ export class NoteChart {
     }
     this.chart = chart;
     this.durationSec = durationSec;
+    this.audioOffsetSec = chart.audioOffsetSec ?? 0;   // 音频前导(秒),播放时跳过
+    this.judgeOffsetSec = chart.judgeOffsetSec ?? 0;   // 谱面级判定偏移(叠加在全局 latency 上)
 
     const w = chart.timingWindows || {};
     this.windowsMs = {
@@ -404,6 +406,7 @@ export class AudioEngine {
     this._durationSec = durationSec;
     this._state = "idle";
     this._loop = false;
+    this._audioOffsetSec = 0;
     this.onStateChange = onStateChange;
     this.onEnded = onEnded;
   }
@@ -441,7 +444,7 @@ export class AudioEngine {
 
   _setState(s) { if (s !== this._state) { this._state = s; this.onStateChange?.(s); } }
 
-  async load(source) {
+  async load(source, audioOffsetSec = 0) {
     this._setState("loading");
     try {
       let arrayBuf;
@@ -457,7 +460,10 @@ export class AudioEngine {
         throw new Error("load(): source must be a URL string or ArrayBuffer");
       }
       this._buffer = await this.ctx.decodeAudioData(arrayBuf);
-      if (this._buffer && this._buffer.duration > 0) this._durationSec = this._buffer.duration;
+      this._audioOffsetSec = audioOffsetSec || 0;
+      if (this._buffer && this._buffer.duration > 0) {
+        this._durationSec = Math.max(0, this._buffer.duration - this._audioOffsetSec);
+      }
       this._setState("ready");
     } catch (e) {
       this._setState("idle");
@@ -483,7 +489,7 @@ export class AudioEngine {
       src.connect(this.ctx.destination);
       src.loop = this._loop;
       src.onended = () => { if (this._src === src) this._handleEnded(); };
-      src.start(when, offsetSec);
+      src.start(when, offsetSec + this._audioOffsetSec);
       this._src = src;
     }
   }
@@ -550,9 +556,9 @@ const TIER_MULT = { PERFECT: 1.0, GREAT: 0.8, GOOD: 0.6, MISS: 0 };
 
 function tierFromTiming(deltaSec, windowsMs) {
   const ms = Math.abs(deltaSec) * 1000;
-  if (ms <= windowsMs.perfect) return "PERFECT";
-  if (ms <= windowsMs.great) return "GREAT";
-  if (ms <= windowsMs.good) return "GOOD";
+  if (ms <= windowsMs.perfect + 1e-6) return "PERFECT";
+  if (ms <= windowsMs.great + 1e-6) return "GREAT";
+  if (ms <= windowsMs.good + 1e-6) return "GOOD";
   return "MISS";
 }
 
@@ -593,6 +599,11 @@ export class NoteJudge {
 
   feed(songTime, frame) { this.buffer.push(frame, songTime); }
 
+  // 判定时刻 = note.t + judgeOffsetSec + 全局延迟
+  _judgeTimeAt(t) {
+    return this.latency.judgeTimeAt(t + this.chart.judgeOffsetSec);
+  }
+
   // 每帧(或每 tick)驱动;返回本 tick 新产生的判定(含 hold 进行中)
   tick(songTime) {
     const out = [];
@@ -600,7 +611,7 @@ export class NoteJudge {
     for (let i = 0; i < this.chart.notes.length; i++) {
       const note = this.chart.notes[i];
       const st = this._states[i];
-      const judgeTime = this.latency.judgeTimeAt(note.t);
+      const judgeTime = this._judgeTimeAt(note.t);
 
       if (note.type === "hold") {
         const minHold = note.minHold ?? note.threshold ?? this.defaultThreshold;
@@ -617,13 +628,13 @@ export class NoteJudge {
             out.push(this._makeResult(note, st.startTier, start.acc, start.deltaSec, true));
           }
         } else if (st.phase === "active") {
-          const cur = this.buffer.sampleNearest(this.latency.judgeTimeAt(songTime), goodSec);
+          const cur = this.buffer.sampleNearest(this._judgeTimeAt(songTime), goodSec);
           if (cur) {
             const acc = this._compare(this.refAt(songTime, note), cur.frame, note);
             if (acc < st.minAcc) st.minAcc = acc;
             if (acc < minHold) st.broke = true;
           }
-          if (songTime >= this.latency.judgeTimeAt(note.endT) + goodSec) {
+          if (songTime >= this._judgeTimeAt(note.endT) + goodSec) {
             let tier;
             if (st.broke) tier = "GOOD";
             else if (st.minAcc >= PERFECT_ACC) tier = "PERFECT";
@@ -726,12 +737,13 @@ export class NoteJudge {
 // SongSession — 门面,main.js 唯一入口
 // ---------------------------------------------------------------------------
 export class SongSession {
-  constructor({ sequence, similarity, audioContext = null, onJudge = null, onBeat = null, onStateChange = null, latency = null } = {}) {
+  constructor({ sequence, similarity, audioContext = null, onJudge = null, onBeat = null, onStateChange = null, latency = null, onSongEnd = null } = {}) {
     if (!sequence) throw new Error("SongSession needs a sequence");
     this.sequence = sequence;
     this.similarity = similarity || (() => 0);
     this.onJudge = onJudge;
     this.onBeat = onBeat;
+    this.onSongEnd = onSongEnd;
     this.latency = latency || new LatencyModel();
     this.engine = new AudioEngine({ audioContext, onStateChange, onEnded: () => this._handleEnded() });
     this.timing = null;
@@ -769,8 +781,11 @@ export class SongSession {
 
     const audioPath = this.sequence.chart?.audio || this.sequence.meta?.audio || this.sequence.audio;
     if (audioPath) {
-      try { await this.engine.load(audioPath); }
-      catch (e) { console.warn("audio load failed, running silent:", e); }
+      const audioOffsetSec = this.sequence.chart?.audioOffsetSec ?? 0;
+      try {
+        await this.engine.load(audioPath, audioOffsetSec);
+        if (durationSec > 0) this.engine.setDurationSec(durationSec); // meta 为准
+      } catch (e) { console.warn("audio load failed, running silent:", e); }
     }
   }
 
@@ -806,6 +821,7 @@ export class SongSession {
   _handleEnded() {
     if (this._ended) return;
     this._ended = true;
+    this.onSongEnd?.();
   }
 
   pause() { return this.engine.pause(); }

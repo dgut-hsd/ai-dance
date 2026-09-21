@@ -461,3 +461,71 @@ test("SongSession: prepare/start/update 驱动音符判定(静默时钟)", async
   assert.equal(settled.length, 1);
   assert.equal(settled[0].tier, "PERFECT");
 });
+
+test("AudioEngine: audioOffsetSec 跳过前导并缩短时长", async () => {
+  const clock = { t: 0 };
+  const { ctx, started } = fakeAudioContext(clock);
+  const e = new AudioEngine({ audioContext: ctx });
+  await e.load(new ArrayBuffer(8), 2); // decode 返回 duration 4.0
+  assert.equal(e.durationSec, 2);
+  await e.play(0);
+  assert.equal(started[0].offset, 2); // 起播即跳 2s 前导
+});
+
+test("NoteJudge: chart.judgeOffsetSec 平移判定时刻", () => {
+  const withOffset = new NoteJudge(
+    { version: "chart/v1", judgeOffsetSec: 0.1, notes: [{ id: "n", t: 1.0, type: "pose" }] },
+    markerSimilarity, { refAt, durationSec: 10 }
+  );
+  withOffset.feed(1.1, mkFrame("A"));
+  assert.equal(withOffset.tick(1.25)[0].tier, "PERFECT"); // judgeTime = 1.1
+
+  const without = new NoteJudge(
+    { version: "chart/v1", notes: [{ id: "n", t: 1.0, type: "pose" }] },
+    markerSimilarity, { refAt, durationSec: 10 }
+  );
+  without.feed(1.1, mkFrame("A"));
+  assert.equal(without.tick(1.15)[0].tier, "GREAT"); // 无 offset:1.1 处 = 100ms → GREAT
+});
+
+test("SongSession: 静默时钟到点触发 onSongEnd(幂等)", async () => {
+  const clock = { t: 0 };
+  const { ctx } = fakeAudioContext(clock);
+  const seq = {
+    schema: "dance-sequence/v1", danceId: "x",
+    meta: { fps: 30, durationSec: 2, numFrames: 60, boneCount: 2, danceType: "full-body" },
+    bones: [], frames: [{ t: 0, bones: [[1, 0, 0]], conf: [1] }],
+  };
+  let ended = 0;
+  const session = new SongSession({ sequence: seq, similarity: () => 1, audioContext: ctx, onSongEnd: () => ended++ });
+  await session.prepare();
+  await session.start(0);
+  clock.t = 1.9; session.update(); assert.equal(ended, 0);
+  clock.t = 2.0; session.update(); assert.equal(ended, 1);
+  clock.t = 2.5; session.update(); assert.equal(ended, 1);
+  session.stop();
+});
+
+test("SongSession: 音频自然结束触发 onSongEnd", async () => {
+  const clock = { t: 0 };
+  const { ctx, started } = fakeAudioContext(clock);
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
+  try {
+    let ended = 0;
+    const seq = {
+      schema: "dance-sequence/v1", danceId: "y",
+      meta: { fps: 30, durationSec: 4, numFrames: 120, boneCount: 2, danceType: "full-body", audio: "song.wav" },
+      bones: [], frames: [],
+    };
+    const session = new SongSession({ sequence: seq, similarity: () => 1, audioContext: ctx, onSongEnd: () => ended++ });
+    await session.prepare();
+    await session.start(0);
+    assert.equal(started.length, 1);
+    started[0].src.onended(); // 模拟音频自然结束
+    assert.equal(ended, 1);
+    session.stop();
+  } finally {
+    globalThis.fetch = origFetch;
+  }
+});

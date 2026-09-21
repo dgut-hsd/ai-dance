@@ -118,7 +118,7 @@ class AudioEngine implements SongClock {
   get loop(): boolean;               // 循环播放(表演模式用)
   set loop(v: boolean): void;
 
-  async load(source: string | ArrayBuffer): Promise<void>;   // fetch → decodeAudioData
+  async load(source: string | ArrayBuffer, audioOffsetSec?: number): Promise<void>;   // fetch → decodeAudioData;audioOffsetSec=跳过音频前导(静音/lead-in)
   async play(whenSec?: number): Promise<void>;               // whenSec=绝对 ctx 时间;缺省 ctx.currentTime + 0.06
   pause(): number;                    // 暂停并返回此刻 songTime(不释放 buffer)
   async resume(): Promise<void>;      // 从暂停点重建 source 继续
@@ -288,6 +288,7 @@ interface SongSessionOptions {
   onJudge?: (r: JudgeResult) => void;        // 透传 NoteJudge
   onBeat?: (beat: { index: number; time: number; downbeat: boolean }) => void;
   onStateChange?: (s: SongState) => void;
+  onSongEnd?: () => void;                      // 歌曲结束(音频自然结束或静默时钟到点),幂等
 }
 
 class SongSession {

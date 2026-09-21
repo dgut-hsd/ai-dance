@@ -9,13 +9,21 @@ import * as THREE from "three";
 import { startPoseStream } from "../pose_capture/mocap.js";
 import { resolveMode } from "../pose_capture/contract.js";
 import { reconstructJoints } from "../pose_capture/playback.js";
-import { renderStickFigure } from "../pose_capture/stick-figure.js";
+import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { createScene } from "./scene.js";
 import { createJuice } from "./ui-lab/juice.js";
 import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
 import { SimpleScorer } from "./simple-score.js";
 import { buildDemoSequence } from "./demo-sequence.js";
 import { SongSession, AudioEngine } from "./audio.js";
+import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
+
+// 动作预期(Just Dance 式右侧滚动列):把谱面音符当作"动作时刻",按时间差换算成纵向位移。
+const MOVE_NOW_LINE_Y = 10;          // "现在"判定线距滚动区顶部的像素
+const MOVE_FALLBACK_INTERVAL = 2.0;  // 无谱面时,按此固定间隔生成动作时刻
+const MOVE_HORIZON = 3;              // 最多展示接下来 N 个动作
+const MOVE_EXIT_SEC = 0.45;          // 卡片滑过判定线后的淡出时长
+const MOVE_ENTER_SEC = 0.30;         // 新卡片淡入时长
 
 // ---------------------------------------------------------------------------
 // 状态
@@ -55,7 +63,7 @@ const dom = {
   confFill: $("conf-fill"),
   confLabel: $("conf-label"),
   refPanel: $("ref-panel"),
-  refStick: $("ref-stick"),
+  moveTrack: $("move-track"),
   beats: $("beats"),
   scorePanel: $("score-panel"),
   grade: $("grade"),
@@ -214,6 +222,7 @@ async function loadModel(url, type) {
     }
     scene.scene.add(avatar.object);
     avatar.retargeter.reset();
+    captureRestPose(avatar.object); // 记录休息姿态,供内置舞曲重定向对齐
     state.avatar = avatar;
     state.modelSource = { url, type: type || detectExt(url) };
     state.skeletons = avatar.skeletons;
@@ -326,6 +335,10 @@ function makeCoachPlayer(seq, retargeter, boneDefs) {
 // ---------------------------------------------------------------------------
 // 表演模式:播放 FBX/GLB 内嵌动画(AnimationMixer)
 // ---------------------------------------------------------------------------
+// 表演曲目列表:{ id, label, kind: 'builtin'|'embedded', dance?, clip? }
+let performanceOptions = [];
+let mixerSeq = 0; // 令牌:让「停止/切换」作废进行中的异步舞曲加载
+
 function enterPerformance() {
   stopMixer();
   if (!state.avatar) {
@@ -333,21 +346,34 @@ function enterPerformance() {
     setStatus("请先选择舞者");
     return;
   }
-  const anims = state.avatar.animations || [];
-  dom.animSelect.innerHTML = "";
-  for (const clip of anims) {
-    const opt = document.createElement("option");
-    opt.value = clip.name;
-    opt.textContent = clip.name;
-    dom.animSelect.appendChild(opt);
-  }
-  if (anims.length) {
+  buildPerformanceOptions();
+  if (performanceOptions.length) {
     dom.btnStart.disabled = false;
     dom.btnStop.disabled = true;
-    setStatus(`表演模式:${anims.length} 个内嵌动画,点「开始」播放`);
+    setStatus(`表演模式:${performanceOptions.length} 支舞蹈,选好点「开始」播放`);
   } else {
     dom.btnStart.disabled = true;
-    setStatus("该模型没有内嵌动画(建议用 Mixamo 的 FBX)");
+    setStatus("没有可用舞蹈(内置舞曲 + 模型内嵌动画均不可用)");
+  }
+}
+
+function buildPerformanceOptions() {
+  performanceOptions = [];
+  dom.animSelect.innerHTML = "";
+  const add = (opt) => {
+    performanceOptions.push(opt);
+    const el = document.createElement("option");
+    el.value = opt.id;
+    el.textContent = opt.label;
+    dom.animSelect.appendChild(el);
+  };
+  // 内置舞曲(优先):来自仓库根 fbx/ 目录的 Mixamo 动作
+  for (const d of BUILTIN_DANCES) {
+    add({ id: "builtin:" + d.id, label: "内置 · " + d.label, kind: "builtin", dance: d });
+  }
+  // 模型内嵌动画(如默认 Michelle 自带的 SambaDance)
+  for (const clip of state.avatar.animations || []) {
+    add({ id: "embedded:" + clip.name, label: clip.name, kind: "embedded", clip });
   }
 }
 
@@ -360,7 +386,7 @@ async function ensurePerformanceAudio() {
   const audioContext = AudioCtor ? new AudioCtor() : null;
   const engine = new AudioEngine({ audioContext });
   engine.loop = true;
-  await engine.load("audio/samba-demo.wav");
+  await engine.load("audio/pop-demo.wav");
   performanceAudio = engine;
   return engine;
 }
@@ -375,19 +401,44 @@ function stopPerformanceMusic() {
   if (performanceAudio) performanceAudio.stop();
 }
 
-function startMixer(clipName) {
-  if (!state.avatar?.animations?.length) return;
+async function startMixer(optionId) {
+  if (!state.avatar) return;
+  const opt = performanceOptions.find((o) => o.id === optionId) || performanceOptions[0];
+  if (!opt) return;
+  const seq = ++mixerSeq;
   stopMixer();
-  const clip = state.avatar.animations.find((c) => c.name === clipName) || state.avatar.animations[0];
+
+  let clip;
+  if (opt.kind === "builtin") {
+    setStatus("正在加载舞曲:" + opt.label + "…");
+    try {
+      const { root, clips } = await loadDanceClips(opt.dance);
+      if (seq !== mixerSeq || state.mode !== "performance") return; // 已被停止/切换
+      if (!clips.length) throw new Error("该 FBX 里没有动画片段");
+      clip = retargetClipToSkeleton(clips[0], root, state.avatar.object);
+      if (!clip.tracks.length) throw new Error("骨骼名对不上,无法重定向到当前舞者");
+    } catch (e) {
+      if (seq !== mixerSeq || state.mode !== "performance") return;
+      console.error(e);
+      setStatus("舞曲加载失败:" + e.message);
+      dom.btnStart.disabled = false;
+      return;
+    }
+  } else {
+    clip = opt.clip;
+  }
+  if (!clip) return;
+
   state.avatar.retargeter.reset();
   state.mixer = new THREE.AnimationMixer(state.avatar.object);
   const action = state.mixer.clipAction(clip);
   action.reset();
+  action.setLoop(THREE.LoopRepeat, Infinity); // 动作短,循环播放(与循环背景乐一致)
   action.play();
   state.running = true;
   dom.btnStart.disabled = true;
   dom.btnStop.disabled = false;
-  setStatus("播放动画: " + clip.name);
+  setStatus("播放舞蹈: " + (opt.label || clip.name));
   startPerformanceMusic();
 }
 
@@ -457,6 +508,7 @@ function ensureSession(ch) {
     similarity: (ref, player) => scorer._similarity(ref, player),
     audioContext,
     onJudge: (r) => handleNoteJudge(ch, r),
+    onSongEnd: () => finishChallenge(),
   });
   return ch.session;
 }
@@ -580,10 +632,9 @@ function onFrame(frame, boneDefs) {
       judgeFeedback(res.tier, res.combo);
     }
     ch.session?.feed(t, frame);
-    ch.session?.update();
+    ch.session?.update(); // 内部含节拍 + 音符判定 + 结束检测(onSongEnd)
     updateChallengeProgress(t, ch);
     beatPulse(t, ch);
-    if (t >= ch.seq.meta.durationSec) finishChallenge();
   }
 }
 
@@ -599,6 +650,7 @@ function stopAll() {
   }
   state.coachPlayer = null;
   if (state.coach) state.coach.retargeter.reset();
+  mixerSeq++; // 作废进行中的异步舞曲加载
   stopMixer(); // 停动画并复位主舞者
   dom.btnStart.disabled = !state.avatar;
   dom.btnStop.disabled = true;
@@ -612,7 +664,7 @@ dom.btnStart.addEventListener("click", async () => {
   dom.btnStart.disabled = true;
   try {
     if (state.mode === "performance") {
-      startMixer(dom.animSelect.value);
+      await startMixer(dom.animSelect.value);
     } else if (state.mode === "challenge") {
       await startChallenge();
     } else {
@@ -704,17 +756,126 @@ function resetScoreHUD() {
   dom.accPct.textContent = "0%";
   dom.progressFill.style.width = "0%";
   drawAccRing(0);
+  // 清空动作预期滚动列
+  for (const [, card] of moveCards) card.el.remove();
+  moveCards.clear();
+}
+
+// ---------------------------------------------------------------------------
+// 动作预期:Just Dance 式右侧滚动列
+// ---------------------------------------------------------------------------
+const moveCards = new Map(); // timeKey -> { el, canvas, label, born }
+
+// 动作时刻列表(秒,升序):优先谱面音符;无谱面则按固定间隔生成
+function getMoveTimes(ch) {
+  const notes = ch.session?.chart?.notes;
+  if (notes && notes.length) return notes.map((n) => n.t);
+  const dur = ch.seq.meta.durationSec || 0;
+  const out = [];
+  for (let t = 0; t <= dur + 1e-6; t += MOVE_FALLBACK_INTERVAL) out.push(+t.toFixed(3));
+  return out;
+}
+
+// 在右上角渲染一条竖直滚动列(Just Dance 式):
+//   - 顶部判定线处「钉住」当前动作(白色剪影 + 粉色发光 + 呼吸脉动);
+//   - 下方接下来的动作随歌曲时间向上滚动(灰色 → 最远深灰),到点后升格为当前。
+function renderMoveColumn(ch, now) {
+  const track = dom.moveTrack;
+  if (!track) return;
+  const times = getMoveTimes(ch);
+  const dims = ch.seq.meta.dimensions || {};
+  const bones = ch.seq.bones;
+
+  // 自适应尺寸:卡片高度随滚动区宽度变化;canvas 后台像素按 dpr 放大保证清晰
+  const trackW = track.clientWidth || 150;
+  const dpr = globalThis.devicePixelRatio || 1;
+  const cardH = Math.round(Math.min(120, Math.max(80, trackW * 0.75)));
+  const gap = Math.round(cardH * 0.16);
+  const spacing = cardH + gap;
+
+  // 滚动速度:按最小动作间隔算,保证卡片永不重叠
+  let minGap = Infinity;
+  for (let i = 1; i < times.length; i++) minGap = Math.min(minGap, times[i] - times[i - 1]);
+  if (!isFinite(minGap) || minGap <= 0) minGap = MOVE_FALLBACK_INTERVAL;
+  const pxPerSec = spacing / minGap;
+
+  // 当前动作下标(最大的 t <= now)
+  let curIdx = -1;
+  for (let i = times.length - 1; i >= 0; i--) if (times[i] <= now) { curIdx = i; break; }
+
+  // 可见卡片:退出中的(上一个动作)+ 当前(钉住)+ 接下来 N 个
+  const cards = [];
+  if (curIdx >= 0) {
+    const exitElapsed = now - times[curIdx]; // 上一个动作已退出多久
+    if (curIdx - 1 >= 0 && exitElapsed < MOVE_EXIT_SEC) {
+      cards.push({ t: times[curIdx - 1], tier: "exit", exitElapsed });
+    }
+    cards.push({ t: times[curIdx], tier: "active" });
+  }
+  for (let i = curIdx + 1; i <= curIdx + MOVE_HORIZON && i < times.length; i++) {
+    cards.push({ t: times[i], tier: i === curIdx + MOVE_HORIZON ? "far" : "next" });
+  }
+
+  // 移除不再需要的卡片
+  const needed = new Set(cards.map((c) => c.t.toFixed(3)));
+  for (const [key, card] of moveCards) {
+    if (!needed.has(key)) { card.el.remove(); moveCards.delete(key); }
+  }
+
+  cards.forEach((c) => {
+    const key = c.t.toFixed(3);
+    let card = moveCards.get(key);
+    if (!card) {
+      const el = document.createElement("div");
+      el.className = "move-card";
+      el.style.height = cardH + "px";
+      const canvas = document.createElement("canvas");
+      canvas.className = "move-sil";
+      canvas.width = Math.round(trackW * dpr);
+      canvas.height = Math.round(cardH * dpr);
+      const label = document.createElement("span");
+      label.className = "move-time";
+      el.appendChild(canvas);
+      el.appendChild(label);
+      track.appendChild(el);
+      card = { el, canvas, label, born: now };
+      moveCards.set(key, card);
+      // 该动作的姿势固定,只画一次剪影
+      const frame = ch.scorer.frameAt(c.t);
+      if (frame) {
+        const joints = reconstructJoints(frame, dims, bones);
+        renderPoseSilhouette(card.canvas, joints, bones);
+      }
+    }
+
+    // 定位:当前钉在判定线;退出中的向上滑走;接下来的向上滚动逼近判定线
+    let y;
+    if (c.tier === "active") y = MOVE_NOW_LINE_Y;
+    else if (c.tier === "exit") y = MOVE_NOW_LINE_Y - c.exitElapsed * pxPerSec;
+    else y = MOVE_NOW_LINE_Y + (c.t - now) * pxPerSec;
+    card.el.style.transform = `translateY(${y.toFixed(1)}px)`;
+
+    // 透明度:退出淡出 / 最远降透明度 / 新卡淡入
+    let opacity = 1;
+    if (c.tier === "exit") opacity = Math.max(0, 1 - c.exitElapsed / MOVE_EXIT_SEC);
+    else if (c.tier === "far") opacity = 0.62;
+    const enter = Math.min(1, Math.max(0, (now - card.born) / MOVE_ENTER_SEC));
+    card.el.style.opacity = (opacity * enter).toFixed(2);
+
+    // 层级:当前 / 最远 / 普通后续
+    card.el.classList.toggle("active", c.tier === "active");
+    card.el.classList.toggle("far", c.tier === "far");
+
+    // 倒计时(仅未来动作)
+    card.label.textContent = (c.tier === "next" || c.tier === "far") ? (c.t - now).toFixed(1) + "s" : "";
+  });
 }
 
 function updateChallengeProgress(t, ch) {
   const dur = ch.seq.meta.durationSec || 1;
   dom.progressFill.style.width = Math.min(100, (t / dur) * 100) + "%";
-  // 参考动作
-  const refFrame = ch.scorer.frameAt(t);
-  if (refFrame) {
-    const joints = reconstructJoints(refFrame, ch.seq.meta.dimensions || {}, ch.seq.bones);
-    renderStickFigure(dom.refStick, joints, ch.seq.bones, refFrame.hands);
-  }
+  // 动作预期:Just Dance 式右侧滚动列(当前 + 接下来 N 个动作剪影)
+  renderMoveColumn(ch, t);
   // 节拍指示(优先 timing/v1,回退旧 beatTimesSec)
   const timing = ch.session?.timing;
   let beatIdx = 0;

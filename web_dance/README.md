@@ -27,8 +27,12 @@ python -m http.server 8000
    3D 教练(由 `dance-sequence/v1` JSON 逐帧驱动),右侧是你(实时动捕);先 3-2-1-GO 倒计时,
    跟着教练跳,右下角实时计分(分数 / 连击 / 匹配度 / 评级)。内置一支合成示例舞,
    也可「加载参考 JSON」(即 `pose_capture` 导出的文件)。
-4. **舞者表演**:播放模型**内嵌的 FBX/GLB 动画**(默认 Michelle 自带桑巴舞 SambaDance),
-   底部「动画」下拉可切换片段;加载自己 Mixamo 的 FBX 后这里会出现它的动画列表。
+4. **舞者表演**:底部「动画」下拉可切换舞蹈。默认列出**内置舞曲**(仓库根 `fbx/` 目录里的
+   Mixamo 动作,如 Hip Hop Dancing / Salsa Dancing),加上模型**内嵌的 FBX/GLB 动画**
+   (默认 Michelle 自带桑巴舞 SambaDance)。内置舞曲做**世界空间重定向**(先按骨骼名匹配,
+   再用源/目标骨架的休息姿态差对齐朝向,避免 Mixamo FBX 与 glTF 骨架的 90° 朝向错位),
+   只保留旋转轨道(原地跳),短片段自动循环播放。想加新舞:把 FBX 丢进仓库根 `fbx/`,
+   在 `dance-library.js` 的 `BUILTIN_DANCES` 里补一行。
 5. 快捷键:`空格` 开始/停止,`M` 切换左右镜像。
 
 ## 目录结构
@@ -43,6 +47,7 @@ python -m http.server 8000
 | `ik.js` | 两骨 IK 求解器(位置级,带 pole 弯折方向约束) |
 | `score.js` | 舞蹈挑战实时评分 |
 | `demo-sequence.js` | 内置合成示例舞(开箱即玩) |
+| `dance-library.js` | 内置舞曲库:加载 `fbx/` 里的 Mixamo 动作并重定向到当前骨架 |
 
 ## 原理(把「契约帧」搬到 3D 骨架)
 

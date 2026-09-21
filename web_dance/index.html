@@ -53,10 +53,13 @@
         <div id="conf-label">置信度 --</div>
       </div>
 
-      <!-- 右上:挑战参考动作 -->
+      <!-- 右上:舞蹈动作(Just Dance 式滚动列:当前 + 接下来的动作剪影) -->
       <div id="ref-panel" class="panel hidden">
-        <div class="panel-title">目标动作</div>
-        <canvas id="ref-stick" width="240" height="320"></canvas>
+        <div class="panel-title">舞蹈动作</div>
+        <div id="move-scroll">
+          <div id="move-now-line"></div>
+          <div id="move-track"></div>
+        </div>
         <div id="beats">
           <span></span><span></span><span></span><span></span>
         </div>
