@@ -26,8 +26,14 @@ const _cache = new Map();
 // 目标骨架的「休息姿态」缓存(root -> Map<Bone, 世界四元数>),载入时采集一次
 const _restCache = new WeakMap();
 
-function stripMixamorig(name) {
-  return String(name).replace(/^mixamorig/i, "");
+// 归一化骨骼名:去掉 mixamorig 前缀,并去掉可能残留的分隔符(: . _ - 空格)。
+// 兼容三种命名:Mixamo FBX 的 `mixamorigHips`、Michelle glb 的 `mixamorig:Hips`、
+// 以及 ReadyPlayerMe 的 `Hips`,统一归一到 `hips`。
+function normalizeBoneName(name) {
+  return String(name)
+    .toLowerCase()
+    .replace(/^mixamorig/i, "")
+    .replace(/^[:._\s-]+/, "");
 }
 
 /**
@@ -57,12 +63,12 @@ export function retargetClipToSkeleton(clip, sourceRoot, targetRoot) {
   sourceRoot.traverse((o) => { if (o.isBone) srcByName.set(o.name, o); });
   const dstByKey = new Map();
   targetRoot.traverse((o) => {
-    if (o.isBone) dstByKey.set(stripMixamorig(o.name).toLowerCase(), o);
+    if (o.isBone) dstByKey.set(normalizeBoneName(o.name), o);
   });
 
   const pairs = []; // { src, dst }
   for (const [name, src] of srcByName) {
-    const dst = dstByKey.get(stripMixamorig(name).toLowerCase());
+    const dst = dstByKey.get(normalizeBoneName(name));
     if (dst) pairs.push({ src, dst });
   }
   if (!pairs.length) return new THREE.AnimationClip(clip.name, clip.duration, []);
@@ -109,14 +115,16 @@ export function retargetClipToSkeleton(clip, sourceRoot, targetRoot) {
       correctedWorld.set(p.src, cw);
 
       // 目标局部 = 父世界⁻¹ × 修正世界
+      // 父是被匹配的骨骼 → 用它本帧的修正世界朝向;否则(非骨骼父节点/未匹配骨骼)
+      // → 用父节点当前(休息态)的真实世界朝向,不能假设是恒等(Michelle 骨架外层有带旋转的节点)。
       let parentWorld;
       const pp = p.src.parent ? pairOfSrc.get(p.src.parent) : null;
       if (pp) {
         parentWorld = correctedWorld.get(pp.src);
       } else {
         const dstParent = p.dst.parent;
-        parentWorld = (dstParent && dstParent.isBone)
-          ? (dstRest.get(dstParent) || new THREE.Quaternion())
+        parentWorld = dstParent
+          ? dstParent.getWorldQuaternion(new THREE.Quaternion())
           : new THREE.Quaternion();
       }
       if (!parentWorld) parentWorld = new THREE.Quaternion();

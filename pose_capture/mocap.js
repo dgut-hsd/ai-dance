@@ -17,6 +17,7 @@ import {
   resolveMode,
 } from "./contract.js";
 import { PoseSmoother, HandSmoother } from "./filters.js";
+import { RootMotionTracker } from "./root-motion.js";
 import { PerfMonitor } from "./perf.js";
 import { createPoseEngine } from "./pose-engine.js";
 import { renderStickFigure } from "./stick-figure.js";
@@ -43,6 +44,7 @@ async function runLivePipeline({
   await onReady();
 
   const smoother = new PoseSmoother(smoothing);
+  const rootTracker = new RootMotionTracker();
   const handSmoother = withHands
     ? new HandSmoother({ minCutoff: 3.0, beta: 1.0, dCutoff: 1.0 }) // 手更快,更跟手
     : null;
@@ -80,7 +82,8 @@ async function runLivePipeline({
         const handsField = handSmoother
           ? handSmoother.smooth(rawHands, tSec)
           : null;
-        const frame = buildFrame(tSec, joints, vis, boneDefs, handsField);
+        const root = rootTracker.update(joints, tSec);
+        const frame = buildFrame(tSec, joints, vis, boneDefs, handsField, root);
 
         onFrame?.(frame);
         if (canvas) renderStickFigure(canvas, joints, boneDefs, handsField);

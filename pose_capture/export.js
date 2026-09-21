@@ -15,6 +15,7 @@ import {
   resolveMode,
 } from "./contract.js";
 import { PoseSmoother, HandSmoother } from "./filters.js";
+import { RootMotionTracker } from "./root-motion.js";
 import { computeDimensions } from "./playback.js";
 
 export async function exportVideoToSequence({
@@ -52,6 +53,7 @@ export async function exportVideoToSequence({
 
   // ---- 3. 播放并逐帧采集 ----
   const smoother = new PoseSmoother(smoothing);
+  const rootTracker = new RootMotionTracker();
   const handSmoother = m.hands
     ? new HandSmoother({ minCutoff: 3.0, beta: 1.0, dCutoff: 1.0 })
     : null;
@@ -93,8 +95,16 @@ export async function exportVideoToSequence({
             const handsField = handSmoother
               ? handSmoother.smooth(rawHands, tSec)
               : null;
+            const root = rootTracker.update(joints, tSec);
 
-            const frame = { t: tSec, bones, rootYaw, conf };
+            const frame = {
+              t: tSec,
+              bones,
+              rootYaw,
+              conf,
+              rootVel: root.rootVel,   // 根运动:髋中点速度(米/秒)
+              grounded: root.grounded, // 根运动:是否贴地
+            };
             if (handsField) frame.hands = handsField;
             frames.push(frame);
 

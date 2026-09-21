@@ -17,6 +17,7 @@ import { SimpleScorer } from "./simple-score.js";
 import { buildDemoSequence } from "./demo-sequence.js";
 import { SongSession, AudioEngine } from "./audio.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
+import { SONGS, FBX_DANCES, loadFbxSequence } from "./challenge-library.js";
 
 // 动作预期(Just Dance 式右侧滚动列):把谱面音符当作"动作时刻",按时间差换算成纵向位移。
 const MOVE_NOW_LINE_Y = 10;          // "现在"判定线距滚动区顶部的像素
@@ -41,6 +42,8 @@ const state = {
   modelSource: null,       // { url, type } 用于给教练加载同一模型
   stream: null,
   challenge: null,         // { seq, scorer, running, session, noteBonus }
+  challengeDanceId: "demo",
+  challengeSongId: "demo-beat",
   latestConf: 0,
 };
 
@@ -81,6 +84,10 @@ const dom = {
   danceTypeLabel: $("dance-type-label"),
   btnLoadRef: $("btn-load-ref"),
   refFile: $("ref-file"),
+  dancePicker: $("dance-picker"),
+  danceSelect: $("dance-select"),
+  songPicker: $("song-picker"),
+  songSelect: $("song-select"),
   animPicker: $("anim-picker"),
   animSelect: $("anim-select"),
   btnReset: $("btn-reset"),
@@ -254,6 +261,80 @@ dom.modelFile.addEventListener("change", () => {
 });
 
 // ---------------------------------------------------------------------------
+// 挑战舞曲选择(舞蹈 + 歌曲)
+// ---------------------------------------------------------------------------
+const CHALLENGE_DANCES = [
+  { id: "demo", label: "合成示例舞", kind: "demo", defaultSongId: "demo-beat" },
+  { id: "hiphop", label: "Hip Hop Dancing", kind: "fbx", fbx: FBX_DANCES[0], defaultSongId: "pop-demo" },
+  { id: "salsa", label: "Salsa Dancing", kind: "fbx", fbx: FBX_DANCES[1], defaultSongId: "samba-demo" },
+];
+
+function challengeDance() {
+  return CHALLENGE_DANCES.find((d) => d.id === state.challengeDanceId) || CHALLENGE_DANCES[0];
+}
+function challengeSong() {
+  return SONGS.find((s) => s.id === state.challengeSongId) || SONGS[0];
+}
+
+// 把歌曲的音频 + BPM 覆盖到序列上(用于内置 demo 序列换歌)
+function applySongToSequence(seq, song) {
+  seq.chart = { ...seq.chart, audio: song.url };
+  const bpm = song.bpm;
+  seq.meta.timing = { version: "timing/v1", bpm, offsetSec: 0, tempoMap: [{ t: 0, bpm }] };
+  const beat = 60 / bpm;
+  const beats = [];
+  for (let t = 0; t <= seq.meta.durationSec; t += beat) beats.push(+t.toFixed(3));
+  seq.meta.beatTimesSec = beats;
+  return seq;
+}
+
+async function rebuildChallenge() {
+  const dance = challengeDance();
+  const song = challengeSong();
+  if (state.running) stopAll();
+  let seq;
+  if (dance.kind === "fbx") {
+    setStatus("正在生成舞曲:" + dance.label + "…");
+    seq = await loadFbxSequence(dance.fbx, song);
+  } else {
+    seq = applySongToSequence(buildDemoSequence(), song);
+  }
+  state.challenge = { seq, scorer: new SimpleScorer(seq), running: false };
+  state.coachPlayer = null;
+  setStatus(`已选:${dance.label} / ${song.label}`);
+}
+
+function setupChallengePickers() {
+  for (const d of CHALLENGE_DANCES) {
+    const o = document.createElement("option");
+    o.value = d.id;
+    o.textContent = d.label;
+    dom.danceSelect.appendChild(o);
+  }
+  for (const s of SONGS) {
+    const o = document.createElement("option");
+    o.value = s.id;
+    o.textContent = s.label;
+    dom.songSelect.appendChild(o);
+  }
+  dom.danceSelect.value = state.challengeDanceId;
+  dom.songSelect.value = state.challengeSongId;
+
+  dom.danceSelect.addEventListener("change", () => {
+    state.challengeDanceId = dom.danceSelect.value;
+    const dance = challengeDance();
+    state.challengeSongId = dance.defaultSongId;
+    dom.songSelect.value = dance.defaultSongId;
+    rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
+  });
+  dom.songSelect.addEventListener("change", () => {
+    state.challengeSongId = dom.songSelect.value;
+    rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
+  });
+}
+setupChallengePickers();
+
+// ---------------------------------------------------------------------------
 // 模式切换
 // ---------------------------------------------------------------------------
 function setMode(mode) {
@@ -265,13 +346,11 @@ function setMode(mode) {
   dom.scorePanel.classList.toggle("hidden", !isChallenge);
   dom.refPanel.classList.toggle("hidden", !isChallenge);
   dom.btnLoadRef.classList.toggle("hidden", !isChallenge);
+  dom.dancePicker.classList.toggle("hidden", !isChallenge);
+  dom.songPicker.classList.toggle("hidden", !isChallenge);
   dom.animPicker.classList.toggle("hidden", !isPerformance);
   if (isChallenge && !state.challenge) {
-    state.challenge = {
-      seq: buildDemoSequence(),
-      scorer: new SimpleScorer(buildDemoSequence()),
-      running: false,
-    };
+    rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
   }
   if (isPerformance) enterPerformance();
   layoutForMode();
@@ -327,7 +406,8 @@ function makeCoachPlayer(seq, retargeter, boneDefs) {
     update(t) {
       const i = Math.min(frames.length - 1, Math.max(0, Math.round(t * fps)));
       const frame = frames[i];
-      if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false });
+      // 教练固定站位跟跳,不消费根运动(否则会跟着参考序列的位移满场跑)
+      if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
     },
   };
 }

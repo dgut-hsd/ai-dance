@@ -161,8 +161,11 @@
 ### 4.2 MediaPipe 迁 Web Worker
 - 主线程推理会卡,污染单一时钟下的判定体验。用 Vite 打包迁到 Worker(README 已承认这是已知取舍)。
 
-### 4.3 rootPos 位移(跳跃)
-- 契约帧目前丢弃髋位移,跳跃/前后移动无法还原。在帧里保留 `rootPos`,`retarget.js` 追踪根节点位移(README 已列出)。
+### 4.3 rootPos 位移(跳跃)✅ 已按方案 C 落地
+- 契约帧目前丢弃髋位移,跳跃/前后移动无法还原。→ 已改为「根速度 + 地面接触」方案 C:
+  - 生产端 `pose_capture/root-motion.js` 输出 `rootVel`(髋中点相邻帧差分)+ `grounded`(最低脚踝相对地面)。
+  - 消费端 `retarget.js` 积分水平速度得到前后/左右位移,垂直在贴地时用运动学(蹲下)、腾空时用速度积分(跳跃)。
+  - 参考/教练固定站位(`rootMotion:false`),评分仍只比对 `bones`,保持平移不变。
 
 ### 4.4 手势舞完整 retarget
 - 手指逐节驱动(`hands` 21 点已有数据,`retarget.js` 未消费),`gesture` 音符的语义匹配(`gestureId`)。

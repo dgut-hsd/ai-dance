@@ -11,6 +11,7 @@
 | `contract.js` | 骨骼索引 + 坐标轴标定 + 归一化 + 拼帧 | M2 |
 | `pose-engine.js` | MediaPipe 模型加载/推理(实时与导出共用) | M1 |
 | `filters.js` | One Euro 滤波 + 低置信度冻结 | M4 |
+| `root-motion.js` | 根运动:髋中点速度 + 地面接触(跳跃/位移通道) | 方案C |
 | `mocap.js` | 摄像头 -> MediaPipe -> 平滑 -> 契约帧回调 | M0/M1/M4 |
 | `export.js` | 视频 -> 逐帧 -> dance-sequence JSON 导出 | 导出 |
 | `playback.js` | 序列 JSON 回放(重建关节 + 动画) | 回放 |

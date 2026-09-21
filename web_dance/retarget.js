@@ -34,6 +34,12 @@ const LIMBS = [
   { upper: "RightUpLeg",  lower: "RightLeg",     endL: "right_ankle", endR: "left_ankle",   l1: "thigh",    l2: "shin",    pole: "front", leg: true },
 ];
 
+// 根运动(方案 C)调参:
+const ROOT_VEL_DEADZONE = 0.08; // m/s:低于此速度的水平分量视为噪声,丢弃
+const ROOT_RECENTER = 0.6;      // 1/s:贴地时水平位移回中的指数速率(防随机游走漂出)
+const ROOT_MAX_DISP = 1.6;      // m:水平位移半径上限(不出舞台)
+const ROOT_AIR_DAMP = 0.9;      // 腾空垂直速度每帧阻尼
+
 export class Retargeter {
   /**
    * @param {THREE.Object3D} root 模型根节点(已缩放、已摆好,且 updateMatrixWorld 已调用)
@@ -77,9 +83,15 @@ export class Retargeter {
 
     // ---- 身体尺寸(供 reconstructJoints 重建目标关节点) ----
     this.dims = this._computeDims(hips, leftArm, rightArm, chest);
-    this.ankleYRest = -hips.getWorldPosition(new THREE.Vector3()).y;
-    this.rootBaseY = root.position.y;
-    this._hipShift = 0;
+    // 脚踝休息高度 = 髋→脚踝的腿长(负值)。与 reconstructJoints 的「髋为原点」口径自洽,
+    // 避免用「髋离地高度」导致脚踝/脚掌整体下陷(差一个脚踝离地高度 + 骨盆偏移)。
+    this.ankleYRest = -(this.dims.thigh + this.dims.shin);
+    this.rootBasePos = root.position.clone(); // 根基准位(布局 x/z + 贴地 y)
+    this._hipShift = 0;                        // 垂直位移(蹲/跳)
+    this._rootDisp = new THREE.Vector3();      // 水平位移积分(前后/左右)
+    this._airVy = 0;                           // 腾空垂直速度(世界系)
+    this._lastT = null;                        // 上一帧 t(秒),用于积分 dt
+    this._rootBaseSynced = false;              // 根基准位是否已对齐当前布局
     // 骨骼四元数平滑系数(0~1):1 = 完全跟手(默认)。
     // 注意:输入已在 pose_capture 管线里过 One Euro 滤波,这里再叠加平滑会明显拖慢
     // 响应(「提线木偶」感)。除非看到高频抖动,否则不要调小;要调建议 0.7~0.9。
@@ -246,7 +258,7 @@ export class Retargeter {
   /**
    * 应用一帧契约数据。
    */
-  applyFrame(frame, { boneDefs, mirror = true, flipFacing = false, minConf = 0.3 } = {}) {
+  applyFrame(frame, { boneDefs, mirror = true, flipFacing = false, minConf = 0.3, rootMotion = true } = {}) {
     if (!frame || !Array.isArray(frame.bones) || !boneDefs) return;
     const bones = frame.bones;
     const idx = this._boneIndex(boneDefs);
@@ -264,12 +276,62 @@ export class Retargeter {
     const isFullBody = idx["thigh_l"] != null;
     const joints = reconstructJoints(frame, this.dims, boneDefs);
 
-    // ---- 根高度:脚贴地(仅全身模式有腿数据) ----
+    // ---- 根运动(仅全身模式):水平位移积分 + 垂直(贴地运动学 / 腾空速度) ----
     if (isFullBody && joints.left_ankle && joints.right_ankle) {
+      if (!this._rootBaseSynced) {
+        this.rootBasePos.copy(this.root.position);
+        this._rootDisp.set(0, 0, 0);
+        this._hipShift = 0;
+        this._airVy = 0;
+        this._lastT = null;
+        this._rootBaseSynced = true;
+      }
+
       const ankleY = (joints.left_ankle[1] + joints.right_ankle[1]) / 2;
-      const target = this.ankleYRest - ankleY;
-      this._hipShift += (target - this._hipShift) * 0.85; // 只做很轻的低通,避免垂直方向拖沓
-      this.root.position.y = this.rootBaseY + this._hipShift;
+      const kinTarget = this.ankleYRest - ankleY; // 脚踝反推髋高(蹲下正确)
+      const hasRoot = rootMotion &&
+        Array.isArray(frame.rootVel) && frame.rootVel.length >= 3;
+
+      if (hasRoot) {
+        const dt = this._lastT != null
+          ? Math.min(Math.max(frame.t - this._lastT, 0), 0.1)
+          : 0;
+        this._lastT = frame.t;
+        const grounded = frame.grounded !== false; // 缺省视为贴地(保守回退)
+        const vWorld = toWorld(frame.rootVel);
+
+        // 水平:死区抑制噪声 → 积分 → 贴地缓慢回中 → 限幅不出舞台
+        const vx = Math.abs(vWorld.x) < ROOT_VEL_DEADZONE ? 0 : vWorld.x;
+        const vz = Math.abs(vWorld.z) < ROOT_VEL_DEADZONE ? 0 : vWorld.z;
+        this._rootDisp.x += vx * dt;
+        this._rootDisp.z += vz * dt;
+        if (grounded) {
+          const k = Math.max(0, 1 - ROOT_RECENTER * dt);
+          this._rootDisp.x *= k;
+          this._rootDisp.z *= k;
+        }
+        const d = Math.hypot(this._rootDisp.x, this._rootDisp.z);
+        if (d > ROOT_MAX_DISP) {
+          this._rootDisp.x *= ROOT_MAX_DISP / d;
+          this._rootDisp.z *= ROOT_MAX_DISP / d;
+        }
+
+        // 垂直:贴地用运动学(蹲下),腾空用速度积分(跳跃)
+        if (grounded) {
+          this._hipShift += (kinTarget - this._hipShift) * 0.85;
+          this._airVy = 0;
+        } else {
+          this._airVy = this._airVy * ROOT_AIR_DAMP + vWorld.y;
+          this._hipShift += this._airVy * dt;
+        }
+      } else {
+        // 回退:旧序列没有 rootVel,保持「脚贴地」运动学(向后兼容)
+        this._hipShift += (kinTarget - this._hipShift) * 0.85;
+      }
+
+      this.root.position.x = this.rootBasePos.x + this._rootDisp.x;
+      this.root.position.z = this.rootBasePos.z + this._rootDisp.z;
+      this.root.position.y = this.rootBasePos.y + this._hipShift;
       this.root.updateMatrixWorld(true);
     }
 
@@ -341,8 +403,15 @@ export class Retargeter {
       this._headNeutral = null;
     }
     for (const ft of this.feet) ft.bone.quaternion.copy(ft.restLocalQuat);
-    this.root.position.y = this.rootBaseY;
+    // 撤销我们施加的根位移(布局 x/z 由外部控制,这里只去掉水平漂移)
+    this.root.position.x -= this._rootDisp.x;
+    this.root.position.z -= this._rootDisp.z;
+    this._rootDisp.set(0, 0, 0);
     this._hipShift = 0;
+    this._airVy = 0;
+    this._lastT = null;
+    this.root.position.y = this.rootBasePos.y;
+    this._rootBaseSynced = false; // 下次 applyFrame 重新对齐基准位(布局可能已变)
     this.root.updateMatrixWorld(true);
   }
 }

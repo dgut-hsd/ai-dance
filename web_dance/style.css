@@ -201,7 +201,7 @@ html, body {
 #cam-panel {
   position: fixed;
   left: 18px; bottom: 18px;
-  width: 176px;
+  width: 280px;
 }
 #cam-wrap { position: relative; border-radius: 10px; overflow: hidden; }
 #cam { width: 100%; display: block; transform: scaleX(-1); background: #000; }
@@ -384,7 +384,7 @@ html, body {
 .hidden { display: none !important; }
 
 @media (max-width: 720px) {
-  #cam-panel { width: 120px; }
+  #cam-panel { width: 190px; }
   #ref-panel { width: 132px; }
   #score-panel { width: 160px; }
   #logo { font-size: 16px; }

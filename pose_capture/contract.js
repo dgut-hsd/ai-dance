@@ -214,7 +214,7 @@ export function handsFromResult(handsResult) {
 // ---------------------------------------------------------------------------
 let seq = 0;
 
-export function buildFrame(t, joints, vis = {}, boneDefs = BONE_DEFS, hands = null) {
+export function buildFrame(t, joints, vis = {}, boneDefs = BONE_DEFS, hands = null, root = null) {
   const { bones, rootYaw, conf } = poseFromJoints(joints, vis, boneDefs);
   const frame = {
     t,
@@ -225,5 +225,11 @@ export function buildFrame(t, joints, vis = {}, boneDefs = BONE_DEFS, hands = nu
     _seq: seq++,
   };
   if (hands) frame.hands = hands; // 仅 gesture 模式存在
+  // 根运动通道(方案 C):rootVel = 髋中点速度(米/秒),grounded = 是否贴地。
+  // 均为可选字段,缺省时消费端回退到「脚贴地」运动学(向后兼容旧序列)。
+  if (root) {
+    if (Array.isArray(root.rootVel)) frame.rootVel = root.rootVel;
+    if (typeof root.grounded === "boolean") frame.grounded = root.grounded;
+  }
   return frame;
 }
