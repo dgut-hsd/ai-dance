@@ -24,7 +24,7 @@ export function createJuice({ canvas, shakeTarget }) {
 
   const cap = () => { if (parts.length > 800) parts.splice(0, parts.length - 800); };
 
-  /** 冲击波:从 hit 点扩散的描边圆环(easeOutCubic 半径 + 淡出)。 */
+  /** 冲击波:从 hit 点扩散的描边圆环(easeOutCubic 半径 + 淡出)。duration/delay 单位毫秒。 */
   function ring(x, y, {
     size = 140, color = "57,255,207", width = 3, duration = 320, delay = 0, alpha = 1,
   } = {}) {
@@ -107,7 +107,7 @@ export function createJuice({ canvas, shakeTarget }) {
       // 冲击波环
       for (let i = rings.length - 1; i >= 0; i--) {
         const r = rings[i];
-        r.life += dt;
+        r.life += dt * 1000; // dt 是秒、duration 是毫秒,统一成毫秒
         if (r.life >= r.duration) { rings.splice(i, 1); continue; }
         if (r.life < 0) continue;
         const t = r.life / r.duration;

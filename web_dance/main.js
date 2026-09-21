@@ -13,21 +13,26 @@ import { renderStickFigure } from "../pose_capture/stick-figure.js";
 import { createScene } from "./scene.js";
 import { createJuice } from "./ui-lab/juice.js";
 import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
-import { DanceScorer } from "./score.js";
+import { SimpleScorer } from "./simple-score.js";
 import { buildDemoSequence } from "./demo-sequence.js";
+import { SongSession, AudioEngine } from "./audio.js";
 
 // ---------------------------------------------------------------------------
 // 状态
 // ---------------------------------------------------------------------------
 const state = {
-  mode: "free",            // free | challenge
+  mode: "free",            // free | challenge | performance
   danceType: "full-body",  // full-body | gesture
   mirror: true,
   flipFacing: false,
   running: false,
-  avatar: null,            // { object, retargeter }
+  avatar: null,            // { object, retargeter, animations, ... }
+  coach: null,             // 挑战模式里的 3D 教练(同模型第二实例)
+  coachPlayer: null,       // { update(t) } 按歌曲时钟驱动教练
+  mixer: null,             // 表演模式的 AnimationMixer
+  modelSource: null,       // { url, type } 用于给教练加载同一模型
   stream: null,
-  challenge: null,         // { seq, scorer, running, startMs }
+  challenge: null,         // { seq, scorer, running, session, noteBonus }
   latestConf: 0,
 };
 
@@ -68,6 +73,8 @@ const dom = {
   danceTypeLabel: $("dance-type-label"),
   btnLoadRef: $("btn-load-ref"),
   refFile: $("ref-file"),
+  animPicker: $("anim-picker"),
+  animSelect: $("anim-select"),
   btnReset: $("btn-reset"),
   centerMsg: $("center-msg"),
   centerMsgText: $("center-msg-text"),
@@ -117,9 +124,8 @@ function showJudge(text, color) {
   dom.judge.classList.add("pop");
 }
 
-function judgeFeedback(acc, combo) {
+function judgeFeedback(tier, combo) {
   const p = avatarScreen();
-  const tier = acc >= 0.8 ? "PERFECT" : acc >= 0.55 ? "GREAT" : "MISS";
   if (tier !== lastTier) {
     lastTier = tier;
     if (tier === "PERFECT") {
@@ -148,10 +154,18 @@ function judgeFeedback(acc, combo) {
 }
 
 function beatPulse(t, ch) {
-  const beats = ch.seq.meta.beatTimesSec;
-  if (!beats || beats.length < 2) return;
-  const beat = beats[1] - beats[0] || 0.5;
-  const idx = Math.floor(t / beat);
+  let idx = null;
+  const timing = ch.session?.timing;
+  if (timing) {
+    const b = timing.nearestBeat(t);
+    if (!b) return;
+    idx = b.index;
+  } else {
+    const beats = ch.seq.meta.beatTimesSec;
+    if (!beats || beats.length < 2) return;
+    const beat = beats[1] - beats[0] || 0.5;
+    idx = Math.floor(t / beat);
+  }
   if (idx !== lastBeatIdx) {
     lastBeatIdx = idx;
     const p = avatarScreen();
@@ -161,11 +175,25 @@ function beatPulse(t, ch) {
 
 function renderLoop() {
   requestAnimationFrame(renderLoop);
-  const dt = clock.getDelta();
-  scene.update(dt);
-  // 改了骨骼后必须手动刷新 Skeleton,否则蒙皮不更新
-  state.skeletons?.forEach((s) => s.update());
-  scene.renderer.render(scene.scene, scene.camera);
+  try {
+    const dt = clock.getDelta();
+    scene.update(dt);
+    // 改了骨骼后必须手动刷新 Skeleton,否则蒙皮不更新
+    state.skeletons?.forEach((s) => s.update());
+    // 表演模式:FBX/GLB 内嵌动画
+    if (state.mixer) state.mixer.update(dt);
+    // 跟跳挑战:教练按歌曲时钟跳参考舞
+    if (state.mode === "challenge" && state.challenge?.running && state.coachPlayer) {
+      const t = state.challenge.session?.songTime ?? 0;
+      state.coachPlayer.update(t);
+    }
+    // 兼容两种 scene 版本:合成器版走 scene.render(),老版直接渲染
+    if (scene.render) scene.render();
+    else scene.renderer.render(scene.scene, scene.camera);
+  } catch (e) {
+    // 渲染异常绝不能再中断整页初始化(否则按钮都不会挂载)
+    console.error("renderLoop error:", e);
+  }
 }
 renderLoop();
 
@@ -178,14 +206,22 @@ async function loadModel(url, type) {
   try {
     const avatar = await loadAvatar(url, type);
     if (state.avatar) scene.scene.remove(state.avatar.object);
+    // 换模型后旧教练作废(它是旧模型的实例)
+    if (state.coach) {
+      scene.scene.remove(state.coach.object);
+      state.coach = null;
+      state.coachPlayer = null;
+    }
     scene.scene.add(avatar.object);
     avatar.retargeter.reset();
     state.avatar = avatar;
+    state.modelSource = { url, type: type || detectExt(url) };
     state.skeletons = avatar.skeletons;
+    layoutForMode();
     dom.menu.classList.add("hidden");
     dom.hud.classList.remove("hidden");
     dom.btnStart.disabled = false;
-    setStatus("舞者已就绪");
+    setStatus(`舞者已就绪(${avatar.animations.length} 个内嵌动画)`);
   } catch (e) {
     console.error(e);
     dom.menuStatus.textContent = "加载失败: " + e.message;
@@ -203,35 +239,173 @@ dom.modelFile.addEventListener("change", () => {
     dom.menuStatus.textContent = "提示:.gltf 若含外部 .bin/.jpg 资源,本地加载可能失败,建议用 .glb 或 .fbx";
   }
   const url = URL.createObjectURL(file);
-  loadModel(url, ext).finally(() => setTimeout(() => URL.revokeObjectURL(url), 60000));
+  // 旧本地模型 URL 不再需要(教练要复用当前 URL,所以只在新模型加载时回收旧的)
+  if (state.modelSource?.url?.startsWith("blob:")) URL.revokeObjectURL(state.modelSource.url);
+  loadModel(url, ext);
 });
 
 // ---------------------------------------------------------------------------
 // 模式切换
 // ---------------------------------------------------------------------------
 function setMode(mode) {
-  if (state.running) stopStream();
+  if (state.running) stopAll();
   state.mode = mode;
   modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
   const isChallenge = mode === "challenge";
+  const isPerformance = mode === "performance";
   dom.scorePanel.classList.toggle("hidden", !isChallenge);
   dom.refPanel.classList.toggle("hidden", !isChallenge);
   dom.btnLoadRef.classList.toggle("hidden", !isChallenge);
+  dom.animPicker.classList.toggle("hidden", !isPerformance);
   if (isChallenge && !state.challenge) {
     state.challenge = {
       seq: buildDemoSequence(),
-      scorer: new DanceScorer(buildDemoSequence()),
+      scorer: new SimpleScorer(buildDemoSequence()),
       running: false,
-      startMs: 0,
     };
   }
+  if (isPerformance) enterPerformance();
+  layoutForMode();
 }
 modeBtns.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+// ---------------------------------------------------------------------------
+// 舞台布局(单人 / 教练 + 玩家)
+// ---------------------------------------------------------------------------
+function layoutForMode() {
+  if (!state.avatar) return;
+  if (state.mode === "challenge") {
+    state.avatar.object.position.x = 1.1;
+    if (state.coach) {
+      state.coach.object.visible = true;
+      state.coach.object.position.x = -1.1;
+    }
+    scene.camera.position.set(0, 1.9, 6.6);
+    scene.controls.target.set(0, 0.95, 0);
+    scene.controls.update();
+  } else {
+    state.avatar.object.position.x = 0;
+    if (state.coach) state.coach.object.visible = false;
+    scene.resetCamera();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3D 教练(跟跳挑战):同模型的第二实例,按歌曲时钟跳参考舞(JSON 帧)
+// ---------------------------------------------------------------------------
+async function ensureCoach() {
+  if (state.coach) return state.coach;
+  if (!state.modelSource) return null;
+  setStatus("正在加载教练…");
+  try {
+    const coach = await loadAvatar(state.modelSource.url, state.modelSource.type);
+    coach.object.visible = false;
+    scene.scene.add(coach.object);
+    state.coach = coach;
+    state.skeletons = [...(state.avatar?.skeletons || []), ...coach.skeletons];
+    return coach;
+  } catch (e) {
+    setStatus("教练加载失败: " + e.message);
+    return null;
+  }
+}
+
+// 把参考序列按时间逐帧喂给教练的 Retargeter(IK/贴地/头全部复用)
+function makeCoachPlayer(seq, retargeter, boneDefs) {
+  const fps = seq.meta?.fps || 30;
+  const frames = seq.frames || [];
+  return {
+    update(t) {
+      const i = Math.min(frames.length - 1, Math.max(0, Math.round(t * fps)));
+      const frame = frames[i];
+      if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false });
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 表演模式:播放 FBX/GLB 内嵌动画(AnimationMixer)
+// ---------------------------------------------------------------------------
+function enterPerformance() {
+  stopMixer();
+  if (!state.avatar) {
+    dom.btnStart.disabled = true;
+    setStatus("请先选择舞者");
+    return;
+  }
+  const anims = state.avatar.animations || [];
+  dom.animSelect.innerHTML = "";
+  for (const clip of anims) {
+    const opt = document.createElement("option");
+    opt.value = clip.name;
+    opt.textContent = clip.name;
+    dom.animSelect.appendChild(opt);
+  }
+  if (anims.length) {
+    dom.btnStart.disabled = false;
+    dom.btnStop.disabled = true;
+    setStatus(`表演模式:${anims.length} 个内嵌动画,点「开始」播放`);
+  } else {
+    dom.btnStart.disabled = true;
+    setStatus("该模型没有内嵌动画(建议用 Mixamo 的 FBX)");
+  }
+}
+
+// 表演模式循环音乐(与挑战 SongSession 分离,复用 AudioEngine + loop)
+let performanceAudio = null;
+
+async function ensurePerformanceAudio() {
+  if (performanceAudio) return performanceAudio;
+  const AudioCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+  const audioContext = AudioCtor ? new AudioCtor() : null;
+  const engine = new AudioEngine({ audioContext });
+  engine.loop = true;
+  await engine.load("audio/samba-demo.wav");
+  performanceAudio = engine;
+  return engine;
+}
+
+function startPerformanceMusic() {
+  ensurePerformanceAudio()
+    .then((engine) => engine.play())
+    .catch((e) => console.warn("表演音频播放失败:", e));
+}
+
+function stopPerformanceMusic() {
+  if (performanceAudio) performanceAudio.stop();
+}
+
+function startMixer(clipName) {
+  if (!state.avatar?.animations?.length) return;
+  stopMixer();
+  const clip = state.avatar.animations.find((c) => c.name === clipName) || state.avatar.animations[0];
+  state.avatar.retargeter.reset();
+  state.mixer = new THREE.AnimationMixer(state.avatar.object);
+  const action = state.mixer.clipAction(clip);
+  action.reset();
+  action.play();
+  state.running = true;
+  dom.btnStart.disabled = true;
+  dom.btnStop.disabled = false;
+  setStatus("播放动画: " + clip.name);
+  startPerformanceMusic();
+}
+
+function stopMixer() {
+  if (state.mixer) {
+    state.mixer.stopAllAction();
+    state.mixer = null;
+  }
+  if (state.avatar) state.avatar.retargeter.reset();
+  stopPerformanceMusic();
+}
+
+dom.animSelect.addEventListener("change", () => startMixer(dom.animSelect.value));
 
 dom.danceType.addEventListener("change", () => {
   state.danceType = dom.danceType.value;
   dom.danceTypeLabel.textContent = dom.danceType.value === "gesture" ? "手势" : "全身";
-  if (state.running) stopStream();
+  if (state.running) stopAll();
 });
 
 dom.btnMirror.addEventListener("click", () => {
@@ -258,7 +432,8 @@ dom.refFile.addEventListener("change", async () => {
     if (seq.schema !== "dance-sequence/v1" || !Array.isArray(seq.frames)) {
       throw new Error("不是合法的 dance-sequence/v1 文件");
     }
-    state.challenge = { seq, scorer: new DanceScorer(seq), running: false, startMs: 0 };
+    if (state.challenge?.session) state.challenge.session.stop();
+    state.challenge = { seq, scorer: new SimpleScorer(seq), running: false };
     setStatus(`已加载参考:${seq.danceId} (${seq.meta.numFrames} 帧)`);
   } catch (e) {
     setStatus("参考加载失败: " + e.message);
@@ -272,20 +447,73 @@ async function startFree() {
   await startCamera();
 }
 
+function ensureSession(ch) {
+  if (ch.session) return ch.session;
+  const AudioCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+  const audioContext = AudioCtor ? new AudioCtor() : null;
+  const scorer = ch.scorer;
+  ch.session = new SongSession({
+    sequence: ch.seq,
+    similarity: (ref, player) => scorer._similarity(ref, player),
+    audioContext,
+    onJudge: (r) => handleNoteJudge(ch, r),
+  });
+  return ch.session;
+}
+
+// 音符判定反馈:独立于连续评分 judgeFeedback,避免 lastTier 去重互扰
+function handleNoteJudge(ch, r) {
+  if (r.ongoing) return;
+  if (r.tier !== "MISS") ch.noteBonus = (ch.noteBonus || 0) + r.score;
+  const p = avatarScreen();
+  if (r.tier === "PERFECT") {
+    showJudge("PERFECT", "#39ffcf");
+    juice.ring(p.x, p.y, { size: 130, color: "57,255,207", width: 3.5, duration: 300 });
+    juice.sparks(p.x, p.y, { count: 14, rays: 8, speed: 300 });
+  } else if (r.tier === "GREAT") {
+    showJudge("GREAT", "#4d7cff");
+    juice.ring(p.x, p.y, { size: 100, color: "77,124,255", width: 3, duration: 260 });
+    juice.sparks(p.x, p.y, { count: 8, rays: 5, speed: 220 });
+  } else {
+    showJudge("MISS", "#ff5f6d");
+    juice.vignette(0.16);
+    juice.shake(3);
+  }
+}
+
 async function startChallenge() {
   const ch = state.challenge;
   if (!ch) return;
   ch.scorer.reset();
   resetScoreHUD();
+  ch.noteBonus = 0;
   lastTier = "";
   lastMilestone = 0;
   lastBeatIdx = -1;
+
+  // 音乐会话:唯一时钟(音频对齐);首建在用户手势内创建 AudioContext
+  const session = ensureSession(ch);
+  await session.prepare();
+
+  // 3D 教练(同模型第二实例)跳参考舞,玩家跟着跳
+  const coach = await ensureCoach();
+  if (coach) {
+    coach.object.visible = true;
+    coach.retargeter.reset();
+    state.coachPlayer = makeCoachPlayer(ch.seq, coach.retargeter, resolveMode(state.danceType).bones);
+  }
+  layoutForMode();
   await startCamera();
   if (!state.running) return;
-  // 倒计时
-  await countdown();
+
+  // 倒计时:GO 时刻 = songTime 0 = 音频起点(绝对 ctx 时间锚定,不用 setTimeout 猜)
+  const ctx = session.engine.ctx;
+  if (ctx.state === "suspended") { try { await ctx.resume(); } catch { /* noop */ } }
+  const goAt = ctx.currentTime + 3.2;
+  await session.start(goAt); // 预调度音频与时钟
+  await countdownTo(goAt);   // 3 / 2 / 1 / GO
+
   ch.running = true;
-  ch.startMs = performance.now();
 }
 
 function startCamera() {
@@ -345,26 +573,33 @@ function onFrame(frame, boneDefs) {
   // 挑战判定
   const ch = state.challenge;
   if (state.mode === "challenge" && ch && ch.running) {
-    const t = (performance.now() - ch.startMs) / 1000;
+    const t = ch.session?.songTime ?? 0;
     const res = ch.scorer.judge(t, frame, boneDefs);
     if (res) {
       updateScoreHUD(res);
-      judgeFeedback(res.acc, res.combo);
+      judgeFeedback(res.tier, res.combo);
     }
+    ch.session?.feed(t, frame);
+    ch.session?.update();
     updateChallengeProgress(t, ch);
     beatPulse(t, ch);
     if (t >= ch.seq.meta.durationSec) finishChallenge();
   }
 }
 
-function stopStream() {
+function stopAll() {
   if (state.stream) {
     state.stream.stop();
     state.stream = null;
   }
   state.running = false;
-  if (state.challenge) state.challenge.running = false;
-  if (state.avatar) state.avatar.retargeter.reset();
+  if (state.challenge) {
+    state.challenge.running = false;
+    state.challenge.session?.stop();
+  }
+  state.coachPlayer = null;
+  if (state.coach) state.coach.retargeter.reset();
+  stopMixer(); // 停动画并复位主舞者
   dom.btnStart.disabled = !state.avatar;
   dom.btnStop.disabled = true;
   dom.confFill.style.width = "0%";
@@ -376,18 +611,23 @@ dom.btnStart.addEventListener("click", async () => {
   if (!state.avatar) return;
   dom.btnStart.disabled = true;
   try {
-    if (state.mode === "challenge") await startChallenge();
-    else await startFree();
+    if (state.mode === "performance") {
+      startMixer(dom.animSelect.value);
+    } else if (state.mode === "challenge") {
+      await startChallenge();
+    } else {
+      await startFree();
+    }
   } catch (e) {
     setStatus("启动失败: " + e.message);
     dom.btnStart.disabled = false;
   }
 });
 
-dom.btnStop.addEventListener("click", stopStream);
+dom.btnStop.addEventListener("click", stopAll);
 dom.resultAgain.addEventListener("click", () => {
   dom.result.classList.add("hidden");
-  startChallenge();
+  startChallenge().catch((e) => setStatus("启动失败: " + e.message));
 });
 
 // ---------------------------------------------------------------------------
@@ -395,18 +635,21 @@ dom.resultAgain.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function countdown() {
+async function countdownTo(goAt) {
+  const ctx = state.challenge.session.engine.ctx;
+  const labels = ["3", "2", "1", "GO!"];
   dom.centerMsg.classList.remove("hidden");
-  for (const n of ["3", "2", "1", "GO!"]) {
-    dom.centerMsgText.textContent = n;
+  for (let i = 0; i < labels.length; i++) {
+    const target = goAt - (labels.length - 1 - i) * 0.8;
+    await sleep(Math.max(0, (target - ctx.currentTime) * 1000));
+    dom.centerMsgText.textContent = labels[i];
     dom.centerMsgText.style.animation = "none";
     void dom.centerMsgText.offsetWidth; // 重启动画
     dom.centerMsgText.style.animation = "";
-    if (n === "GO!") {
+    if (labels[i] === "GO!") {
       juice.flash("255,255,255", 0.25, 0.16);
       juice.shake(6);
     }
-    await sleep(800);
   }
   dom.centerMsg.classList.add("hidden");
 }
@@ -415,7 +658,7 @@ async function countdown() {
 // HUD 更新
 // ---------------------------------------------------------------------------
 function updateScoreHUD(res) {
-  dom.score.textContent = Math.round(state.challenge.scorer.score);
+  dom.score.textContent = Math.round(state.challenge.scorer.score + (state.challenge.noteBonus || 0));
   const combo = res.combo;
   dom.comboN.textContent = combo;
   dom.combo.classList.toggle("hot", combo > 0 && combo % 10 === 0);
@@ -472,13 +715,20 @@ function updateChallengeProgress(t, ch) {
     const joints = reconstructJoints(refFrame, ch.seq.meta.dimensions || {}, ch.seq.bones);
     renderStickFigure(dom.refStick, joints, ch.seq.bones, refFrame.hands);
   }
-  // 节拍指示
-  const beats = ch.seq.meta.beatTimesSec;
-  if (beats && beats.length > 1) {
-    const beat = beats[1] - beats[0] || 0.5;
-    const idx = Math.floor(t / beat) % 4;
-    [...dom.beats.children].forEach((el, i) => el.classList.toggle("on", i === idx));
+  // 节拍指示(优先 timing/v1,回退旧 beatTimesSec)
+  const timing = ch.session?.timing;
+  let beatIdx = 0;
+  if (timing) {
+    const b = timing.nearestBeat(t);
+    beatIdx = b ? b.index % 4 : 0;
+  } else {
+    const beats = ch.seq.meta.beatTimesSec;
+    if (beats && beats.length > 1) {
+      const beat = beats[1] - beats[0] || 0.5;
+      beatIdx = Math.floor(t / beat) % 4;
+    }
   }
+  [...dom.beats.children].forEach((el, i) => el.classList.toggle("on", i === beatIdx));
 }
 
 function finishChallenge() {
@@ -488,7 +738,7 @@ function finishChallenge() {
   const r = ch.scorer.finalize();
   dom.resultGrade.textContent = r.grade;
   dom.resultGrade.className = "grade-" + r.grade.toLowerCase();
-  dom.resultScore.textContent = "得分 " + r.score;
+  dom.resultScore.textContent = "得分 " + (r.score + (ch.noteBonus || 0));
   dom.resultAcc.textContent = "平均匹配 " + Math.round(r.avgAcc * 100) + "%";
   dom.resultCombo.textContent = "最大连击 " + r.maxCombo;
   dom.result.classList.remove("hidden");
@@ -496,7 +746,7 @@ function finishChallenge() {
   juice.burst(window.innerWidth / 2, window.innerHeight * 0.5, { count: 80, speed: 550, ttl: 1.1 });
   juice.flash("255,255,255", 0.3, 0.2);
   juice.shake(12);
-  stopStream();
+  stopAll();
 }
 
 // ---------------------------------------------------------------------------
@@ -511,7 +761,7 @@ window.addEventListener("keydown", (e) => {
   if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   if (e.code === "Space") {
     e.preventDefault();
-    if (state.running) stopStream();
+    if (state.running) stopAll();
     else if (state.avatar) dom.btnStart.click();
   } else if (e.key === "m" || e.key === "M") {
     dom.btnMirror.click();

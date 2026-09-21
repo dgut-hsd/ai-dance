@@ -15,7 +15,8 @@
       <div id="logo">DANCE<span>ARENA</span></div>
       <nav id="modes">
         <button data-mode="free" class="mode-btn active">自由模式</button>
-        <button data-mode="challenge" class="mode-btn">舞蹈挑战</button>
+        <button data-mode="challenge" class="mode-btn">跟跳挑战</button>
+        <button data-mode="performance" class="mode-btn">舞者表演</button>
       </nav>
       <div id="statusbar">
         <span id="status">初始化…</span>
@@ -89,6 +90,10 @@
         </label>
         <button id="btn-load-ref" class="btn hidden">加载参考 JSON</button>
         <input type="file" id="ref-file" accept="application/json,.json" hidden />
+        <label class="btn hidden" id="anim-picker">
+          <span>动画</span>
+          <select id="anim-select"></select>
+        </label>
         <button id="btn-reset" class="btn">重置视角</button>
       </div>
     </div>

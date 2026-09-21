@@ -26,9 +26,12 @@ export async function loadAvatar(url = DEFAULT_MODEL, type) {
   const ext = (type || "").toLowerCase() || detectExt(url);
 
   let object;
+  let animations = [];
   if (ext === "fbx") {
     const loader = new FBXLoader();
-    object = await loader.loadAsync(url);
+    const result = await loader.loadAsync(url);
+    object = result;
+    animations = result.animations || [];
   } else {
     const loader = new GLTFLoader();
     // 默认配 Draco 解码器(若模型非 Draco 压缩则不会被使用)
@@ -37,13 +40,14 @@ export async function loadAvatar(url = DEFAULT_MODEL, type) {
     loader.setDRACOLoader(draco);
     const gltf = await loader.loadAsync(url);
     object = gltf.scene || gltf.scenes?.[0];
+    animations = gltf.animations || [];
   }
   if (!object) throw new Error("模型加载失败:没有可用的场景对象");
 
-  return prepare(object);
+  return prepare(object, animations);
 }
 
-function prepare(object) {
+function prepare(object, animations = []) {
   object.updateMatrixWorld(true);
 
   // 1) 归一化身高
@@ -83,7 +87,7 @@ function prepare(object) {
     }
   });
 
-  return { object, retargeter, bones, skeletons };
+  return { object, retargeter, bones, skeletons, animations };
 }
 
 // 找到模型里的 SkinnedMesh(用于开启阴影 / 材质微调等)

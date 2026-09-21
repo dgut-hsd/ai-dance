@@ -3,6 +3,10 @@
 > 状态:**DRAFT** — 结构已冻结,标 `[待定]` 的字段由双方在联调前补齐并回填本文档。
 > 本文档是「离线参考序列」与「实时玩家帧」之间的**合同**。两条链路各自把数据
 > 转成同一种帧格式后,评分模块才能直接对它们求差。
+>
+> **冻结记录**:§4.1 `timing/v1` 与 §4.2 `chart/v1` 已于本次修订**冻结为 v1.0**;
+> 后续变更必须升版本号,不得静默修改。其余 `[待定]` 项维持 DRAFT。
+> 配套音频引擎接口设计见 `docs/audio-engine-api.md`。
 
 ---
 
@@ -181,7 +185,10 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
       "spineLen": 0.52, "shoulderWidth": 0.38, "hipWidth": 0.32,
       "upperArm": 0.28, "forearm": 0.26, "thigh": 0.44, "shin": 0.42
     },
-    "beatTimesSec": [0.0, 0.5, 1.0, 1.5],  // [可选] 节拍标记,用于节奏分
+    "beatTimesSec": [0.0, 0.5, 1.0, 1.5],  // [兼容] 节拍标记,恒等于 timing.beatTimesSec(§4.1)
+    "timing": { ... },                     // §4.1 timing/v1(冻结):BPM/变速/拍号/下拍
+    "audio": "audio/mixamo-hiphop-001.ogg",// [可选] 歌曲文件,路径相对本 JSON 所在目录
+    "chart": { ... },                      // §4.2 chart/v1(冻结):音符轨道 + 判定窗
     "difficulty": 2          // [可选] 1-5,待定分级规则
   },
   "bones": [                 // 骨骼表(名字+端点),冗余存储便于离线端自查
@@ -195,6 +202,179 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 
 生成流程(离线、每支舞只跑一次):FBX → 标准机位渲染 MP4 → MediaPipe →
 归一化 → 写成本文件。运行时只读,不重算。
+
+---
+
+## 4.1 音频与节拍 schema(`timing/v1`)—【冻结 v1.0】
+
+> 与音频主时钟配套的**节拍栅格**。决定「每一拍、每一下拍发生在第几秒」。
+> 由离线端用 librosa/aubio 一次算好写入;运行时只读,不在浏览器里重算。
+> 取代旧字段 `meta.beatTimesSec`(后者降级为兼容别名)。
+
+### 位置与兼容
+
+- 权威位置:`meta.timing`(对象)。
+- **兼容字段**:`meta.beatTimesSec`(旧)仍被现有代码读取。二者同时存在时**必须逐项相等**;
+  新生产者应输出 `meta.timing`,并**可**保留旧字段以便老版本消费。
+- `meta.timing.version` 必须为 `"timing/v1"`;不匹配则拒绝(快速失败)。
+
+### 结构
+
+```jsonc
+"timing": {
+  "version": "timing/v1",
+  "bpm": 120,                       // 主 BPM(展示用参考值;数值 = tempoMap 首项 bpm)
+  "offsetSec": 0.0,                 // 第一个下拍相对音频起点(歌曲 0.000s)的秒数;可为负(弱起)
+  "tempoMap": [                     // 变速点,按 t 升序;首项 t 必须 = 0.0
+    { "t": 0.0,  "bpm": 120.0 },
+    { "t": 30.0, "bpm": 132.5 }
+  ],
+  "timeSignatures": [               // 拍号,按 t 升序;首项 t 必须 = 0.0;缺省等价于 4/4
+    { "t": 0.0, "num": 4, "den": 4 }
+  ],
+  "beatTimesSec": [0.0, 0.5, 1.0, 1.5],   // 派生:每一拍时间戳(升序、严格递增)
+  "downbeatsSec": [0.0, 2.0, 4.0]         // 派生:每小节第 1 拍(升序)
+}
+```
+
+### 字段
+
+| 字段 | 类型 | 必填 | 约束 | 说明 |
+|---|---|---|---|---|
+| `version` | string | ✅ | `"timing/v1"` | 版本锁定 |
+| `bpm` | number | ✅ | `> 0` | 主 BPM,仅展示/HUD 用 |
+| `offsetSec` | number | ✅ | 任意实数 | 首个下拍相对歌曲 0.000s 的偏移;负值 = 弱起(节拍落在歌曲起点前) |
+| `tempoMap` | array | ✅ | ≥1 项;`t` 升序;首项 `t===0`;`bpm>0` | 变速点;相邻两点之间 BPM 恒定 |
+| `timeSignatures` | array | ❌ | 首项 `t===0`;`num` 正整数;`den` 为 2 的幂 | 拍号;缺省 `[{t:0,num:4,den:4}]` |
+| `beatTimesSec` | array | 建议 | 升序、严格递增 | 派生:每拍时间戳 |
+| `downbeatsSec` | array | 建议 | 升序;是 `beatTimesSec` 的子集 | 派生:每小节第 1 拍 |
+
+### 派生规则(生产者与消费者必须逐项一致)
+
+1. **拍栅格**:`B[0] = offsetSec`;递推 `B[n] = B[n-1] + 60 / bpmAt(B[n-1])`,
+   其中 `bpmAt(t)` = `tempoMap` 中 `t` 最大且 `<= t` 的那一项的 `bpm`。重复直到越过 `durationSec`。
+2. **BPM 单位**:`bpm` 恒为「拍/分钟」,且这里的「拍」= `beatTimesSec` 里的栅格单位。
+   `timeSignatures.den` 不改变 BPM 数值(即 BPM 始终按「拍」计,不按附点四分音符等复合拍换算)。
+3. **下拍**:`B[i]` 是下拍当且仅当 —— `i === 0`;或 `B[i]` 是某条 `timeSignatures` 变更点之后的
+   第一拍;或 `B[i]` 距上一个下拍正好相隔 `num` 拍(`num` = 该拍所在拍号的分子)。
+4. 常见情形(无变速、4/4):`downbeatsSec` = `beatTimesSec` 中下标 0、4、8、… 的项。
+
+### 为什么单独成 schema
+
+节拍是**时间维**的元数据,与 `frames[]` 是正交的两个轴。单独成 schema 后,变速歌、
+变拍、弱起都能表达,评分模块可只依赖节拍(不必遍历帧)做节奏判定。
+
+---
+
+## 4.2 谱面 schema(`chart/v1`)—【冻结 v1.0】
+
+> 音符轨道:在节拍栅格上标出「哪些时刻要做动作判定」。是「跟跳」升级成「音游」的
+> 事件层,与 `score.js` 的连续相似度评分**正交**(连续 = 基底分,音符 = 节奏 bonus + 连击)。
+
+### 位置
+
+- **权威位置**:序列文件顶层的 `chart` 字段(与 `schema`/`meta`/`frames` 平级)。
+- 允许存在独立 `reference/<danceId>.chart.json` 作为**编辑器交换格式**(见本节末);
+  运行时以序列文件内嵌的 `chart` 为准。
+
+### 结构
+
+```jsonc
+"chart": {
+  "version": "chart/v1",
+  "danceId": "mixamo-hiphop-001",      // [可选] 冗余校验:须与序列文件 danceId 一致
+  "audio": "audio/mixamo-hiphop-001.ogg", // 音频文件路径(相对序列文件目录)
+  "audioOffsetSec": 0.0,               // 音频里「歌曲 0.000s」对应的采样起点秒数(静音前导/延迟补偿)
+  "judgeOffsetSec": 0.0,               // [可选] 本谱专用判定偏移(叠加在全局 offset 之上)
+  "timingWindows": {                    // 判定窗(秒);缺省 = ±0.050 / ±0.100 / ±0.150
+    "perfect": 0.050, "great": 0.100, "good": 0.150
+  },
+  "lanes": [                            // [可选] 轨道定义(HUD 显示)
+    { "key": "left-hand",  "label": "左手", "side": "left" },
+    { "key": "right-hand", "label": "右手", "side": "right" },
+    { "key": "body",       "label": "全身", "side": "center" }
+  ],
+  "notes": [ /* Note 对象,按 t 升序 */ ]
+}
+```
+
+### Note 对象
+
+**公共字段**(所有类型必含):
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `t` | number | ✅ | 命中时刻(歌曲时间,秒),`0 <= t <= durationSec` |
+| `type` | string | ✅ | `"beat"` \| `"pose"` \| `"hold"` \| `"gesture"` |
+| `id` | string | ❌ | 稳定 id(编辑器/调试/去重) |
+| `lane` | string | ❌ | 轨道 key,须存在于 `lanes[].key`(若有 `lanes`) |
+
+**`beat`(节奏重音,瞬时)**:
+
+```jsonc
+{ "id": "n001", "t": 1.000, "type": "beat", "lane": "body",
+  "bones": [0, 1, 2, 3, 4],   // [可选] 参与比对的骨骼子集;缺省 = 当前模式全部骨骼
+  "threshold": 0.55 }         // [可选] 命中阈值,覆盖全局判定线
+```
+
+**`pose`(关键姿势)**:
+
+```jsonc
+{ "id": "n002", "t": 2.500, "type": "pose", "lane": "body",
+  "refFrameIdx": 120,         // [可选] 参考帧下标;缺省 = round(t * meta.fps)
+  "bones": [2, 3],            // [可选] 骨骼子集;缺省 = 全部
+  "threshold": 0.7 }
+```
+
+**`hold`(保持动作)**:
+
+```jsonc
+{ "id": "n003", "t": 4.000, "type": "hold", "lane": "body",
+  "endT": 5.500,              // 必填,> t
+  "refFrameIdx": 180,
+  "bones": [2, 3],
+  "threshold": 0.55,          // 起手命中阈值
+  "minHold": 0.45 }           // [可选] 持续期间最低相似度,缺省 = threshold
+```
+
+**`gesture`(手势舞)**:
+
+```jsonc
+{ "id": "n004", "t": 6.000, "type": "gesture", "hand": "right",  // "left"|"right"|"both"
+  "gestureId": "victory",     // [可选] 语义标签;缺省按 hands 关键点相似度比对
+  "threshold": 0.6 }
+```
+
+### 判定规则(与 `docs/audio-engine-api.md` §3.8 一致)
+
+- 到点 `t` 进入判定窗;`judgeTime = t + 全局offset + judgeOffsetSec`;取该时刻玩家最近一帧。
+- `|命中偏移|` 落窗:≤`perfect`→PERFECT,≤`great`→GREAT,≤`good`→GOOD,否则 MISS(消费该 note)。
+- `beat/pose/gesture`:单次采样即结算。
+- `hold`:起手窗内达标 → 进入 HOLD;之后每 tick 在 `[t, endT]` 采样,跌破 `minHold` 提前结束(GOOD);
+  撑满 → 按区间均值落 tier。
+
+### 不变量(解析时校验,违反即拒)
+
+- `notes` 按 `t` 升序;`hold` 另有 `endT > t`,并列时按 `endT` 升序。
+- 所有 `t` ∈ `[0, durationSec]`(越界警告并 clamp)。
+- `refFrameIdx` ∈ `[0, numFrames-1]`;`bones` 下标 ∈ `[0, boneCount-1]`,且与 `meta.danceType` 骨骼表一致。
+- `version` 必须为 `"chart/v1"`;未知版本快速失败。
+
+### 独立 chart 文件(编辑器交换格式)
+
+```jsonc
+{
+  "schema": "chart/v1",
+  "danceId": "mixamo-hiphop-001",
+  "sequenceFile": "mixamo-hiphop-001.json",   // 关联的 dance-sequence/v1 文件
+  "audio": "audio/mixamo-hiphop-001.ogg",
+  "timingWindows": { "perfect": 0.050, "great": 0.100, "good": 0.150 },
+  "lanes": [ /* 同上 */ ],
+  "notes": [ /* 同上 */ ]
+}
+```
+
+> 导出/打包时把独立 `chart` 内容合并进序列文件的 `chart` 字段;运行时只读内嵌副本。
 
 ---
 
@@ -233,6 +413,11 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 | 采样率统一(fps 30?) | 双方 | [待定] |
 | 参考文件放置目录与命名 | 离线端 | 建议 `reference/` |
 | 评分模块如何拿到实时帧(回调签名) | 实时端 | [待定] |
+| `timing/v1` schema(§4.1) | 双方 | ✅ 冻结 v1.0 |
+| `chart/v1` schema(§4.2) | 双方 | ✅ 冻结 v1.0 |
+| 音频文件格式/采样率(建议 ogg/44100Hz)与 `audio` 相对路径约定 | 离线端 | [待定] |
+| 判定窗默认值(±50/100/150ms,§4.2) | 双方 | 建议采用 |
+| 延迟补偿 `offset` 校准流程(`docs/audio-engine-api.md` §3.4) | 双方 | [待定] |
 
 ---
 

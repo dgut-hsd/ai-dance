@@ -1,18 +1,28 @@
 /**
- * scene.js — 舞台(Dance Evolution / Just Dance / Dance Spotlight 风格)。
+ * stage-scene.js — 舞台实验(Dance Evolution / Just Dance / Dance Spotlight 风格)。
  *
- * 暗场 + 光:三盏会动的锥形聚光灯(扫动 + 变色 + 精确椭圆投影)、
- * 逆光勾边、脚下光池、台口灯带、雾、粒子。
- * 无后处理 bloom / 无环境反射(按实验台验收结果,直接 renderer.render)。
+ * 核心:舞者是主角,舞台是"暗场 + 光"。
+ * 关键修法(上一版的两个问题):
+ *   1) 反射"白膜" ← RoomEnvironment 是白色房间,给暗场抬了一层白光。
+ *      改为「自建暗色 + 彩色发光板」的环境图:反射是"暗底 + 彩色光条",不是白膜。
+ *   2) bloom"白炽" ← 阈值 0.85 太高,只有白/近白像素会 bloom,饱和色够不到。
+ *      改为低阈值(0.22)+ 场景压黑 + 发光源保持饱和色 → bloom 出彩色光晕。
  */
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
-// 光束:右圆锥(顶点=光源,半张角 HALF_ANGLE);锥身超出地板,由 shader 裁剪出「锥∩平面」的椭圆
+// bloom:低阈值让饱和色也能 bloom,场景压黑避免误发光
+const BLOOM = { strength: 0.6, radius: 0.45, threshold: 0.22 };
+
+// 光束:右圆锥(顶点=光源,半张角 HALF_ANGLE);锥身超出地板,由深度裁剪出「锥∩平面」的椭圆
 const HALF_ANGLE = 8 * Math.PI / 180;
 const BEAM_HEIGHT = 14.0;
 
-export function createScene(canvas) {
+export function createStage(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -25,6 +35,12 @@ export function createScene(canvas) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x05070f);
   scene.fog = new THREE.FogExp2(0x05070f, 0.03);
+
+  // 环境反射:自建「暗室 + 彩色发光板」,反射是暗底上的彩色光条
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envMap = pmrem.fromScene(buildEnvScene(), 0.04).texture;
+  // 反射默认关闭(暗场更干净),用「反射」开关按需打开
+  // scene.environment = envMap;
 
   const camera = new THREE.PerspectiveCamera(
     50, window.innerWidth / window.innerHeight, 0.1, 120
@@ -74,13 +90,31 @@ export function createScene(canvas) {
   const movingLights = buildMovingLights();
   scene.add(movingLights);
 
+  const mannequin = buildMannequin();
+  scene.add(mannequin);
+
   const particles = buildParticles();
   scene.add(particles);
+
+  // ---- 后处理 ----
+  const composer = new EffectComposer(renderer);
+  composer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  composer.setSize(window.innerWidth, window.innerHeight);
+  composer.addPass(new RenderPass(scene, camera));
+
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    BLOOM.strength, BLOOM.radius, BLOOM.threshold
+  );
+  composer.addPass(bloom);
+  bloom.enabled = false; // bloom 默认关闭,「Bloom」开关按需打开
+  composer.addPass(new OutputPass());
 
   function resize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
   }
   window.addEventListener("resize", resize);
 
@@ -89,21 +123,45 @@ export function createScene(canvas) {
     scene,
     camera,
     controls,
+    composer,
+    bloom,
     particles,
+    setBloom(on) { bloom.enabled = on; },
+    setEnv(on) { scene.environment = on ? envMap : null; },
+    setMannequin(on) { mannequin.visible = on; },
     update(dt) {
       particles.rotation.y += dt * 0.04;
       updateMovingLights(movingLights, dt);
       controls.update();
     },
     render() {
-      renderer.render(scene, camera);
-    },
-    resetCamera() {
-      camera.position.set(0, 2.0, 6.2);
-      controls.target.set(0, 1.0, 0);
-      controls.update();
+      composer.render();
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// 环境图:暗室 + 几块 HDR 彩色发光板(反射来源),不是白房间
+// ---------------------------------------------------------------------------
+function buildEnvScene() {
+  const s = new THREE.Scene();
+  s.background = new THREE.Color(0x010208);
+  const defs = [
+    { color: 0x39ffcf, pos: [-4, 3.5, -2], size: [5, 2.5], mult: 2.5 },
+    { color: 0xff3d81, pos: [4, 3.5, -2], size: [5, 2.5], mult: 2.5 },
+    { color: 0x8b5cff, pos: [0, 4.5, -4], size: [6, 2.5], mult: 2.5 },
+    { color: 0x2a4a7a, pos: [0, 3, 5], size: [6, 3], mult: 1.2 },
+  ];
+  defs.forEach(({ color, pos, size, mult }) => {
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(size[0], size[1]),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(mult) })
+    );
+    m.position.set(...pos);
+    m.lookAt(0, 0, 0);
+    s.add(m);
+  });
+  return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +188,7 @@ function buildFloor() {
   edge.position.y = 0.012;
   g.add(edge);
 
-  // 脚下光池:饱和青色,additive
+  // 脚下光池:饱和青色(不再近白),低透明度
   const pool = new THREE.Mesh(
     new THREE.PlaneGeometry(4.6, 4.6),
     new THREE.MeshBasicMaterial({
@@ -202,7 +260,7 @@ function updateMovingLights(g, dt) {
     const h = dir.length();
     dir.normalize();
 
-    // 光束:锥顶点在光源,指向地板;锥身超出地板,由 shader 裁剪出「锥∩平面」的椭圆
+    // 光束:锥顶点在光源,指向地板;锥身超出地板,由深度裁剪出「锥∩平面」的椭圆
     l.beam.position.copy(S);
     l.beam.quaternion.setFromUnitVectors(up, dir);
 
@@ -234,7 +292,7 @@ function updateMovingLights(g, dt) {
   }
 }
 
-// 光束:右圆锥(顶点在光源处),超出地板由 shader 裁剪出椭圆投影
+// 光束:右圆锥(顶点在光源处),超出地板由深度裁剪出椭圆投影
 function buildBeam() {
   const baseRadius = Math.tan(HALF_ANGLE) * BEAM_HEIGHT;
   const mat = makeBeamMaterial(0.7); // 主光束(彩色)
@@ -300,6 +358,42 @@ function makeBeamMaterial(intensity) {
 }
 
 // ---------------------------------------------------------------------------
+// 占位人偶
+// ---------------------------------------------------------------------------
+function buildMannequin() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x0b0e18, roughness: 0.45, metalness: 0.35 });
+
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.7, 8, 16), mat);
+  torso.position.y = 1.05;
+  g.add(torso);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 16), mat);
+  head.position.y = 1.72;
+  g.add(head);
+
+  const armGeo = new THREE.CapsuleGeometry(0.07, 0.55, 4, 12);
+  const lArm = new THREE.Mesh(armGeo, mat);
+  lArm.position.set(-0.32, 1.1, 0);
+  lArm.rotation.z = 0.25;
+  g.add(lArm);
+  const rArm = new THREE.Mesh(armGeo, mat);
+  rArm.position.set(0.32, 1.1, 0);
+  rArm.rotation.z = -0.25;
+  g.add(rArm);
+
+  const legGeo = new THREE.CapsuleGeometry(0.09, 0.75, 4, 12);
+  const lLeg = new THREE.Mesh(legGeo, mat);
+  lLeg.position.set(-0.13, 0.38, 0);
+  g.add(lLeg);
+  const rLeg = new THREE.Mesh(legGeo, mat);
+  rLeg.position.set(0.13, 0.38, 0);
+  g.add(rLeg);
+
+  return g;
+}
+
+// ---------------------------------------------------------------------------
 // 粒子
 // ---------------------------------------------------------------------------
 function buildParticles() {
@@ -348,3 +442,4 @@ function makeGlowTexture(inner = "rgba(255,255,255,1)", outer = "rgba(255,255,25
   ctx.fillRect(0, 0, s, s);
   return new THREE.CanvasTexture(c);
 }
+

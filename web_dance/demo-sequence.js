@@ -92,6 +92,10 @@ export function buildDemoSequence() {
   const beatTimesSec = [];
   for (let b = 0; b < DURATION * 2; b++) beatTimesSec.push(+(b * 0.5).toFixed(3));
 
+  // 每个下拍(每 2s)埋一个 pose 音符,演示音符轨道判定
+  const chartNotes = [];
+  for (let t = 0; t <= 22; t += 2) chartNotes.push({ id: `downbeat-${t}`, t, type: "pose", lane: "body" });
+
   return {
     schema: "dance-sequence/v1",
     danceId: "demo-arena-loop",
@@ -105,6 +109,12 @@ export function buildDemoSequence() {
       coordinateSystem: "canonical-yup",
       difficulty: 1,
       beatTimesSec,
+      timing: {
+        version: "timing/v1",
+        bpm: 120,
+        offsetSec: 0,
+        tempoMap: [{ t: 0, bpm: 120 }],
+      },
       dimensions: {
         spineLen: 0.52, shoulderWidth: 0.38, hipWidth: 0.32,
         upperArm: 0.28, forearm: 0.26, thigh: 0.44, shin: 0.42, headLen: 0.22,
@@ -112,5 +122,10 @@ export function buildDemoSequence() {
     },
     bones: BONE_DEFS.map(({ name, parent, child }) => ({ name, parent, child })),
     frames,
+    chart: {
+      version: "chart/v1",
+      audio: "audio/demo-beat.wav",
+      notes: chartNotes,
+    },
   };
 }

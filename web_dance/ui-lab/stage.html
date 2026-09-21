@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>STAGE LAB — 舞台实验(材质优先)</title>
+    <link rel="stylesheet" href="./stage.css" />
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+
+    <div id="bar">
+      <div id="logo">STAGE<span>LAB</span></div>
+      <div id="subtitle">舞台材质实验 · PBR + 环境反射 + Bloom · 拖拽旋转视角</div>
+      <div id="actions">
+        <label class="tgl"><input type="checkbox" id="tgl-bloom" /> Bloom</label>
+        <label class="tgl"><input type="checkbox" id="tgl-env" /> 反射</label>
+        <label class="tgl"><input type="checkbox" id="tgl-mannequin" checked /> 人偶</label>
+        <a class="btn" href="./index.html">← 判定台</a>
+        <a class="btn" href="../index.html">← 主页面</a>
+      </div>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./stage.js"></script>
+  </body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "real-time-motion-transfer-to-a-3d-avatar",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DANCE ARENA: 3D 舞者动捕 + 音乐游戏(音频同步 / 节拍 / 音符轨道)",
+  "scripts": {
+    "test": "node --test --test-isolation=none \"test/*.test.js\""
+  }
+}
