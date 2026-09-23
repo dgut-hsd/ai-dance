@@ -13,7 +13,7 @@ import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { createScene } from "./scene.js";
 import { createJuice } from "./ui-lab/juice.js";
 import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
-import { SimpleScorer } from "./simple-score.js";
+import { ScoringAdapter } from "./scoring-adapter.js";
 import { buildDemoSequence } from "./demo-sequence.js";
 import { SongSession, AudioEngine } from "./audio.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
@@ -98,6 +98,10 @@ const dom = {
   resultScore: $("result-score"),
   resultAcc: $("result-acc"),
   resultCombo: $("result-combo"),
+  talliesPerfect: $("tallies-perfect"),
+  talliesGreat: $("tallies-great"),
+  talliesGood: $("tallies-good"),
+  talliesMiss: $("tallies-miss"),
   resultAgain: $("result-again"),
 };
 
@@ -293,7 +297,7 @@ async function rebuildChallenge() {
   } else {
     seq = applySongToSequence(buildDemoSequence(), song);
   }
-  state.challenge = { seq, scorer: new SimpleScorer(seq), running: false };
+  state.challenge = { seq, scorer: new ScoringAdapter(seq), running: false };
   state.coachPlayer = null;
   setStatus(`已选:${dance.label} / ${song.label}`);
 }
@@ -558,7 +562,7 @@ dom.refFile.addEventListener("change", async () => {
       throw new Error("不是合法的 dance-sequence/v1 文件");
     }
     if (state.challenge?.session) state.challenge.session.stop();
-    state.challenge = { seq, scorer: new SimpleScorer(seq), running: false };
+    state.challenge = { seq, scorer: new ScoringAdapter(seq), running: false };
     setStatus(`已加载参考:${seq.danceId} (${seq.meta.numFrames} 帧)`);
   } catch (e) {
     setStatus("参考加载失败: " + e.message);
@@ -976,6 +980,11 @@ function finishChallenge() {
   dom.resultScore.textContent = "得分 " + (r.score + (ch.noteBonus || 0));
   dom.resultAcc.textContent = "平均匹配 " + Math.round(r.avgAcc * 100) + "%";
   dom.resultCombo.textContent = "最大连击 " + r.maxCombo;
+  const tales = r.tallies || {};
+  dom.talliesPerfect.textContent = String(tales.perfect ?? 0);
+  dom.talliesGreat.textContent = String(tales.great ?? 0);
+  dom.talliesGood.textContent = String(tales.good ?? 0);
+  dom.talliesMiss.textContent = String(tales.miss ?? 0);
   dom.result.classList.remove("hidden");
   // 结算庆祝
   juice.burst(window.innerWidth / 2, window.innerHeight * 0.5, { count: 80, speed: 550, ttl: 1.1 });

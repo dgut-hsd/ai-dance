@@ -394,6 +394,12 @@ html, body {
 #result-grade.grade-c { color: #c88bff; text-shadow: 0 0 60px rgba(200,139,255,0.8); }
 #result-grade.grade-d { color: #ff8a8a; text-shadow: 0 0 60px rgba(255,138,138,0.7); }
 #result p { margin: 4px 0; font-size: 18px; color: var(--text); }
+#result-tallies { margin: 14px auto 4px; border-collapse: collapse; }
+#result-tallies td { padding: 5px 20px; font-size: 18px; text-align: center; width: 90px; }
+#result-tallies .t-perfect { color: var(--gold); }
+#result-tallies .t-great { color: var(--accent3); }
+#result-tallies .t-good { color: var(--accent2); }
+#result-tallies .t-miss { color: var(--red); }
 
 .hidden { display: none !important; }
 
