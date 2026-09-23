@@ -204,6 +204,13 @@ export const SONGS = [
   { id: "samba-demo", label: "Samba Demo", url: "audio/samba-demo.wav", bpm: 100 },
 ];
 
+// 跟跳挑战的舞曲配对:选歌主页(game.js)与游戏页(main.js)共用这一份
+export const CHALLENGE_DANCES = [
+  { id: "demo", label: "合成示例舞", kind: "demo", defaultSongId: "demo-beat" },
+  { id: "hiphop", label: "Hip Hop Dancing", kind: "fbx", fbx: FBX_DANCES[0], defaultSongId: "pop-demo" },
+  { id: "salsa", label: "Salsa Dancing", kind: "fbx", fbx: FBX_DANCES[1], defaultSongId: "samba-demo" },
+];
+
 const _cache = new Map(); // fbxDance.id -> sequence
 
 /**

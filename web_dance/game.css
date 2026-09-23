@@ -1,0 +1,221 @@
+/* game.css — DANCE ARENA 选歌主页(Just Dance 卡片轮播 × Dance Evolution 霓虹 HUD × Dance Spotlight 舞台) */
+:root {
+  --bg: #070b18;
+  --panel: rgba(13, 20, 40, 0.72);
+  --panel-border: rgba(120, 160, 255, 0.25);
+  --text: #e8edff;
+  --muted: #93a2c8;
+  --accent: #ff3d81;
+  --accent2: #4d7cff;
+  --accent3: #39ffcf;
+  --gold: #ffd54a;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  user-select: none;
+}
+
+#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+#vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse at 50% 42%, transparent 30%, rgba(3, 5, 12, 0.55) 78%, rgba(3, 5, 12, 0.9) 100%);
+}
+#scanlines {
+  position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: 0.5;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,0.022) 0 1px, transparent 1px 4px);
+}
+
+/* ---- 顶栏 ---- */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  display: flex; align-items: center; gap: 22px;
+  padding: 18px 26px;
+}
+#logo {
+  font-size: 26px; font-weight: 900; letter-spacing: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 24px rgba(255, 61, 129, 0.4);
+}
+#logo span { color: transparent; }
+#modes { display: flex; gap: 8px; }
+.mode-btn {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.15s ease;
+}
+.mode-btn:hover { color: var(--text); border-color: var(--accent2); }
+.mode-btn.active {
+  color: #fff;
+  border-color: var(--accent);
+  background: linear-gradient(90deg, rgba(255,61,129,0.25), rgba(77,124,255,0.25));
+  box-shadow: 0 0 18px rgba(255, 61, 129, 0.35);
+}
+#top-hint { margin-left: auto; font-size: 12px; color: var(--muted); }
+
+/* ---- 卡片轮播 ---- */
+#carousel-wrap {
+  position: fixed; inset: 0; z-index: 10;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+#carousel {
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  gap: 26px;
+  min-height: 380px;
+}
+.card {
+  position: relative;
+  width: 218px; height: 320px;
+  border-radius: 20px;
+  cursor: pointer;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  transform: scale(0.86);
+  opacity: 0.55;
+  filter: saturate(0.7);
+  transition: transform 0.28s cubic-bezier(0.2, 0.9, 0.25, 1.2), opacity 0.28s, filter 0.28s,
+    border-color 0.28s, box-shadow 0.28s;
+}
+.card.selected {
+  transform: scale(1.06);
+  opacity: 1;
+  filter: none;
+  border-color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 3px var(--card-a, var(--accent)), 0 0 42px var(--card-a, var(--accent)),
+    0 22px 60px rgba(0, 0, 0, 0.6);
+}
+.card-cover {
+  position: absolute; inset: 0;
+  background: linear-gradient(150deg, var(--card-a, #ff3d81), var(--card-b, #4d7cff));
+}
+.card-cover::after {
+  content: "";
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 78% 12%, rgba(255,255,255,0.35), transparent 42%),
+    repeating-linear-gradient(115deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 14px);
+}
+.card canvas {
+  position: absolute;
+  left: 50%; top: 46%;
+  transform: translate(-50%, -50%);
+  width: 74%; height: 62%;
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+}
+.card-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  padding: 12px 14px 14px;
+  background: linear-gradient(0deg, rgba(4, 6, 14, 0.82), transparent);
+}
+.card-title {
+  font-size: 19px; font-weight: 800; letter-spacing: 0.5px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-sub {
+  margin-top: 3px;
+  font-size: 12px; color: rgba(232, 237, 255, 0.85);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-stars { margin-top: 6px; font-size: 13px; letter-spacing: 2px; color: var(--gold); text-shadow: 0 0 8px rgba(255, 213, 74, 0.6); }
+.card-stars .off { color: rgba(255, 255, 255, 0.28); text-shadow: none; }
+.card-tag {
+  position: absolute; top: 12px; left: 12px;
+  font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(4, 6, 14, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.arrow {
+  z-index: 12;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 30px; line-height: 1;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.15s ease;
+}
+.arrow:hover { border-color: var(--accent); box-shadow: 0 0 18px rgba(255, 61, 129, 0.45); }
+
+/* ---- 底部信息条 + CTA ---- */
+#dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  display: flex; align-items: center; gap: 26px;
+  padding: 18px 30px 22px;
+  background: linear-gradient(0deg, rgba(4, 6, 14, 0.88), transparent);
+}
+#song-info { min-width: 0; }
+#song-title {
+  font-size: 26px; font-weight: 900; letter-spacing: 1px;
+  text-shadow: 0 0 20px rgba(77, 124, 255, 0.5);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#song-meta { display: flex; gap: 8px; margin-top: 8px; }
+.chip {
+  font-size: 12px; color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 4px 12px; border-radius: 999px;
+  backdrop-filter: blur(6px);
+}
+#cta {
+  margin-left: auto;
+  font-size: 20px; font-weight: 900; letter-spacing: 4px;
+  color: #fff;
+  padding: 16px 52px;
+  border: none; border-radius: 999px;
+  cursor: pointer;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  box-shadow: 0 0 26px rgba(255, 61, 129, 0.55), 0 10px 30px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s ease, box-shadow 0.15s ease;
+}
+#cta:hover { transform: scale(1.05); box-shadow: 0 0 40px rgba(255, 61, 129, 0.8), 0 10px 30px rgba(0, 0, 0, 0.5); }
+#cta:active { transform: scale(0.97); }
+#cta.pulse { animation: cta-pulse 1.6s ease-in-out infinite; }
+@keyframes cta-pulse {
+  0%, 100% { box-shadow: 0 0 22px rgba(255, 61, 129, 0.45), 0 10px 30px rgba(0, 0, 0, 0.5); }
+  50% { box-shadow: 0 0 44px rgba(255, 61, 129, 0.85), 0 10px 30px rgba(0, 0, 0, 0.5); }
+}
+#dock-hint { font-size: 12px; color: var(--muted); max-width: 220px; text-align: right; }
+
+/* ---- 四角霓虹框 ---- */
+.hud-corner {
+  position: fixed; z-index: 15; pointer-events: none;
+  width: 46px; height: 46px;
+  border: 2px solid rgba(57, 255, 207, 0.5);
+  filter: drop-shadow(0 0 6px rgba(57, 255, 207, 0.6));
+}
+.hud-corner.tl { top: 12px; left: 12px; border-right: none; border-bottom: none; }
+.hud-corner.tr { top: 12px; right: 12px; border-left: none; border-bottom: none; }
+.hud-corner.bl { bottom: 12px; left: 12px; border-right: none; border-top: none; }
+.hud-corner.br { bottom: 12px; right: 12px; border-left: none; border-top: none; }
+
+@media (max-width: 860px) {
+  .card { width: 168px; height: 252px; }
+  #carousel { gap: 14px; }
+  #song-title { font-size: 19px; }
+  #cta { font-size: 16px; padding: 13px 34px; letter-spacing: 2px; }
+  #dock-hint, #top-hint { display: none; }
+}

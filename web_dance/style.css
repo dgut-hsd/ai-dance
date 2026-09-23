@@ -108,6 +108,20 @@ html, body {
   box-shadow: 0 0 18px rgba(255, 61, 129, 0.35);
 }
 
+#btn-home {
+  pointer-events: auto;
+  text-decoration: none;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  padding: 7px 14px;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  transition: all 0.15s ease;
+}
+#btn-home:hover { color: var(--text); border-color: var(--accent2); }
+
 #statusbar {
   margin-left: auto;
   display: flex;

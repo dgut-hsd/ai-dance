@@ -11,8 +11,12 @@
 ```bash
 # 在仓库根目录
 python -m http.server 8000
-# 浏览器打开 http://localhost:8000/web_dance/
+# 浏览器打开 http://localhost:8000/web_dance/game.html (选歌主页)
+# 或直接进游戏页 http://localhost:8000/web_dance/
 ```
+
+选歌主页 → 游戏页的跳转参数:`?mode=challenge&dance=hiphop&song=pop-demo&autoload=1`
+(`mode` 三选一,`dance`/`song` 为库内 id,`autoload=1` 自动加载默认舞者)。
 
 - 必须走 http(localhost 即可),`file://` 打不开 ES module 且拿不到摄像头。
 - 模型 / three.js / MediaPipe wasm 都从 CDN 加载,需要联网。
@@ -40,6 +44,7 @@ python -m http.server 8000
 
 | 文件 | 职责 |
 |---|---|
+| `game.html` / `game.css` / `game.js` | 选歌主页(Just Dance 式卡片轮播 + 霓虹 HUD,跳转参数由 `main.js` 接收) |
 | `index.html` / `style.css` | 游戏化 UI 壳(霓虹舞台 + HUD) |
 | `main.js` | 编排:场景、模式、动捕、评分、HUD、渲染循环 |
 | `scene.js` | 三渲二舞池(灯光、地板、粒子、相机) |

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DANCE ARENA — 选歌主页</title>
+    <link rel="stylesheet" href="./game.css" />
+  </head>
+  <body>
+    <!-- 三渲二舞池背景(复用 scene.js:聚光灯 / 移动光束 / 粒子) -->
+    <canvas id="stage"></canvas>
+    <div id="vignette"></div>
+    <div id="scanlines"></div>
+
+    <!-- 顶栏 -->
+    <header id="topbar">
+      <div id="logo">DANCE<span>ARENA</span></div>
+      <nav id="modes">
+        <button data-mode="challenge" class="mode-btn active">跟跳挑战</button>
+        <button data-mode="free" class="mode-btn">自由舞动</button>
+        <button data-mode="performance" class="mode-btn">舞者表演</button>
+      </nav>
+      <div id="top-hint">需要摄像头 · 建议 Chrome / Edge</div>
+    </header>
+
+    <!-- 中央:Just Dance 式卡片轮播 -->
+    <main id="carousel-wrap">
+      <button id="arrow-left" class="arrow" aria-label="上一首">‹</button>
+      <div id="carousel"></div>
+      <button id="arrow-right" class="arrow" aria-label="下一首">›</button>
+    </main>
+
+    <!-- 底部:Dance Evolution 式信息条 + CTA -->
+    <footer id="dock">
+      <div id="song-info">
+        <div id="song-title">—</div>
+        <div id="song-meta">
+          <span id="song-sub" class="chip">—</span>
+          <span id="song-bpm" class="chip">BPM --</span>
+          <span id="song-diff" class="chip">难度 --</span>
+        </div>
+      </div>
+      <button id="cta" class="pulse">开始跳舞</button>
+      <div id="dock-hint">← → 选曲 · Enter 开始 · 进入后按 空格 启动摄像头</div>
+    </footer>
+
+    <!-- 四角霓虹框(Dance Evolution HUD) -->
+    <div class="hud-corner tl"></div>
+    <div class="hud-corner tr"></div>
+    <div class="hud-corner bl"></div>
+    <div class="hud-corner br"></div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./game.js"></script>
+  </body>
+</html>

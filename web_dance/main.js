@@ -17,7 +17,7 @@ import { SimpleScorer } from "./simple-score.js";
 import { buildDemoSequence } from "./demo-sequence.js";
 import { SongSession, AudioEngine } from "./audio.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
-import { SONGS, FBX_DANCES, loadFbxSequence } from "./challenge-library.js";
+import { SONGS, CHALLENGE_DANCES, loadFbxSequence } from "./challenge-library.js";
 
 // 动作预期(Just Dance 式右侧滚动列):把谱面音符当作"动作时刻",按时间差换算成纵向位移。
 const MOVE_NOW_LINE_Y = 10;          // "现在"判定线距滚动区顶部的像素
@@ -261,14 +261,8 @@ dom.modelFile.addEventListener("change", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 挑战舞曲选择(舞蹈 + 歌曲)
+// 挑战舞曲选择(舞蹈 + 歌曲;配对表来自 challenge-library.js,与选歌主页共用)
 // ---------------------------------------------------------------------------
-const CHALLENGE_DANCES = [
-  { id: "demo", label: "合成示例舞", kind: "demo", defaultSongId: "demo-beat" },
-  { id: "hiphop", label: "Hip Hop Dancing", kind: "fbx", fbx: FBX_DANCES[0], defaultSongId: "pop-demo" },
-  { id: "salsa", label: "Salsa Dancing", kind: "fbx", fbx: FBX_DANCES[1], defaultSongId: "samba-demo" },
-];
-
 function challengeDance() {
   return CHALLENGE_DANCES.find((d) => d.id === state.challengeDanceId) || CHALLENGE_DANCES[0];
 }
@@ -1011,3 +1005,25 @@ window.addEventListener("keydown", (e) => {
 
 setMode("free");
 setStatus("就绪 — 请选择舞者");
+
+// ---------------------------------------------------------------------------
+// 选歌主页(game.html)跳转参数:?mode=challenge&dance=hiphop&song=pop-demo&autoload=1
+// ---------------------------------------------------------------------------
+function applyLaunchParams() {
+  const q = new URLSearchParams(location.search);
+  const danceId = q.get("dance");
+  const songId = q.get("song");
+  if (danceId && CHALLENGE_DANCES.some((d) => d.id === danceId)) {
+    state.challengeDanceId = danceId;
+    dom.danceSelect.value = danceId;
+    state.challengeSongId = challengeDance().defaultSongId;
+  }
+  if (songId && SONGS.some((s) => s.id === songId)) {
+    state.challengeSongId = songId;
+  }
+  dom.songSelect.value = state.challengeSongId;
+  const mode = q.get("mode");
+  if (["free", "challenge", "performance"].includes(mode)) setMode(mode);
+  if (q.get("autoload") === "1") loadModel(DEFAULT_MODEL);
+}
+applyLaunchParams();
