@@ -65,8 +65,9 @@ export function reconstructJoints(frame, dims = {}, boneDefs = BONE_DEFS) {
 
   const left_hip = add(hips_center, scale(lateral, -D.hipWidth / 2));
   const right_hip = add(hips_center, scale(lateral, D.hipWidth / 2));
-  const left_shoulder = add(shoulders_center, scale(lateral, -D.shoulderWidth / 2));
-  const right_shoulder = add(shoulders_center, scale(lateral, D.shoulderWidth / 2));
+  const shoulderAxis = frame.shoulderAxis || lateral;
+  const left_shoulder = add(shoulders_center, scale(shoulderAxis, -D.shoulderWidth / 2));
+  const right_shoulder = add(shoulders_center, scale(shoulderAxis, D.shoulderWidth / 2));
 
   const left_elbow = add(left_shoulder, scale(getBone("upper_arm_l"), D.upperArm));
   const left_wrist = add(left_elbow, scale(getBone("forearm_l"), D.forearm));

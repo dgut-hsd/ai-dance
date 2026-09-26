@@ -50,12 +50,15 @@ function scoreEvent(event, best, opts) {
     };
   }
   const deltaT = best.t - event.t;
-  const inWindow = Math.abs(deltaT) <= windowEdge;
-  const grade = gradeOf(deltaT, opts.bands, windowEdge);
+  const completeness = frameCompleteness(weights, best.conf);
+  const inWindow = Math.abs(deltaT) <= windowEdge && best.poseScore >= (opts.minPoseScore ?? 0.55) && completeness >= (opts.minCompleteness ?? 0.5);
+  const timingGrade = gradeOf(deltaT, opts.bands, windowEdge);
+  const poseGrade = best.poseScore >= .8 ? "perfect" : best.poseScore >= .65 ? "great" : "good";
+  const ranks = ["miss", "good", "great", "perfect"];
+  const grade = ranks[Math.min(ranks.indexOf(timingGrade), ranks.indexOf(poseGrade))];
   const timing = opts.timingFn === "exponential" ? expTimingValue(deltaT, opts.timingSigma ?? 0.2) : timingValue(deltaT, opts.bands, windowEdge);
   const raw = poseWeight * best.poseScore + timingWeight * timing;
   const eventScore = inWindow ? Math.min(1, Math.max(0, raw)) : 0;
-  const completeness = frameCompleteness(weights, best.conf);
   return {
     moveId: event.moveId,
     t: event.t,

@@ -220,6 +220,8 @@ export function buildFrame(t, joints, vis = {}, boneDefs = BONE_DEFS, hands = nu
     t,
     bones,      // 顺序见所选模式骨骼表
     rootYaw,
+    rootYawConf: Math.min(vis.left_hip ?? 1, vis.right_hip ?? 1),
+    shoulderAxis: normalize(sub(joints.right_shoulder, joints.left_shoulder)),
     conf,
     _src: "live",
     _seq: seq++,

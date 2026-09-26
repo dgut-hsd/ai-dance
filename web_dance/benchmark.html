@@ -1,0 +1,53 @@
+<!doctype html><meta charset="utf-8"><title>姿态性能对比</title>
+<h1>姿态性能对比（工作人员）</h1>
+<p>使用仓库 demo.mp4，运行 15 秒。此视频用于同输入性能比较，不能替代真人舞蹈准确率验收。</p>
+<button id="worker">测 Worker</button><button id="baseline">测原主线程</button>
+<button id="download">下载对比数据</button><pre id="out">待开始</pre>
+<video muted playsinline loop width="480" src="../.github/assets/demo/demo.mp4"></video>
+<script type="module">
+import { PerfMonitor } from "../pose_capture/perf.js";
+import { createPoseEngine } from "../pose_capture/pose-engine.js";
+import { createPoseEngine as baseline } from "../test/fixtures/pose-engine-main-thread.js";
+const out = document.querySelector('#out'), video = document.querySelector('video');
+const reports = [];
+async function run(mode) {
+  document.querySelectorAll('button').forEach(b => b.disabled = true);
+  let engine, raf, frameId, done = false, busy = false;
+  try {
+    out.textContent = '加载模型…';
+    engine = await (mode === 'worker' ? createPoseEngine : baseline)();
+    video.currentTime = 0; await video.play();
+    const monitor = new PerfMonitor(), render = new PerfMonitor();
+    let last = performance.now(), start = last, processed = 0, detected = 0;
+    function draw(now) { render.record('frameInterval', now-last); render.fpsTick(); last=now; if(!done) raf=requestAnimationFrame(draw); }
+    raf=requestAnimationFrame(draw);
+    await new Promise((resolve, reject) => {
+      async function frame(now) {
+        if (done) return;
+        if (now-start >= 15000 && !busy) { done=true; resolve(); return; }
+        frameId=video.requestVideoFrameCallback(frame);
+        if (busy) { monitor.drop(); return; }
+        busy=true;
+        try {
+          const t=performance.now(); const bitmap=await createImageBitmap(video);
+          const before=performance.now(); const result=await engine.detect(bitmap, t);
+          if (mode !== 'worker') bitmap.close();
+          monitor.record('inference', result.inferenceMs ?? performance.now()-before);
+          monitor.record('callbackToResult', performance.now()-t); monitor.fpsTick();
+          processed++; if(result.world) detected++;
+          out.textContent=`${mode} ${engine.delegate}: ${processed} 帧 / 识别人像 ${detected} 帧`;
+        } catch(e) { done=true; reject(e); } finally {busy=false;}
+      }
+      frameId=video.requestVideoFrameCallback(frame);
+    });
+    const r={mode,delegate:engine.delegate,source:'repository demo screen recording',processed,detected,
+      pose:monitor.report(),render:render.report()};
+    r.poseFps=processed/r.pose.elapsedSec; r.renderFps=r.render.totalFrames/r.render.elapsedSec;
+    reports.push(r); out.textContent=JSON.stringify(reports,null,2);
+  } catch(e) {out.textContent='失败: '+e.message;}
+  finally {done=true;cancelAnimationFrame(raf);video.cancelVideoFrameCallback(frameId);video.pause();engine?.close();document.querySelectorAll('button').forEach(b=>b.disabled=false);}
+}
+document.querySelector('#worker').onclick=()=>run('worker');
+document.querySelector('#baseline').onclick=()=>run('main-thread');
+document.querySelector('#download').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(reports,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='benchmark.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);};
+</script>

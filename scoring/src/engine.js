@@ -17,6 +17,8 @@ class ScoringEngine {
       windowEdge: opts.windowEdge ?? 0.25,
       yawMode: opts.yawMode ?? "none",
       refYaw: opts.refYaw ?? 0,
+      minPoseScore: opts.minPoseScore,
+      minCompleteness: opts.minCompleteness,
       weights: opts.weights
     };
     this.pending = events.map((event) => ({

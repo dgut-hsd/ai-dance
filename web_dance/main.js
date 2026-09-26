@@ -6,6 +6,7 @@
  */
 
 import * as THREE from "three";
+import { PerfMonitor } from "../pose_capture/perf.js";
 import { startPoseStream } from "../pose_capture/mocap.js";
 import { resolveMode } from "../pose_capture/contract.js";
 import { reconstructJoints } from "../pose_capture/playback.js";
@@ -112,6 +113,12 @@ const modeBtns = document.querySelectorAll(".mode-btn");
 // ---------------------------------------------------------------------------
 const scene = createScene(dom.stage);
 const clock = new THREE.Clock();
+const renderPerf = new PerfMonitor();
+let startGeneration = 0;
+let challengeTimer = null;
+let lastPoseAt = 0;
+let lastCaptureToRender = null;
+let lastPerf = null;
 
 // ---------------------------------------------------------------------------
 // 游戏手感层(juice):冲击波 / 火花 / 闪光 / 震屏 / 暗角 / hit-stop
@@ -155,6 +162,8 @@ function judgeFeedback(tier, combo) {
       showJudge("GREAT", "#4d7cff");
       juice.ring(p.x, p.y, { size: 100, color: "77,124,255", width: 3, duration: 260 });
       juice.sparks(p.x, p.y, { count: 8, rays: 5, speed: 220 });
+    } else if (tier === "GOOD") {
+      showJudge("GOOD", "#ffd54a");
     } else {
       showJudge("MISS", "#ff5f6d");
       juice.vignette(0.16);
@@ -196,6 +205,8 @@ function renderLoop() {
   requestAnimationFrame(renderLoop);
   try {
     const dt = clock.getDelta();
+    renderPerf.record("renderFrame", dt * 1000);
+    renderPerf.fpsTick();
     scene.update(dt);
     // 改了骨骼后必须手动刷新 Skeleton,否则蒙皮不更新
     state.skeletons?.forEach((s) => s.update());
@@ -205,6 +216,10 @@ function renderLoop() {
     if (state.mode === "challenge" && state.challenge?.running && state.coachPlayer) {
       const t = state.challenge.session?.songTime ?? 0;
       state.coachPlayer.update(t);
+    }
+    if (lastCaptureToRender != null) {
+      renderPerf.record("captureToRenderSubmit", performance.now() - lastCaptureToRender);
+      lastCaptureToRender = null;
     }
     // 兼容两种 scene 版本:合成器版走 scene.render(),老版直接渲染
     if (scene.render) scene.render();
@@ -585,38 +600,22 @@ function ensureSession(ch) {
     sequence: ch.seq,
     similarity: (ref, player) => scorer._similarity(ref, player),
     audioContext,
-    onJudge: (r) => handleNoteJudge(ch, r),
+    enableJudge: false, // ScoringAdapter owns the only judgement stream.
+    allowSilent: false,
     onSongEnd: () => finishChallenge(),
   });
   return ch.session;
 }
 
-// 音符判定反馈:独立于连续评分 judgeFeedback,避免 lastTier 去重互扰
-function handleNoteJudge(ch, r) {
-  if (r.ongoing) return;
-  if (r.tier !== "MISS") ch.noteBonus = (ch.noteBonus || 0) + r.score;
-  const p = avatarScreen();
-  if (r.tier === "PERFECT") {
-    showJudge("PERFECT", "#39ffcf");
-    juice.ring(p.x, p.y, { size: 130, color: "57,255,207", width: 3.5, duration: 300 });
-    juice.sparks(p.x, p.y, { count: 14, rays: 8, speed: 300 });
-  } else if (r.tier === "GREAT") {
-    showJudge("GREAT", "#4d7cff");
-    juice.ring(p.x, p.y, { size: 100, color: "77,124,255", width: 3, duration: 260 });
-    juice.sparks(p.x, p.y, { count: 8, rays: 5, speed: 220 });
-  } else {
-    showJudge("MISS", "#ff5f6d");
-    juice.vignette(0.16);
-    juice.shake(3);
-  }
-}
-
 async function startChallenge() {
   const ch = state.challenge;
   if (!ch) return;
+  const generation = ++startGeneration;
+  dom.btnStart.disabled = true;
+  dom.btnStop.disabled = false;
   ch.scorer.reset();
   resetScoreHUD();
-  ch.noteBonus = 0;
+
   lastTier = "";
   lastMilestone = 0;
   lastBeatIdx = -1;
@@ -624,9 +623,11 @@ async function startChallenge() {
   // 音乐会话:唯一时钟(音频对齐);首建在用户手势内创建 AudioContext
   const session = ensureSession(ch);
   await session.prepare();
+  if (generation !== startGeneration) return;
 
   // 3D 教练(同模型第二实例)跳参考舞,玩家跟着跳
   const coach = await ensureCoach();
+  if (generation !== startGeneration) return;
   if (coach) {
     coach.object.visible = true;
     coach.retargeter.reset();
@@ -634,6 +635,7 @@ async function startChallenge() {
   }
   layoutForMode();
   await startCamera();
+  if (generation !== startGeneration) { stopAll(); return; }
   if (!state.running) return;
 
   // 倒计时:GO 时刻 = songTime 0 = 音频起点(绝对 ctx 时间锚定,不用 setTimeout 猜)
@@ -641,12 +643,29 @@ async function startChallenge() {
   if (ctx.state === "suspended") { try { await ctx.resume(); } catch { /* noop */ } }
   const goAt = ctx.currentTime + 3.2;
   await session.start(goAt); // 预调度音频与时钟
-  await countdownTo(goAt);   // 3 / 2 / 1 / GO
-
+  ch.scorer.latency.outputLatencySec = ctx.outputLatency || 0;
+  if (!await countdownTo(goAt, generation)) return;
   ch.running = true;
+  challengeTimer = setInterval(() => {
+    if (!ch.running) return;
+    const t = session.songTime;
+    // Give the one in-flight frame time to arrive; frame timestamps remain capture-based.
+    const lag = Math.min(.25, (lastPerf?.stages?.captureToResult?.p95Ms ?? 80) / 1000);
+    for (const result of ch.scorer.advance(Math.max(0, t - lag))) {
+      if (!result.ongoing) { lastTier = ""; judgeFeedback(result.tier, result.combo); }
+    }
+    updateScoreHUD({ acc: ch.previewAcc ?? 0 });
+    if (performance.now() - lastPoseAt > 700) {
+      dom.confFill.style.width = "0%";
+      dom.confLabel.textContent = "暂时看不清，请站回画面内";
+    }
+    updateChallengeProgress(t, ch); beatPulse(t, ch);
+    session.update();
+  }, 25);
 }
 
 function startCamera() {
+  if (state.stream) { state.running = true; return Promise.resolve(); }
   const boneDefs = resolveMode(state.danceType).bones;
   setStatus("加载 MediaPipe 模型…");
   return startPoseStream({
@@ -664,7 +683,12 @@ function startCamera() {
       state.running = false;
     },
     onPerf: (snap) => {
-      dom.fps.textContent = snap.fps + " FPS";
+      lastPerf = snap;
+      const rendering = renderPerf.read();
+      const p = snap.stages.captureToResult;
+      dom.fps.textContent = `识别 ${snap.fps} / 画面 ${rendering.fps} FPS`;
+      dom.fps.title = p ? `输入至结果 P50 ${p.p50Ms} / P95 ${p.p95Ms} / P99 ${p.p99Ms} ms` : "等待性能样本";
+      document.getElementById("perf-details").textContent = JSON.stringify({ pose: snap, rendering }, null, 2);
       dom.delegate.textContent = snap.delegate;
     },
   }).then((handle) => {
@@ -686,6 +710,8 @@ function mapStatus(s) {
 }
 
 function onFrame(frame, boneDefs) {
+  lastPoseAt = performance.now();
+  lastCaptureToRender = frame.capturedAtMs ?? lastPoseAt;
   if (state.avatar) {
     state.avatar.retargeter.applyFrame(frame, {
       boneDefs,
@@ -703,21 +729,18 @@ function onFrame(frame, boneDefs) {
   // 挑战判定
   const ch = state.challenge;
   if (state.mode === "challenge" && ch && ch.running) {
-    const t = ch.session?.songTime ?? 0;
-    const res = ch.scorer.judge(t, frame, boneDefs);
-    if (res) {
-      updateScoreHUD(res);
-      judgeFeedback(res.tier, res.combo);
-    }
-    ch.session?.feed(t, frame);
-    ch.session?.update(); // 内部含节拍 + 音符判定 + 结束检测(onSongEnd)
-    updateChallengeProgress(t, ch);
-    beatPulse(t, ch);
+    const t = ch.session.songTime - Math.max(0, performance.now() - frame.capturedAtMs) / 1000;
+    const res = ch.scorer.judge(t, frame);
+    if (res) ch.previewAcc = res.acc;
   }
 }
 
-function stopAll() {
-  if (state.stream) {
+function stopAll({ keepCamera = false } = {}) {
+  startGeneration++;
+  clearInterval(challengeTimer);
+  challengeTimer = null;
+  dom.centerMsg.classList.add("hidden");
+  if (state.stream && !keepCamera) {
     state.stream.stop();
     state.stream = null;
   }
@@ -754,7 +777,7 @@ dom.btnStart.addEventListener("click", async () => {
   }
 });
 
-dom.btnStop.addEventListener("click", stopAll);
+dom.btnStop.addEventListener("click", () => stopAll());
 dom.resultAgain.addEventListener("click", () => {
   dom.result.classList.add("hidden");
   startChallenge().catch((e) => setStatus("启动失败: " + e.message));
@@ -763,32 +786,27 @@ dom.resultAgain.addEventListener("click", () => {
 // ---------------------------------------------------------------------------
 // 倒计时
 // ---------------------------------------------------------------------------
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function countdownTo(goAt) {
+// Audio-clock countdown, cancellable without sleeping through an obsolete start.
+async function countdownTo(goAt, generation) {
   const ctx = state.challenge.session.engine.ctx;
-  const labels = ["3", "2", "1", "GO!"];
   dom.centerMsg.classList.remove("hidden");
-  for (let i = 0; i < labels.length; i++) {
-    const target = goAt - (labels.length - 1 - i) * 0.8;
-    await sleep(Math.max(0, (target - ctx.currentTime) * 1000));
-    dom.centerMsgText.textContent = labels[i];
-    dom.centerMsgText.style.animation = "none";
-    void dom.centerMsgText.offsetWidth; // 重启动画
-    dom.centerMsgText.style.animation = "";
-    if (labels[i] === "GO!") {
-      juice.flash("255,255,255", 0.25, 0.16);
-      juice.shake(6);
-    }
-  }
-  dom.centerMsg.classList.add("hidden");
+  return new Promise((resolve) => {
+    const tick = () => {
+      if (generation !== startGeneration) { resolve(false); return; }
+      const remaining = goAt - ctx.currentTime;
+      if (remaining <= 0) { dom.centerMsg.classList.add("hidden"); resolve(true); return; }
+      dom.centerMsgText.textContent = String(Math.min(3, Math.ceil(remaining)));
+      setTimeout(tick, 25);
+    };
+    tick();
+  });
 }
 
 // ---------------------------------------------------------------------------
 // HUD 更新
 // ---------------------------------------------------------------------------
 function updateScoreHUD(res) {
-  dom.score.textContent = Math.round(state.challenge.scorer.score + (state.challenge.noteBonus || 0));
+  dom.score.textContent = Math.round(state.challenge.scorer.score);
   const combo = res.combo;
   dom.comboN.textContent = combo;
   dom.combo.classList.toggle("hot", combo > 0 && combo % 10 === 0);
@@ -977,8 +995,8 @@ function finishChallenge() {
   const r = ch.scorer.finalize();
   dom.resultGrade.textContent = r.grade;
   dom.resultGrade.className = "grade-" + r.grade.toLowerCase();
-  dom.resultScore.textContent = "得分 " + (r.score + (ch.noteBonus || 0));
-  dom.resultAcc.textContent = "平均匹配 " + Math.round(r.avgAcc * 100) + "%";
+  dom.resultScore.textContent = "得分 " + r.score;
+  dom.resultAcc.textContent = "全曲匹配 " + Math.round(r.avgAcc * 100) + "% · 命中 " + Math.round(r.hitRate * 100) + "%";
   dom.resultCombo.textContent = "最大连击 " + r.maxCombo;
   const tales = r.tallies || {};
   dom.talliesPerfect.textContent = String(tales.perfect ?? 0);
@@ -990,7 +1008,7 @@ function finishChallenge() {
   juice.burst(window.innerWidth / 2, window.innerHeight * 0.5, { count: 80, speed: 550, ttl: 1.1 });
   juice.flash("255,255,255", 0.3, 0.2);
   juice.shake(12);
-  stopAll();
+  stopAll({ keepCamera: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -1036,3 +1054,19 @@ function applyLaunchParams() {
   if (q.get("autoload") === "1") loadModel(DEFAULT_MODEL);
 }
 applyLaunchParams();
+
+// Operators can export anonymous timing metrics; no images or poses are included.
+document.getElementById("export-perf").onclick = () => {
+  const report = { version: 1, createdAt: new Date().toISOString(), userAgent: navigator.userAgent,
+    pose: state.stream?.perf.report() ?? null, rendering: renderPerf.report(),
+    note: "captureToResult starts at camera captureTime when available, otherwise video callback; excludes unreported sensor latency. Render submit is not display/photon latency." };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a"); a.href = url; a.download = "dance-performance.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden && (state.running || challengeTimer)) {
+    stopAll(); setStatus("页面已离开，本局已停止；返回后可重新开始");
+  }
+});
+window.addEventListener("pagehide", () => stopAll());

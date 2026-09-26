@@ -1,86 +1,45 @@
-/**
- * pose-engine.js — MediaPipe PoseLandmarker(+ 可选 HandLandmarker)的加载与推理。
- *
- * 实时端、离线导出、视频预览共用同一份,保证模型参数/delegate/阈值完全一致。
- * withHands = true 时额外加载手部模型,用于手势舞。
- */
-
-const TASKS_VISION = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
-
-// 模型路径统一相对「本模块」解析,保证无论页面放在哪个目录,
-// 都能定位到与本模块同级的 models/(便于 pose_capture 之外的其他页面复用)。
-function resolveModelAsset(p) {
-  try {
-    return new URL(p, import.meta.url).href;
-  } catch {
-    return p; // 已是绝对 URL 或非浏览器环境
+// Inference always stays in a worker, including CPU fallback.
+const RUNTIME = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+export async function createPoseEngine(modelPath = "models/pose_landmarker_full.task",
+  { withHands = false, handModelPath = "models/hand_landmarker.task" } = {}) {
+  const worker = new Worker(new URL("./pose-worker.js", import.meta.url));
+  const pending = new Map();
+  let serial = 0, closed = false, busy = false;
+  function close(reason = new Error("姿态推理已停止")) {
+    closed = true; worker.terminate();
+    for (const p of pending.values()) { clearTimeout(p.timer); p.reject(reason); }
+    pending.clear();
   }
-}
-
-export async function createPoseEngine(
-  modelPath = "models/pose_landmarker_full.task",
-  { withHands = false, handModelPath = "models/hand_landmarker.task" } = {}
-) {
-  const { FilesetResolver, PoseLandmarker, HandLandmarker } = await import(
-    `${TASKS_VISION}/vision_bundle.mjs`
-  );
-  const vision = await FilesetResolver.forVisionTasks(`${TASKS_VISION}/wasm`);
-
-  const options = {
-    baseOptions: { modelAssetPath: resolveModelAsset(modelPath), delegate: "GPU" },
-    runningMode: "VIDEO",
-    numPoses: 1,
-    minPoseDetectionConfidence: 0.5,
-    minPosePresenceConfidence: 0.5,
-    minTrackingConfidence: 0.5,
+  worker.onerror = (e) => close(new Error(e.message || "姿态 Worker 加载失败"));
+  worker.onmessageerror = () => close(new Error("姿态 Worker 数据传输失败"));
+  worker.onmessage = ({ data }) => {
+    const p = pending.get(data.id);
+    if (!p) return;
+    pending.delete(data.id); clearTimeout(p.timer);
+    if (data.error) p.reject(new Error(data.error)); else p.resolve(data);
   };
-
-  let landmarker;
-  let delegate = "GPU";
-  try {
-    landmarker = await PoseLandmarker.createFromOptions(vision, options);
-  } catch (gpuErr) {
-    console.warn("GPU delegate 不可用,退回 CPU:", gpuErr);
-    options.baseOptions.delegate = "CPU";
-    delegate = "CPU";
-    landmarker = await PoseLandmarker.createFromOptions(vision, options);
-  }
-
-  let handLandmarker = null;
-  if (withHands) {
-    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: { modelAssetPath: resolveModelAsset(handModelPath), delegate },
-      runningMode: "VIDEO",
-      numHands: 2,
-      minHandDetectionConfidence: 0.3, // 手动作快易模糊,放宽阈值减少丢帧
-      minHandPresenceConfidence: 0.3,
-      minTrackingConfidence: 0.5,
+  function request(data, transfer = [], timeout = 30000) {
+    if (closed) return Promise.reject(new Error("姿态推理已停止"));
+    const id = ++serial;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => close(new Error("姿态 Worker 超时，请重试")), timeout);
+      pending.set(id, { resolve, reject, timer });
+      try { worker.postMessage({ ...data, id }, transfer); }
+      catch (e) { clearTimeout(timer); pending.delete(id); reject(e); }
     });
   }
-
-  return {
-    delegate,
-
-    // 返回 { world, img, hands }
-    //   world: 33 个 pose 世界 landmark 或 null
-    //   img:   33 个 pose 图像 landmark(带 visibility/presence)或 null
-    //   hands: HandLandmarker 原始结果(仅 withHands 时非 null)
-    detect(bitmap, tsMs) {
-      const result = landmarker.detectForVideo(bitmap, tsMs);
-      let hands = null;
-      if (handLandmarker) {
-        hands = handLandmarker.detectForVideo(bitmap, tsMs);
-      }
-      return {
-        world: result.worldLandmarks?.[0] ?? null,
-        img: result.landmarks?.[0] ?? null,
-        hands,
-      };
-    },
-
-    close() {
-      landmarker.close?.();
-      handLandmarker?.close?.();
-    },
-  };
+  try {
+    const { delegate } = await request({ type: "init", runtime: RUNTIME,
+      model: new URL(modelPath, import.meta.url).href, withHands,
+      handModel: new URL(handModelPath, import.meta.url).href }, [], 90000);
+    return { delegate: `${delegate} · Worker`,
+      async detect(bitmap, tsMs) {
+        // Ownership of a transferred ImageBitmap moves to the worker. The
+        // worker closes it in its finally block; never close it on this side.
+        if (busy || closed) throw new Error("姿态推理忙碌或已停止");
+        busy = true;
+        try { return await request({ type: "detect", bitmap, tsMs }, [bitmap]); }
+        finally { busy = false; }
+      }, close };
+  } catch (e) { close(e); throw e; }
 }

@@ -633,7 +633,7 @@ export class NoteJudge {
             const acc = this._compare(this.refAt(songTime, note), cur.frame, note);
             if (acc < st.minAcc) st.minAcc = acc;
             if (acc < minHold) st.broke = true;
-          }
+          } else { st.broke = true; st.minAcc = 0; }
           if (songTime >= this._judgeTimeAt(note.endT) + goodSec) {
             let tier;
             if (st.broke) tier = "GOOD";
@@ -675,7 +675,7 @@ export class NoteJudge {
     let best = null;
     for (const f of frames) {
       const acc = this._compare(ref, f.frame, note);
-      if (!best || acc > best.acc) best = { acc, deltaSec: f.t - judgeTime };
+      if (!best || acc > best.acc + 1e-6 || (Math.abs(acc - best.acc) <= 1e-6 && Math.abs(f.t - judgeTime) < Math.abs(best.deltaSec))) best = { acc, deltaSec: f.t - judgeTime };
     }
     return best;
   }
@@ -700,12 +700,12 @@ export class NoteJudge {
       if (la < 1e-6 || lb < 1e-6) continue;
       let dot = (a[0] * b[0] + a[1] * b[1] + a[2] * b[2]) / (la * lb);
       dot = clamp(dot, -1, 1);
-      const sim = (dot + 1) / 2;
+      const sim = Math.max(0, dot);
       const w = Math.min(rc[i] ?? 1, pc[i] ?? 1);
       sum += sim * w;
       wsum += w;
     }
-    return wsum > 0 ? sum / wsum : 0;
+    return wsum >= indices.length * .5 ? sum / wsum : 0;
   }
 
   _settle(i, note, { tier, acc, deltaSec }) {
@@ -728,6 +728,17 @@ export class NoteJudge {
     return { noteId: note.id, noteType: note.type, tier, acc, deltaSec, combo: this.combo, score: 0, ongoing };
   }
 
+  finish() {
+    // Close all remaining windows, including the final note at song duration.
+    this.tick(this.durationSec + this.latency.totalOffsetSec + this.chart.judgeOffsetSec + this.windowsMs.good / 1000 + .001);
+    for (let i = 0; i < this._states.length; i++) {
+      if (this._states[i].phase !== "settled") {
+        const r = this._settle(i, this.chart.notes[i], { tier: "MISS", acc: 0, deltaSec: 0 });
+        this.onJudgement?.(r);
+      }
+    }
+  }
+
   finalize() {
     return { ...this._stats };
   }
@@ -737,9 +748,11 @@ export class NoteJudge {
 // SongSession — 门面,main.js 唯一入口
 // ---------------------------------------------------------------------------
 export class SongSession {
-  constructor({ sequence, similarity, audioContext = null, onJudge = null, onBeat = null, onStateChange = null, latency = null, onSongEnd = null } = {}) {
+  constructor({ sequence, similarity, audioContext = null, onJudge = null, onBeat = null, onStateChange = null, latency = null, onSongEnd = null, enableJudge = true, allowSilent = true } = {}) {
     if (!sequence) throw new Error("SongSession needs a sequence");
     this.sequence = sequence;
+    this.enableJudge = enableJudge;
+    this.allowSilent = allowSilent;
     this.similarity = similarity || (() => 0);
     this.onJudge = onJudge;
     this.onBeat = onBeat;
@@ -771,7 +784,7 @@ export class SongSession {
         const idx = note?.refFrameIdx != null ? note.refFrameIdx : Math.round(t * fps);
         return frames[clamp(idx, 0, frames.length - 1)] ?? null;
       };
-      this.judge = new NoteJudge(this.sequence.chart, this.similarity, {
+      if (this.enableJudge) this.judge = new NoteJudge(this.sequence.chart, this.similarity, {
         latency: this.latency,
         refAt,
         durationSec,
@@ -785,7 +798,10 @@ export class SongSession {
       try {
         await this.engine.load(audioPath, audioOffsetSec);
         if (durationSec > 0) this.engine.setDurationSec(durationSec); // meta 为准
-      } catch (e) { console.warn("audio load failed, running silent:", e); }
+      } catch (e) {
+        if (!this.allowSilent) throw new Error("音乐加载失败，请检查网络后重试", { cause: e });
+        console.warn("audio load failed, running silent:", e);
+      }
     }
   }
 

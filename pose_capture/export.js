@@ -77,11 +77,12 @@ export async function exportVideoToSequence({
 
     function onFrame(now, metadata) {
       video.requestVideoFrameCallback(onFrame);
+      if (ended || inFlight) return;
       inFlight++;
       (async () => {
         try {
           const bitmap = await createImageBitmap(video);
-          const { world, img, hands } = engine.detect(bitmap, metadata.mediaTime * 1000);
+          const { world, img, hands } = await engine.detect(bitmap, metadata.mediaTime * 1000);
           bitmap.close();
 
           if (world) {
@@ -102,8 +103,6 @@ export async function exportVideoToSequence({
               bones,
               rootYaw,
               conf,
-              rootVel: root.rootVel,   // 根运动:髋中点速度(米/秒)
-              grounded: root.grounded, // 根运动:是否贴地
             };
             if (handsField) frame.hands = handsField;
             frames.push(frame);

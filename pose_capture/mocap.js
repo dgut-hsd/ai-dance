@@ -41,7 +41,7 @@ async function runLivePipeline({
   onStatus("loading-model");
   const engine = await createPoseEngine(modelPath, { withHands, handModelPath });
   onStatus("model-ready");
-  await onReady();
+  try { await onReady(); } catch (e) { engine.close(); throw e; }
 
   const smoother = new PoseSmoother(smoothing);
   const rootTracker = new RootMotionTracker();
@@ -51,6 +51,7 @@ async function runLivePipeline({
   let busy = false;
   let stopped = false;
   let rvfId = null;
+  let lastTsMs = -Infinity;
 
   let perfTimer = null;
   if (onPerf) {
@@ -60,17 +61,24 @@ async function runLivePipeline({
     );
   }
 
-  async function detect(tsMs) {
-    if (stopped || busy) return;
+  async function detect(tsMs, capturedAtMs = performance.now()) {
+    if (stopped) return;
+    if (busy) { monitor.drop(); return; }
+    // PoseLandmarker VIDEO mode requires strictly increasing timestamps.
+    // This also handles a looping preview whose mediaTime jumps backwards.
+    if (!Number.isFinite(tsMs) || tsMs <= lastTsMs) { monitor.drop(); return; }
+    lastTsMs = tsMs;
     busy = true;
     const tStart = performance.now();
     try {
       const bitmap = await createImageBitmap(video);
       const tBitmap = performance.now();
+      monitor.record("captureToBitmap", tBitmap - capturedAtMs);
 
-      const { world, img, hands } = engine.detect(bitmap, tsMs);
+      const { world, img, hands, inferenceMs } = await engine.detect(bitmap, tsMs);
       const tInfer = performance.now();
-      bitmap.close();
+      if (stopped) return;
+      monitor.record("inference", inferenceMs);
 
       if (world) {
         const tSec = tsMs / 1000;
@@ -83,8 +91,11 @@ async function runLivePipeline({
           ? handSmoother.smooth(rawHands, tSec)
           : null;
         const root = rootTracker.update(joints, tSec);
+        // MediaPipe world coordinates are hip-relative, not global translation.
         const frame = buildFrame(tSec, joints, vis, boneDefs, handsField, root);
+        frame.capturedAtMs = capturedAtMs;
 
+      monitor.record("captureToResult", performance.now() - capturedAtMs);
         onFrame?.(frame);
         if (canvas) renderStickFigure(canvas, joints, boneDefs, handsField);
       }
@@ -95,7 +106,7 @@ async function runLivePipeline({
       monitor.record("postprocess", tEnd - tInfer);
       monitor.fpsTick();
     } catch (err) {
-      // 偶发取帧失败,跳过
+      if (!stopped) onError(err);
     } finally {
       busy = false;
     }
@@ -104,7 +115,7 @@ async function runLivePipeline({
   function onVideoFrame(now, metadata) {
     if (stopped) return;
     rvfId = video.requestVideoFrameCallback(onVideoFrame);
-    detect(metadata.mediaTime * 1000);
+    detect(metadata.mediaTime * 1000, metadata.captureTime ?? now);
   }
 
   if (video.requestVideoFrameCallback) {
@@ -170,7 +181,7 @@ export async function startPoseStream({
         audio: false,
       });
       video.srcObject = stream;
-      await video.play();
+      try { await video.play(); } catch (e) { stream.getTracks().forEach((t) => t.stop()); throw e; }
       onStatus("camera-on");
     },
   });

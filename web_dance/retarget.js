@@ -57,6 +57,9 @@ export class Retargeter {
       throw new Error("未找到 Hips 骨骼:仅支持人形骨架(FBX/GLB)");
     }
     this.hips = hips;
+    this.hipsRestQuat = hips.getWorldQuaternion(new THREE.Quaternion()).clone();
+    this.hipsRestLocalQuat = hips.quaternion.clone();
+    this.bodyYaw = new THREE.Quaternion();
 
     // ---- 模型休息基(right/up/forward) ----
     const leftArm = this.findBone(["LeftArm"]);
@@ -163,7 +166,7 @@ export class Retargeter {
     return {
       spineLen: D(hips, chest),
       shoulderWidth: D(leftArm, rightArm),
-      hipWidth: D(ll, rl), // 膝宽 ≈ 髋宽(骨架里没有独立髋骨)
+      hipWidth: D(lul, rul), // 膝宽 ≈ 髋宽(骨架里没有独立髋骨)
       upperArm: (D(leftArm, lf) + D(rightArm, rf)) / 2,
       forearm: (D(lf, lh) + D(rf, rh)) / 2,
       thigh: (D(lul, ll) + D(rul, rl)) / 2,
@@ -245,8 +248,9 @@ export class Retargeter {
 
   // 方向对齐:把某骨骼的休息方向转到 target 方向(带四元数平滑,消除高频抖动)
   _applyDir(cap, target) {
-    const delta = new THREE.Quaternion().setFromUnitVectors(cap.rest, target);
-    const targetQuat = delta.multiply(cap.restQuat);
+    const rest = cap.rest.clone().applyQuaternion(this.bodyYaw);
+    const delta = new THREE.Quaternion().setFromUnitVectors(rest, target);
+    const targetQuat = delta.multiply(this.bodyYaw).multiply(cap.restQuat);
     const pw = cap.bone.parent && cap.bone.parent.isBone
       ? cap.bone.parent.getWorldQuaternion(new THREE.Quaternion())
       : new THREE.Quaternion();
@@ -321,7 +325,7 @@ export class Retargeter {
           this._hipShift += (kinTarget - this._hipShift) * 0.85;
           this._airVy = 0;
         } else {
-          this._airVy = this._airVy * ROOT_AIR_DAMP + vWorld.y;
+          this._airVy = this._airVy * ROOT_AIR_DAMP + vWorld.y * (1 - ROOT_AIR_DAMP);
           this._hipShift += this._airVy * dt;
         }
       } else {
@@ -333,6 +337,16 @@ export class Retargeter {
       this.root.position.z = this.rootBasePos.z + this._rootDisp.z;
       this.root.position.y = this.rootBasePos.y + this._hipShift;
       this.root.updateMatrixWorld(true);
+    }
+
+    // Orient the pelvis using the measured hip axis; do not double-rotate world-space limbs.
+    if (Number.isFinite(frame.rootYaw) && (frame.rootYawConf ?? 1) >= minConf) {
+      const lateral = toWorld([Math.cos(frame.rootYaw), 0, Math.sin(frame.rootYaw)]).normalize();
+      if (mirror) lateral.negate();
+      this.bodyYaw.setFromUnitVectors(this.basis.right, lateral);
+      const parent = this.hips.parent.getWorldQuaternion(new THREE.Quaternion());
+      this.hips.quaternion.copy(parent.invert().multiply(this.bodyYaw).multiply(this.hipsRestQuat));
+      this.hips.updateWorldMatrix(true, true);
     }
 
     // ---- 脊柱(方向对齐 + 曲率分布) ----
@@ -360,7 +374,10 @@ export class Retargeter {
       const l1 = this.dims[limb.l1];
       const l2 = this.dims[limb.l2];
       const poleDir = limb.pole === "front" ? f : f.clone().negate();
-      const pole = p0.clone().add(poleDir);
+      // The elbow/knee is the pole, rather than a fixed front/back bend direction.
+      const midName = endName.replace("wrist", "elbow").replace("ankle", "knee");
+      const mid = joints[midName];
+      const pole = mid ? toWorld(mid).add(hipWorld) : p0.clone().add(poleDir);
       const sol = solveTwoBone(p0, targetEnd, l1, l2, pole);
       this._applyDir(limb.upper, sol.upperDir);
       this._applyDir(limb.lower, sol.lowerDir);
@@ -386,13 +403,15 @@ export class Retargeter {
     // ---- 脚:世界朝向 ≈ 休息(脚掌贴地) ----
     for (const ft of this.feet) {
       const pw = ft.bone.parent.getWorldQuaternion(new THREE.Quaternion());
-      ft.bone.quaternion.copy(pw.invert().multiply(ft.restWorldQuat));
+      ft.bone.quaternion.copy(pw.invert().multiply(this.bodyYaw).multiply(ft.restWorldQuat));
       ft.bone.updateWorldMatrix(true, false);
     }
   }
 
   // 回到休息姿态
   reset() {
+    this.hips.quaternion.copy(this.hipsRestLocalQuat);
+    this.bodyYaw.identity();
     for (const cap of this.spineDriven) cap.bone.quaternion.copy(cap.restLocalQuat);
     for (const limb of this.limbs) {
       limb.upper.bone.quaternion.copy(limb.upper.restLocalQuat);

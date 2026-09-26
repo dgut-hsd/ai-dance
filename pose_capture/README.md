@@ -9,7 +9,7 @@
 | 文件 | 职责 | 里程碑 |
 |---|---|---|
 | `contract.js` | 骨骼索引 + 坐标轴标定 + 归一化 + 拼帧 | M2 |
-| `pose-engine.js` | MediaPipe 模型加载/推理(实时与导出共用) | M1 |
+| `pose-engine.js` | MediaPipe 模型加载/Worker 推理(实时与导出共用) | M1 |
 | `filters.js` | One Euro 滤波 + 低置信度冻结 | M4 |
 | `root-motion.js` | 根运动:髋中点速度 + 地面接触(跳跃/位移通道) | 方案C |
 | `mocap.js` | 摄像头 -> MediaPipe -> 平滑 -> 契约帧回调 | M0/M1/M4 |
@@ -60,10 +60,25 @@ filter,默认 `{ minCutoff: 1.5, beta: 0.5, dCutoff: 1.0 }`(偏跟手,适合舞�
 - 觉得**延迟/拖尾、跟不上快动作**:`beta` 调大(0.8–1.0)。
 - 冻结阈值在 `filters.js` 的 `FREEZE_VISIBILITY`(默认 0.5)。
 
+## 性能与延迟测量
+
+姿态推理现在运行在经典 Web Worker 中，主线程只负责采集、后处理和渲染；Worker
+不可用或 GPU 初始化失败时会在 Worker 内回退 CPU，不会把推理搬回主线程。
+
+打开 `web_dance/benchmark.html`，分别点击“测 Worker”和“测原主线程”，使用同一段
+视频各测 15 秒。结果会记录识别 FPS、渲染 FPS，以及 `callbackToResult`、推理耗时的
+平均值、P50/P95/P99/最大值；下载 JSON 后再在目标摆摊设备上验收。实时页面的性能
+面板也会显示采集到结果的端到端延迟和丢帧数。
+
+### 当前关键修复
+
+- 转移给 Worker 的 `ImageBitmap` 只由 Worker 释放，避免双重关闭造成随机失败。
+- 严格过滤回退/重复时间戳，避免 `PoseLandmarker` VIDEO 模式停止输出。
+- 实时帧重新传入根运动数据，恢复移动、跳跃与落地映射；此前计算了但丢弃。
+- 低延迟路径保持单帧在途，繁忙时丢弃旧帧，避免排队导致拖尾。
+
 ## 已知取舍 / 后续工作
 
-- **MediaPipe 跑在主线程**,不是 Web Worker(0.10.14 无经典包,module worker 又禁
-  `importScripts`)。以后要卸载到 worker,需用 Vite/esbuild 打包。
 - **wasm 从 jsdelivr CDN 加载**,未自托管。访问慢可下载 `wasm/` 到本地并改
   `pose-engine.js` 里的 `TASKS_VISION`。
 - **导出按视频原生帧率逐帧采集**(实时播放速度)。要更快/固定 fps,可改成手动 seek
