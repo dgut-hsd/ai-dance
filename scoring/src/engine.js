@@ -40,7 +40,9 @@ class ScoringEngine {
       const hi = p.event.t + p.event.window.late;
       if (tf < lo || tf > hi) continue;
       const scored = scoreFrameAgainstEvent(p.event, frame, this.opts);
-      if (p.best === null || scored.poseScore > p.best.poseScore) {
+      if (p.best === null || scored.poseScore > p.best.poseScore + 1e-9 ||
+        (Math.abs(scored.poseScore - p.best.poseScore) <= 1e-9 &&
+          Math.abs(scored.t - p.event.t) < Math.abs(p.best.t - p.event.t))) {
         p.best = {
           t: scored.t,
           poseScore: scored.poseScore,
@@ -48,8 +50,14 @@ class ScoringEngine {
         };
       }
     }
+    const released = this.releaseUpTo(tf);
+    return released;
+  }
+  // 按时间推进:释放所有窗口已闭合(closeAt <= t)的待决事件。
+  // 与 ingest 共用,允许驱动方(如计时器)在无帧到达时也按时序结算。
+  releaseUpTo(t) {
     const released = [];
-    while (this.pending.length > 0 && this.pending[0].closeAt <= tf) {
+    while (this.pending.length > 0 && this.pending[0].closeAt <= t) {
       const p = this.pending.shift();
       if (p === void 0) break;
       released.push(scoreEvent(p.event, p.best, this.opts));
