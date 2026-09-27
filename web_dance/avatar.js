@@ -9,10 +9,10 @@ import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 import { Retargeter } from "./retarget.js";
 
-// 默认舞者:three.js 官方示例(Mixamo 人形骨架,骨骼名 Hips/Spine/LeftArm…),稳定可达。
+// 默认舞者:本地 Three.js 官方 Michelle.glb，离线/本地静态服务器即可播放。
 // 想用自己的 ReadyPlayerMe 角色,可直接在「加载本地 FBX/GLB」里填 URL 或文件,例如:
 //   https://models.readyplayer.me/YOUR_AVATAR_ID.glb
-export const DEFAULT_MODEL = "https://threejs.org/examples/models/gltf/Michelle.glb";
+export const DEFAULT_MODEL = "../models/Michelle.glb";
 export const TARGET_HEIGHT = 1.8; // 模型归一化到 1.8 个场景单位
 
 export function detectExt(url) {

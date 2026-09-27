@@ -1,8 +1,21 @@
 // Inference always stays in a worker, including CPU fallback.
-const RUNTIME = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+// Self-hosted Tasks Vision runtime. Keeping this local avoids CDN/CORS failures
+// during a kiosk/demo session and makes Worker startup deterministic.
+const RUNTIME = new URL("./runtime", import.meta.url).href.replace(/\/$/, "");
+async function createMainThreadFallback(modelPath, { withHands = false, handModelPath = "models/hand_landmarker.task" } = {}) {
+  const api = await import(`${RUNTIME}/vision_bundle.mjs`);
+  const files = await api.FilesetResolver.forVisionTasks(`${RUNTIME}/wasm`);
+  const opts = { baseOptions: { modelAssetPath: new URL(modelPath, import.meta.url).href, delegate: "GPU" }, runningMode: "VIDEO", numPoses: 1, minPoseDetectionConfidence: .5, minPosePresenceConfidence: .5, minTrackingConfidence: .5 };
+  let delegate = "GPU", pose;
+  try { pose = await api.PoseLandmarker.createFromOptions(files, opts); }
+  catch { delegate = "CPU"; opts.baseOptions.delegate = "CPU"; pose = await api.PoseLandmarker.createFromOptions(files, opts); }
+  const hand = withHands ? await api.HandLandmarker.createFromOptions(files, { baseOptions: { modelAssetPath: new URL(handModelPath, import.meta.url).href, delegate }, runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: .3, minHandPresenceConfidence: .3, minTrackingConfidence: .5 }) : null;
+  return { delegate: `${delegate} · Main-thread fallback`, detect(bitmap, tsMs) { try { const r = pose.detectForVideo(bitmap, tsMs); return { world: r.worldLandmarks?.[0] ?? null, img: r.landmarks?.[0] ?? null, hands: hand?.detectForVideo(bitmap, tsMs) ?? null, inferenceMs: 0 }; } finally { bitmap.close(); } }, close() { pose.close?.(); hand?.close?.(); } };
+}
 export async function createPoseEngine(modelPath = "models/pose_landmarker_full.task",
   { withHands = false, handModelPath = "models/hand_landmarker.task" } = {}) {
-  const worker = new Worker(new URL("./pose-worker.js", import.meta.url));
+  // Query suffix prevents a previously cached classic-worker artifact from being reused.
+  const worker = new Worker(new URL("./pose-worker.js?module=1", import.meta.url), { type: "module" });
   const pending = new Map();
   let serial = 0, closed = false, busy = false;
   function close(reason = new Error("姿态推理已停止")) {
@@ -41,5 +54,9 @@ export async function createPoseEngine(modelPath = "models/pose_landmarker_full.
         try { return await request({ type: "detect", bitmap, tsMs }, [bitmap]); }
         finally { busy = false; }
       }, close };
-  } catch (e) { close(e); throw e; }
+  } catch (e) {
+    close(e);
+    try { return await createMainThreadFallback(modelPath, { withHands, handModelPath }); }
+    catch (fallbackError) { throw new Error(`姿态推理不可用：Worker=${e.message || e}；主线程兜底=${fallbackError.message || fallbackError}`); }
+  }
 }

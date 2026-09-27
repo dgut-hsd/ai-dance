@@ -43,8 +43,10 @@ const state = {
   modelSource: null,       // { url, type } 用于给教练加载同一模型
   stream: null,
   challenge: null,         // { seq, scorer, running, session, noteBonus }
-  challengeDanceId: "demo",
-  challengeSongId: "demo-beat",
+  // 默认先展示真实 FBX 编排，参数化 demo 仅作为技术回退。
+  challengeDanceId: "hiphop",
+  challengeSongId: "pop-demo",
+  performanceDanceId: null,
   latestConf: 0,
 };
 
@@ -58,9 +60,6 @@ const dom = {
   delegate: $("delegate"),
   menu: $("menu"),
   menuStatus: $("menu-status"),
-  modelHint: $("model-hint"),
-  modelFile: $("model-file"),
-  useDefault: $("use-default"),
   hud: $("hud"),
   cam: $("cam"),
   camStick: $("cam-stick"),
@@ -104,6 +103,7 @@ const dom = {
   talliesGood: $("tallies-good"),
   talliesMiss: $("tallies-miss"),
   resultAgain: $("result-again"),
+  resultExit: $("result-exit"),
 };
 
 const modeBtns = document.querySelectorAll(".mode-btn");
@@ -213,7 +213,7 @@ function renderLoop() {
     // 表演模式:FBX/GLB 内嵌动画
     if (state.mixer) state.mixer.update(dt);
     // 跟跳挑战:教练按歌曲时钟跳参考舞
-    if (state.mode === "challenge" && state.challenge?.running && state.coachPlayer) {
+    if ((state.mode === "challenge" || state.mode === "pk") && state.challenge?.running && state.coachPlayer) {
       const t = state.challenge.session?.songTime ?? 0;
       state.coachPlayer.update(t);
     }
@@ -263,21 +263,6 @@ async function loadModel(url, type) {
     setStatus("模型加载失败");
   }
 }
-
-dom.useDefault.addEventListener("click", () => loadModel(DEFAULT_MODEL));
-
-dom.modelFile.addEventListener("change", () => {
-  const file = dom.modelFile.files[0];
-  if (!file) return;
-  const ext = detectExt(file.name);
-  if (ext === "gltf") {
-    dom.menuStatus.textContent = "提示:.gltf 若含外部 .bin/.jpg 资源,本地加载可能失败,建议用 .glb 或 .fbx";
-  }
-  const url = URL.createObjectURL(file);
-  // 旧本地模型 URL 不再需要(教练要复用当前 URL,所以只在新模型加载时回收旧的)
-  if (state.modelSource?.url?.startsWith("blob:")) URL.revokeObjectURL(state.modelSource.url);
-  loadModel(url, ext);
-});
 
 // ---------------------------------------------------------------------------
 // 挑战舞曲选择(舞蹈 + 歌曲;配对表来自 challenge-library.js,与选歌主页共用)
@@ -354,14 +339,16 @@ function setMode(mode) {
   if (state.running) stopAll();
   state.mode = mode;
   modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
-  const isChallenge = mode === "challenge";
+  const isChallenge = mode === "challenge" || mode === "pk";
+  const isPk = mode === "pk";
   const isPerformance = mode === "performance";
-  dom.scorePanel.classList.toggle("hidden", !isChallenge);
-  dom.refPanel.classList.toggle("hidden", !isChallenge);
-  dom.btnLoadRef.classList.toggle("hidden", !isChallenge);
+  dom.scorePanel.classList.toggle("hidden", !isChallenge || isPk);
+  dom.refPanel.classList.toggle("hidden", !isChallenge || isPk);
+  dom.btnLoadRef.classList.toggle("hidden", !isChallenge || isPk);
   dom.dancePicker.classList.toggle("hidden", !isChallenge);
   dom.songPicker.classList.toggle("hidden", !isChallenge);
   dom.animPicker.classList.toggle("hidden", !isPerformance);
+  document.body.classList.toggle("pk-mode", isPk);
   if (isChallenge && !state.challenge) {
     rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
   }
@@ -376,6 +363,7 @@ modeBtns.forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode
 function layoutForMode() {
   if (!state.avatar) return;
   if (state.mode === "challenge") {
+    state.avatar.object.visible = true;
     state.avatar.object.position.x = 1.1;
     if (state.coach) {
       state.coach.object.visible = true;
@@ -384,7 +372,17 @@ function layoutForMode() {
     scene.camera.position.set(0, 1.9, 6.6);
     scene.controls.target.set(0, 0.95, 0);
     scene.controls.update();
+  } else if (state.mode === "pk") {
+    state.avatar.object.visible = false;
+    if (state.coach) {
+      state.coach.object.visible = true;
+      state.coach.object.position.x = 1.1;
+    }
+    scene.camera.position.set(0, 1.9, 6.6);
+    scene.controls.target.set(0, 0.95, 0);
+    scene.controls.update();
   } else {
+    state.avatar.object.visible = true;
     state.avatar.object.position.x = 0;
     if (state.coach) state.coach.object.visible = false;
     scene.resetCamera();
@@ -440,6 +438,11 @@ function enterPerformance() {
     return;
   }
   buildPerformanceOptions();
+  // 选歌主页通过 dance 参数指定的表演舞蹈优先选中；没有参数时保留第一个选项。
+  if (state.performanceDanceId) {
+    const option = performanceOptions.find((o) => o.kind === "builtin" && o.dance.id === state.performanceDanceId);
+    if (option) dom.animSelect.value = option.id;
+  }
   if (performanceOptions.length) {
     dom.btnStart.disabled = false;
     dom.btnStop.disabled = true;
@@ -608,6 +611,7 @@ function ensureSession(ch) {
 }
 
 async function startChallenge() {
+  if (!state.challenge) await rebuildChallenge();
   const ch = state.challenge;
   if (!ch) return;
   const generation = ++startGeneration;
@@ -728,7 +732,7 @@ function onFrame(frame, boneDefs) {
 
   // 挑战判定
   const ch = state.challenge;
-  if (state.mode === "challenge" && ch && ch.running) {
+  if ((state.mode === "challenge" || state.mode === "pk") && ch && ch.running) {
     const t = ch.session.songTime - Math.max(0, performance.now() - frame.capturedAtMs) / 1000;
     const res = ch.scorer.judge(t, frame);
     if (res) ch.previewAcc = res.acc;
@@ -766,7 +770,7 @@ dom.btnStart.addEventListener("click", async () => {
   try {
     if (state.mode === "performance") {
       await startMixer(dom.animSelect.value);
-    } else if (state.mode === "challenge") {
+    } else if (state.mode === "challenge" || state.mode === "pk") {
       await startChallenge();
     } else {
       await startFree();
@@ -781,6 +785,10 @@ dom.btnStop.addEventListener("click", () => stopAll());
 dom.resultAgain.addEventListener("click", () => {
   dom.result.classList.add("hidden");
   startChallenge().catch((e) => setStatus("启动失败: " + e.message));
+});
+dom.resultExit.addEventListener("click", () => {
+  stopAll();
+  location.href = "./";
 });
 
 // ---------------------------------------------------------------------------
@@ -1031,10 +1039,10 @@ window.addEventListener("keydown", (e) => {
 });
 
 setMode("free");
-setStatus("就绪 — 请选择舞者");
+setStatus("正在加载默认舞者…");
 
 // ---------------------------------------------------------------------------
-// 选歌主页(game.html)跳转参数:?mode=challenge&dance=hiphop&song=pop-demo&autoload=1
+// 选歌主页跳转参数:?mode=challenge&dance=hiphop&song=pop-demo&autoload=1
 // ---------------------------------------------------------------------------
 function applyLaunchParams() {
   const q = new URLSearchParams(location.search);
@@ -1048,10 +1056,13 @@ function applyLaunchParams() {
   if (songId && SONGS.some((s) => s.id === songId)) {
     state.challengeSongId = songId;
   }
+  if (danceId && BUILTIN_DANCES.some((d) => d.id === danceId)) {
+    state.performanceDanceId = danceId;
+  }
   dom.songSelect.value = state.challengeSongId;
   const mode = q.get("mode");
-  if (["free", "challenge", "performance"].includes(mode)) setMode(mode);
-  if (q.get("autoload") === "1") loadModel(DEFAULT_MODEL);
+  if (["free", "challenge", "pk", "performance"].includes(mode)) setMode(mode);
+  loadModel(DEFAULT_MODEL);
 }
 applyLaunchParams();
 

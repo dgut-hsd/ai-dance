@@ -1,12 +1,12 @@
-/* Classic worker: the MediaPipe WASM loader uses importScripts. */
+/* Module worker: Tasks Vision ships vision_bundle.mjs, not vision_bundle.js. */
 let pose, hand;
 let lastTsMs = -Infinity;
+
 self.onmessage = async ({ data }) => {
   const { id, type, bitmap } = data;
   try {
     if (type === "init") {
-      importScripts(`${data.runtime}/vision_bundle.js`);
-      const api = self.vision;
+      const api = await import(`${data.runtime}/vision_bundle.mjs`);
       const files = await api.FilesetResolver.forVisionTasks(`${data.runtime}/wasm`);
       let delegate = "GPU";
       const options = { baseOptions: { modelAssetPath: data.model, delegate },
@@ -21,9 +21,7 @@ self.onmessage = async ({ data }) => {
         minTrackingConfidence: .5 });
       self.postMessage({ id, delegate });
     } else if (type === "detect") {
-      if (!Number.isFinite(data.tsMs) || data.tsMs <= lastTsMs) {
-        throw new Error("MediaPipe VIDEO timestamp must increase");
-      }
+      if (!Number.isFinite(data.tsMs) || data.tsMs <= lastTsMs) throw new Error("MediaPipe VIDEO timestamp must increase");
       lastTsMs = data.tsMs;
       const start = performance.now();
       const result = pose.detectForVideo(bitmap, data.tsMs);
@@ -33,4 +31,3 @@ self.onmessage = async ({ data }) => {
     }
   } catch (error) { self.postMessage({ id, error: error.message || String(error) }); }
   finally { bitmap?.close(); }
-};

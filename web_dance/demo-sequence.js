@@ -1,131 +1,62 @@
-/**
- * demo-sequence.js — 内置一支「合成示例舞」,让挑战模式开箱即玩。
- *
- * 数据格式与 pose_capture/export.js 导出的 dance-sequence/v1 完全一致:
- * 骨架顺序遵循 contract.js 的 BONE_DEFS(10 条骨骼)。
- * 动作是用几个关键姿态 + smoothstep 插值拼出来的 24 秒循环。
- */
+/** Neon Snap — 原创摆摊挑战舞：120 BPM / 16 秒 / 32 拍。 */
+import { BONE_DEFS, poseFromJoints } from "../pose_capture/contract.js";
 
-import { BONE_DEFS } from "../pose_capture/contract.js";
+const FPS = 30, BPM = 120, BEAT = 0.5, DURATION = 24, TAU = Math.PI * 2;
+const smooth = (x) => x * x * (3 - 2 * x);
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
 
-const N = (v) => {
-  const l = Math.hypot(v[0], v[1], v[2]) || 1;
-  return [v[0] / l, v[1] / l, v[2] / l];
-};
-
-// 每个姿态:10 条骨骼的(canonical)单位向量,顺序同 BONE_DEFS
-const POSES = {
-  neutral: [
-    [0, 1, 0], [-0.12, -0.99, 0.03], [0, -1, 0.05],
-    [0.12, -0.99, -0.03], [0, -1, -0.05],
-    [-0.07, -0.99, -0.03], [0, -1, 0.05],
-    [0.07, -0.99, 0.03], [0, -1, -0.05], [0, 1, 0.05],
-  ],
-  armsUp: [
-    [0, 1, 0], [-0.55, 0.78, -0.15], [-0.2, 0.9, -0.3],
-    [0.55, 0.78, 0.15], [0.2, 0.9, 0.3],
-    [-0.07, -0.99, -0.03], [0, -1, 0.05],
-    [0.07, -0.99, 0.03], [0, -1, -0.05], [0, 1, -0.05],
-  ],
-  armsT: [
-    [0, 1, 0], [-1, 0.02, 0.12], [-1, 0, 0.25],
-    [1, 0.02, -0.12], [1, 0, -0.25],
-    [-0.07, -0.99, -0.03], [0, -1, 0.05],
-    [0.07, -0.99, 0.03], [0, -1, -0.05], [0, 1, 0],
-  ],
-  armsForward: [
-    [0, 1, 0], [-0.05, -0.55, -0.83], [-0.05, -0.35, -0.93],
-    [0.05, -0.55, -0.83], [0.05, -0.35, -0.93],
-    [-0.07, -0.99, -0.03], [0, -1, 0.05],
-    [0.07, -0.99, 0.03], [0, -1, -0.05], [0, 1, -0.12],
-  ],
-  waveLeft: [
-    [0.16, 0.98, 0.05], [-0.55, 0.78, -0.15], [-0.2, 0.9, -0.3],
-    [0.12, -0.99, -0.03], [0, -1, -0.05],
-    [-0.07, -0.99, -0.03], [0, -1, 0.05],
-    [0.07, -0.99, 0.03], [0, -1, -0.05], [-0.12, 0.99, 0.05],
-  ],
-  squat: [
-    [0, 0.86, -0.5], [-0.32, -0.42, -0.85], [-0.3, -0.45, -0.84],
-    [0.32, -0.42, -0.85], [0.3, -0.45, -0.84],
-    [-0.12, -0.72, -0.68], [0, -0.9, 0.35],
-    [0.12, -0.72, -0.68], [0, -0.9, -0.35], [0, 0.86, -0.5],
-  ],
-};
-
-// [时间秒, 姿态名] 关键帧;24 秒循环
-const MOVES = [
-  [0, "neutral"], [2, "armsUp"], [4, "armsT"], [6, "armsForward"],
-  [8, "waveLeft"], [10, "armsUp"], [12, "squat"], [14, "neutral"],
-  [16, "armsT"], [18, "armsForward"], [20, "armsUp"], [22, "neutral"],
-];
-
-const DURATION = 24;
-const FPS = 30;
-
-function lerpN(a, b, u) {
-  return N([a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u]);
-}
-
-function samplePose(t) {
-  t = ((t % DURATION) + DURATION) % DURATION;
-  let i = MOVES.length - 1;
-  for (let k = 0; k < MOVES.length; k++) {
-    if (MOVES[k][0] > t) { i = k - 1; break; }
-  }
-  const next = (i + 1) % MOVES.length;
-  const t0 = MOVES[i][0];
-  const t1 = MOVES[next][0] + (next === 0 ? DURATION : 0);
-  const u = Math.min(1, Math.max(0, (t - t0) / (t1 - t0)));
-  const s = u * u * (3 - 2 * u);
-  const p0 = POSES[MOVES[i][1]];
-  const p1 = POSES[MOVES[next][1]];
-  return p0.map((v, idx) => lerpN(v, p1[idx], s));
+function jointsAt(t) {
+  const beat = t / BEAT, b = beat % 32;
+  const side = Math.sin(TAU * beat / 4);
+  const groove = 0.06 * Math.sin(TAU * beat / 2);
+  const bounce = 0.035 * Math.max(0, Math.sin(Math.PI * (beat % 4) / 2));
+  let turn = 0;
+  if (b >= 16 && b < 20) turn = smooth((b - 16) / 4) * Math.PI * 0.5;
+  if (b >= 20 && b < 24) turn = Math.PI * 0.5 * (1 - smooth((b - 20) / 4));
+  const sideAxis = [-Math.sin(turn), 0, Math.cos(turn)];
+  const forward = [Math.cos(turn), 0, Math.sin(turn)];
+  const hips = [0, -0.035 + bounce, 0];
+  const chest = [0.035 * side, 0.58 + hips[1], 0.025 * Math.sin(TAU * beat / 4)];
+  const lh = add(hips, mul(sideAxis, -0.16)), rh = add(hips, mul(sideAxis, 0.16));
+  const ls = add(chest, mul(sideAxis, -0.20)), rs = add(chest, mul(sideAxis, 0.20));
+  const lk = add(lh, [0, -0.40 + (side < 0 ? 0.06 : 0), 0.04]);
+  const rk = add(rh, [0, -0.40 + (side > 0 ? 0.06 : 0), 0.04]);
+  const la = add(lk, [0, -0.40, 0.015 * Math.sin(TAU * beat)]);
+  const ra = add(rk, [0, -0.40, -0.015 * Math.sin(TAU * beat)]);
+  const signature = b < 4 ? Math.sin(Math.PI * b / 4) : 0;
+  const out = 0.10 + 0.15 * signature + 0.05 * Math.abs(side);
+  const punch = 0.18 * Math.max(0, Math.sin(Math.PI * (beat % 2)));
+  const le = add(ls, add(mul(sideAxis, -0.12 - out * 0.15), [0, 0.06 + groove, 0.02]));
+  const re = add(rs, add(mul(sideAxis, 0.12 + out * 0.15), [0, 0.06 - groove, 0.02]));
+  const lw = add(le, add(mul(sideAxis, -out), [0, 0.10 + signature * 0.30, -punch]));
+  const rw = add(re, add(mul(sideAxis, out), [0, 0.10 + signature * 0.30, punch]));
+  if ((b >= 0 && b < 2) || (b >= 24 && b < 28)) { lw[1] += 0.18; rw[1] += 0.18; lw[2] -= 0.15; rw[2] -= 0.15; }
+  return {
+    hips_center: hips, left_hip: lh, right_hip: rh, shoulders_center: chest,
+    left_shoulder: ls, right_shoulder: rs, left_elbow: le, right_elbow: re,
+    left_wrist: lw, right_wrist: rw, left_knee: lk, right_knee: rk,
+    left_ankle: la, right_ankle: ra, nose: add(chest, add(mul(forward, 0.04), [0, 0.24, 0.03])),
+    rootYaw: turn, shoulderAxis: sideAxis,
+  };
 }
 
 export function buildDemoSequence() {
-  const frames = [];
+  const frames = [], previous = [0, 0, 0];
   for (let i = 0; i < DURATION * FPS; i++) {
-    const t = i / FPS;
-    frames.push({ t, bones: samplePose(t), conf: new Array(10).fill(1) });
+    const t = i / FPS, j = jointsAt(t), p = poseFromJoints(j, {}, BONE_DEFS);
+    const rootVel = mul(sub(j.hips_center, previous), FPS);
+    frames.push({ t: +t.toFixed(3), bones: p.bones, conf: p.conf, rootYaw: j.rootYaw, rootYawConf: 1, shoulderAxis: j.shoulderAxis, rootVel, grounded: true });
+    previous[0] = j.hips_center[0]; previous[1] = j.hips_center[1]; previous[2] = j.hips_center[2];
   }
-  const beatTimesSec = [];
-  for (let b = 0; b < DURATION * 2; b++) beatTimesSec.push(+(b * 0.5).toFixed(3));
-
-  // 每个下拍(每 2s)埋一个 pose 音符,演示音符轨道判定
-  const chartNotes = [];
-  for (let t = 0; t <= 22; t += 2) chartNotes.push({ id: `downbeat-${t}`, t, type: "pose", lane: "body" });
-
+  const beatTimesSec = Array.from({ length: DURATION * 2 }, (_, i) => +(i * BEAT).toFixed(3));
+  // 每两秒结算一次，给玩家明确的“招牌动作”目标；转身由连续 rootYaw 轨道表现。
+  const notes = Array.from({ length: 12 }, (_, i) => ({ id: `neon-snap-${i}`, t: i * 2, type: "pose", lane: i % 2 ? "body" : "signature" }));
   return {
-    schema: "dance-sequence/v1",
-    danceId: "demo-arena-loop",
-    meta: {
-      fps: FPS,
-      durationSec: DURATION,
-      numFrames: frames.length,
-      boneCount: BONE_DEFS.length,
-      danceType: "full-body",
-      source: "synthetic-demo",
-      coordinateSystem: "canonical-yup",
-      difficulty: 1,
-      beatTimesSec,
-      timing: {
-        version: "timing/v1",
-        bpm: 120,
-        offsetSec: 0,
-        tempoMap: [{ t: 0, bpm: 120 }],
-      },
-      dimensions: {
-        spineLen: 0.52, shoulderWidth: 0.38, hipWidth: 0.32,
-        upperArm: 0.28, forearm: 0.26, thigh: 0.44, shin: 0.42, headLen: 0.22,
-      },
-    },
-    bones: BONE_DEFS.map(({ name, parent, child }) => ({ name, parent, child })),
-    frames,
-    chart: {
-      version: "chart/v1",
-      audio: "audio/pop-demo.wav",
-      notes: chartNotes,
-    },
+    schema: "dance-sequence/v1", danceId: "neon-snap",
+    meta: { fps: FPS, durationSec: DURATION, numFrames: frames.length, boneCount: BONE_DEFS.length, danceType: "full-body", source: "original-parametric-choreography", coordinateSystem: "canonical-yup", difficulty: 2, beatTimesSec, timing: { version: "timing/v1", bpm: BPM, offsetSec: 0, tempoMap: [{ t: 0, bpm: BPM }] }, dimensions: { spineLen: 0.52, shoulderWidth: 0.40, hipWidth: 0.32, upperArm: 0.28, forearm: 0.26, thigh: 0.44, shin: 0.42, headLen: 0.22 }, choreography: { title: "Neon Snap", hook: "双手上提—左右击拍—半转身—定格", bars: 8, signatureBeats: [0, 4, 16, 24] } },
+    bones: BONE_DEFS.map(({ name, parent, child }) => ({ name, parent, child })), frames,
+    chart: { version: "chart/v1", audio: "audio/pop-demo.wav", notes },
   };
 }

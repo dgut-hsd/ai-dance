@@ -56,7 +56,7 @@ function songOf(id) {
 }
 
 function entriesFor(mode) {
-  if (mode === "challenge") {
+  if (mode === "challenge" || mode === "pk") {
     return CHALLENGE_DANCES.map((d) => {
       const song = songOf(d.defaultSongId);
       const skin = CARD_SKIN[d.id] || CARD_SKIN.demo;
@@ -68,7 +68,7 @@ function entriesFor(mode) {
         bpm: song.bpm,
         diff: skin.diff,
         a: skin.a, b: skin.b, poseT: skin.poseT,
-        url: `./index.html?mode=challenge&dance=${d.id}&song=${song.id}&autoload=1`,
+        url: `./dance.html?mode=${mode}&dance=${d.id}&song=${song.id}&autoload=1`,
       };
     });
   }
@@ -83,7 +83,7 @@ function entriesFor(mode) {
         bpm: null,
         diff: skin.diff,
         a: skin.a, b: skin.b, poseT: [6, 18][i % 2],
-        url: `./index.html?mode=performance&autoload=1`,
+        url: `./dance.html?mode=performance&dance=${encodeURIComponent(d.id)}&autoload=1`,
       };
     });
   }
@@ -97,7 +97,7 @@ function entriesFor(mode) {
     bpm: null,
     diff: 1,
     a: skin.a, b: skin.b, poseT: skin.poseT,
-    url: "./index.html?mode=free&autoload=1",
+    url: "./dance.html?mode=free&autoload=1",
   }];
 }
 
@@ -141,8 +141,8 @@ function buildCarousel() {
       </div>`;
     card.addEventListener("click", () => {
       const idx = entries.indexOf(e);
-      if (idx === selected) launch();
-      else select(idx);
+      select(idx);
+      launch();
     });
     e._card = card;
     e._canvas = card.querySelector("canvas");

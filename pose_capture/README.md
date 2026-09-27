@@ -79,7 +79,7 @@ filter,默认 `{ minCutoff: 1.5, beta: 0.5, dCutoff: 1.0 }`(偏跟手,适合舞�
 
 ## 已知取舍 / 后续工作
 
-- **wasm 从 jsdelivr CDN 加载**,未自托管。访问慢可下载 `wasm/` 到本地并改
-  `pose-engine.js` 里的 `TASKS_VISION`。
+- **MediaPipe Tasks Vision 已自托管**到 `pose_capture/runtime/`，Worker 不再依赖 CDN。
+  姿态模型仍放在 `pose_capture/models/`，适合摆摊设备的本地静态部署。
 - **导出按视频原生帧率逐帧采集**(实时播放速度)。要更快/固定 fps,可改成手动 seek
   循环,后续优化。

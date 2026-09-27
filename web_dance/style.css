@@ -152,7 +152,6 @@ html, body {
 .menu-title span { color: var(--accent); text-shadow: 0 0 30px rgba(255,61,129,0.6); }
 .menu-sub { color: var(--muted); margin: 0 0 8px; }
 .menu-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
-#model-hint { color: var(--muted); font-size: 13px; max-width: 480px; }
 .menu-status { color: var(--accent3); font-size: 14px; min-height: 20px; }
 
 /* ---------- 按钮 ---------- */
@@ -217,9 +216,16 @@ html, body {
   left: 18px; bottom: 18px;
   width: 280px;
 }
+.pk-mode #cam-panel {
+  left: 2vw;
+  top: 50%;
+  bottom: auto;
+  width: min(46vw, 680px);
+  transform: translateY(-50%);
+}
 #cam-wrap { position: relative; border-radius: 10px; overflow: hidden; }
 #cam { width: 100%; display: block; transform: scaleX(-1); background: #000; }
-#cam-stick { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; transform: scaleX(-1); }
+#cam-stick { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #conf-bar {
   height: 6px; border-radius: 3px;
   background: rgba(255,255,255,0.12);
