@@ -13,6 +13,7 @@ import { reconstructJoints } from "../pose_capture/playback.js";
 import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { createScene } from "./scene.js";
 import { createJuice } from "./ui-lab/juice.js";
+import { animate, ease } from "./ui-lab/tween.js";
 import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
 import { ScoringAdapter } from "./scoring-adapter.js";
 import { buildDemoSequence } from "./demo-sequence.js";
@@ -49,6 +50,8 @@ const state = {
   challengeSongId: "pop-demo",
   performanceDanceId: null,
   latestConf: 0,
+  phase: "idle",             // idle | select | playing
+  select: { entries: [], selected: 0, player: null, clock: 0, revertTimer: null },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -56,16 +59,24 @@ const dom = {
   stage: $("stage"),
   fx: $("fx"),
   judge: $("judge"),
+  judgeTier: $("judge-tier"),
+  judgeSub: $("judge-sub"),
+  comboBadge: $("combo-badge"),
+  comboBadgeN: $("combo-badge-n"),
   status: $("status"),
+  statusbar: $("statusbar"),
+  topbar: $("topbar"),
+  staffPerf: $("staff-perf"),
   fps: $("fps"),
   delegate: $("delegate"),
   menu: $("menu"),
   menuStatus: $("menu-status"),
   hud: $("hud"),
+  controls: $("controls"),
+  btnHome: $("btn-home"),
   cam: $("cam"),
   camStick: $("cam-stick"),
-  confFill: $("conf-fill"),
-  confLabel: $("conf-label"),
+  camWrap: $("cam-wrap"),
   refPanel: $("ref-panel"),
   moveTrack: $("move-track"),
   beats: $("beats"),
@@ -94,20 +105,36 @@ const dom = {
   btnReset: $("btn-reset"),
   centerMsg: $("center-msg"),
   centerMsgText: $("center-msg-text"),
+  songPick: $("song-pick"),
+  songPickStrip: $("song-pick-strip"),
+  ready: $("ready"),
+  readySong: $("ready-song"),
+  readyGo: $("ready-go"),
   result: $("result"),
   resultGrade: $("result-grade"),
-  resultScore: $("result-score"),
-  resultAcc: $("result-acc"),
-  resultCombo: $("result-combo"),
-  talliesPerfect: $("tallies-perfect"),
-  talliesGreat: $("tallies-great"),
-  talliesGood: $("tallies-good"),
-  talliesMiss: $("tallies-miss"),
+  resultTitle: $("result-title"),
+  resultTagline: $("result-tagline"),
+  resultSong: $("result-song"),
+  resultNext: $("result-next"),
+  statScore: $("stat-score"),
+  statAcc: $("stat-acc"),
+  statCombo: $("stat-combo"),
+  statHit: $("stat-hit"),
+  statAccBar: $("stat-acc-bar"),
+  statComboBar: $("stat-combo-bar"),
+  statHitBar: $("stat-hit-bar"),
   resultAgain: $("result-again"),
   resultExit: $("result-exit"),
 };
 
 const modeBtns = document.querySelectorAll(".mode-btn");
+
+// 工作人员调试:默认隐藏调试信息/控制条,?debug=1 或按 D 显示
+let debugMode = false;
+function applyDebugUI() {
+  dom.topbar.classList.toggle("hidden", !debugMode);
+  if (dom.staffPerf) dom.staffPerf.hidden = !debugMode;
+}
 
 // ---------------------------------------------------------------------------
 // 场景与渲染循环
@@ -122,12 +149,38 @@ let lastCaptureToRender = null;
 let lastPerf = null;
 const highlights = new HighlightController({
   stage: dom.stage, camera: dom.cam, fx: dom.fx,
-  panel: $("highlight-jobs"), consent: $("highlight-consent"), deviceInput: $("highlight-device-token"),
   getState: () => ({
     score: state.challenge?.scorer.score || 0, combo: state.challenge?.scorer.combo || 0,
     tier: state.challenge?.scorer.lastTier || '', acc: state.challenge?.previewAcc || 0,
     conf: performance.now() - lastPoseAt < 700 ? state.latestConf : 0,
   }),
+});
+
+// 是否录制高光时刻(选曲页小提示)→ sessionStorage,高光控制器据此决定是否录制
+const recordConsent = $("highlight-record-consent");
+if (recordConsent) {
+  recordConsent.checked = sessionStorage.getItem("dance-record-highlight") !== "0";
+  recordConsent.addEventListener("change", () =>
+    sessionStorage.setItem("dance-record-highlight", recordConsent.checked ? "1" : "0"));
+}
+// 结算后悬停 5s:结算画面缩略到右上角,自动播放本地高光回放
+const replayOverlay = $("replay"), replayVideo = $("replay-video"), replayClose = $("replay-close");
+let replayTimer = null;
+function scheduleReplay() {
+  clearTimeout(replayTimer);
+  replayTimer = setTimeout(() => {
+    const replay = highlights.getReplay();
+    if (!replay) return;
+    $("result").classList.add("result-mini");
+    replayVideo.src = replay.url;
+    replayOverlay.classList.remove("hidden");
+    replayVideo.play().catch(() => {});
+  }, 5000);
+}
+if (replayClose) replayClose.addEventListener("click", () => {
+  replayVideo.pause();
+  replayOverlay.classList.add("hidden");
+  $("result").classList.remove("result-mini");
 });
 
 // ---------------------------------------------------------------------------
@@ -151,43 +204,88 @@ function avatarScreen() {
   };
 }
 
-function showJudge(text, color) {
-  dom.judge.textContent = text;
-  dom.judge.style.color = color;
+// 判定层级配色:金 > 青 > 蓝 > 红,与结算评级 S/A/B/D 同族
+const TIER_COLORS = { PERFECT: "#ffd54a", GREAT: "#39ffcf", GOOD: "#4d7cff", MISS: "#ff5f6d" };
+
+function showJudge(tier, subText) {
+  dom.judge.dataset.tier = tier;
+  dom.judge.style.setProperty("--jtier", TIER_COLORS[tier] || "#ffffff");
+  dom.judgeTier.textContent = tier;
+  dom.judgeSub.textContent = subText || "";
   dom.judge.classList.remove("hidden");
   dom.judge.classList.remove("pop");
   void dom.judge.offsetWidth; // 重启动画
   dom.judge.classList.add("pop");
 }
 
-function judgeFeedback(tier, combo) {
+function judgeFeedback(tier, combo, scoreGain) {
   const p = avatarScreen();
+  const gain = scoreGain > 0 ? "+" + Math.round(scoreGain) : "";
   if (tier !== lastTier) {
     lastTier = tier;
+    flashCamFrame(tier);
     if (tier === "PERFECT") {
-      showJudge("PERFECT", "#39ffcf");
-      juice.ring(p.x, p.y, { size: 130, color: "57,255,207", width: 3.5, duration: 300 });
-      juice.sparks(p.x, p.y, { count: 14, rays: 8, speed: 300 });
+      showJudge("PERFECT", gain);
+      juice.hitStop(70);            // 命中顿帧
+      juice.punch(0.045);           // 镜头怼一下
+      juice.shake(7);
+      juice.flash("255,213,74", 0.16, 0.12);
+      juice.ring(p.x, p.y, { size: 160, color: "255,213,74", width: 4, duration: 340 });
+      juice.ring(p.x, p.y, { size: 92, color: "255,255,255", width: 2.5, duration: 220, delay: 40 });
+      juice.sparks(p.x, p.y, { count: 28, rays: 14, speed: 420, colors: ["255,213,74", "255,255,255", "255,61,129"] });
     } else if (tier === "GREAT") {
-      showJudge("GREAT", "#4d7cff");
-      juice.ring(p.x, p.y, { size: 100, color: "77,124,255", width: 3, duration: 260 });
-      juice.sparks(p.x, p.y, { count: 8, rays: 5, speed: 220 });
-    } else if (tier === "GOOD") {
-      showJudge("GOOD", "#ffd54a");
-    } else {
-      showJudge("MISS", "#ff5f6d");
-      juice.vignette(0.16);
+      showJudge("GREAT", gain);
+      juice.hitStop(30);
+      juice.punch(0.025);
       juice.shake(3);
+      juice.flash("57,255,207", 0.1, 0.09);
+      juice.ring(p.x, p.y, { size: 120, color: "57,255,207", width: 3, duration: 280 });
+      juice.sparks(p.x, p.y, { count: 14, rays: 8, speed: 300, colors: ["57,255,207", "255,255,255"] });
+    } else if (tier === "GOOD") {
+      showJudge("GOOD", gain);
+      juice.punch(0.015);
+      juice.shake(2);
+      juice.ring(p.x, p.y, { size: 92, color: "77,124,255", width: 2.5, duration: 230 });
+    } else {
+      showJudge("MISS", "");
+      juice.hitStop(50);
+      juice.punch(0.05);
+      juice.shake(11);
+      juice.flash("255,95,109", 0.18, 0.14);
+      juice.vignette(0.28);
+      juice.sparks(p.x, p.y, { count: 10, rays: 6, speed: 220, colors: ["255,95,109", "255,61,129"] });
     }
   }
-  // 连击里程碑(每 10 连)
-  if (combo > 0 && combo % 10 === 0 && combo !== lastMilestone) {
-    lastMilestone = combo;
-    juice.burst(p.x, p.y, { count: 50, speed: 460, ttl: 0.9 });
-    juice.ring(p.x, p.y, { size: 220, color: "255,213,74", width: 4, duration: 420 });
-    juice.flash("255,255,255", 0.22, 0.14);
-    juice.shake(9);
-    showJudge("COMBO x" + combo, "#ffd54a");
+  updateComboBadge(combo, p);
+}
+
+// 连击徽章:>=2 常驻显示,每次命中脉动并喷火星,每 10 连大爆发,高连击升温
+function updateComboBadge(combo, p) {
+  if (combo >= 2) {
+    dom.comboBadge.classList.remove("hidden");
+    dom.comboBadgeN.textContent = combo;
+    dom.comboBadge.classList.toggle("hot", combo >= 20);
+    dom.comboBadge.classList.remove("pulse", "milestone");
+    void dom.comboBadge.offsetWidth;
+    const b = dom.comboBadge.getBoundingClientRect();
+    const bx = b.left + b.width / 2, by = b.top + b.height / 2;
+    if (combo % 10 === 0 && combo !== lastMilestone) {
+      lastMilestone = combo;
+      dom.comboBadge.classList.add("milestone");
+      setTimeout(() => dom.comboBadge.classList.remove("milestone"), 700);
+      juice.hitStop(40);
+      juice.shake(9);
+      juice.flash("255,213,74", 0.22, 0.15);
+      juice.burst(bx, by, { count: 60, speed: 520, ttl: 1.0, colors: ["255,213,74", "255,61,129", "255,255,255"] });
+      juice.ring(bx, by, { size: 240, color: "255,213,74", width: 4, duration: 440 });
+      juice.ring(p.x, p.y, { size: 200, color: "255,61,129", width: 3, duration: 380 });
+    } else {
+      dom.comboBadge.classList.add("pulse");
+      // 每次命中从徽章喷一点火星,连击越久越烫
+      juice.sparks(bx, by, { count: 5, rays: 4, speed: 200, colors: ["255,213,74", "255,61,129"] });
+    }
+  } else {
+    dom.comboBadge.classList.add("hidden");
   }
 }
 
@@ -222,6 +320,11 @@ function renderLoop() {
     state.skeletons?.forEach((s) => s.update());
     // 表演模式:FBX/GLB 内嵌动画
     if (state.mixer) state.mixer.update(dt);
+    // 选曲态:教练循环试跳/吸引
+    if (state.phase === "select" && state.select?.player) {
+      state.select.clock += dt;
+      state.select.player.update(state.select.clock);
+    }
     // 跟跳挑战:教练按歌曲时钟跳参考舞
     if ((state.mode === "challenge" || state.mode === "pk") && state.challenge?.running && state.coachPlayer) {
       const t = state.challenge.session?.songTime ?? 0;
@@ -246,8 +349,8 @@ renderLoop();
 // 模型加载
 // ---------------------------------------------------------------------------
 async function loadModel(url, type) {
-  setStatus("正在加载舞者…");
-  dom.menuStatus.textContent = "正在加载 3D 模型…";
+  setStatus("准备中…");
+  dom.menuStatus.textContent = "";
   try {
     const avatar = await loadAvatar(url, type);
     if (state.avatar) scene.scene.remove(state.avatar.object);
@@ -268,6 +371,10 @@ async function loadModel(url, type) {
     dom.hud.classList.remove("hidden");
     dom.btnStart.disabled = false;
     setStatus(`舞者已就绪(${avatar.animations.length} 个内嵌动画)`);
+    // 进入 PK/挑战页即进入选曲:教练吸引态 + 摄像头镜像 + 海报卡片
+    if (state.mode === "pk" || state.mode === "challenge") {
+      enterSelect().catch((e) => setStatus("选曲加载失败:" + e.message));
+    }
   } catch (e) {
     console.error(e);
     dom.menuStatus.textContent = "加载失败: " + e.message;
@@ -353,8 +460,8 @@ function setMode(mode) {
   const isChallenge = mode === "challenge" || mode === "pk";
   const isPk = mode === "pk";
   const isPerformance = mode === "performance";
-  dom.scorePanel.classList.toggle("hidden", !isChallenge || isPk);
-  dom.refPanel.classList.toggle("hidden", !isChallenge || isPk);
+  dom.scorePanel.classList.toggle("hidden", !isChallenge);
+  dom.refPanel.classList.toggle("hidden", !isChallenge);
   dom.btnLoadRef.classList.toggle("hidden", !isChallenge || isPk);
   dom.dancePicker.classList.toggle("hidden", !isChallenge);
   dom.songPicker.classList.toggle("hidden", !isChallenge);
@@ -387,7 +494,7 @@ function layoutForMode() {
     state.avatar.object.visible = false;
     if (state.coach) {
       state.coach.object.visible = true;
-      state.coach.object.position.x = 1.1;
+      state.coach.object.position.x = 1.6;
     }
     scene.camera.position.set(0, 1.9, 6.6);
     scene.controls.target.set(0, 0.95, 0);
@@ -433,6 +540,219 @@ function makeCoachPlayer(seq, retargeter, boneDefs) {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// 选曲(整合进 PK 页):悬停试跳 5 秒,双击开始
+// ---------------------------------------------------------------------------
+const SELECT_SKIN = {
+  demo:   { a: "#ff3d81", b: "#7c4dff", diff: 1 },
+  hiphop: { a: "#ffb300", b: "#ff3d81", diff: 2 },
+  salsa:  { a: "#00e5a0", b: "#4d7cff", diff: 3 },
+};
+
+// 每支舞的 3D 舞者白影剪影(离屏预渲染的招牌动作)
+const SILHOUETTES = {
+  demo: "assets/silhouettes/demo.png",
+  hiphop: "assets/silhouettes/hiphop.png",
+  salsa: "assets/silhouettes/salsa.png",
+};
+
+// 循环播放序列(吸引态 / 试跳),教练原地跟跳不消费根运动
+function makeLoopCoachPlayer(seq, retargeter, boneDefs) {
+  const fps = seq.meta?.fps || 30;
+  const frames = seq.frames || [];
+  const dur = seq.meta?.durationSec || 1;
+  return {
+    update(t) {
+      const tt = t % dur;
+      const i = Math.min(frames.length - 1, Math.max(0, Math.round(tt * fps)));
+      const frame = frames[i];
+      if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
+    },
+  };
+}
+
+let cardAnimTimer = null;
+
+function drawCardFrame(canvas, seq, t) {
+  if (!canvas) return;
+  const fps = seq.meta?.fps || 30;
+  const frames = seq.frames || [];
+  const i = Math.min(frames.length - 1, Math.max(0, Math.round(t * fps)));
+  const frame = frames[i];
+  if (!frame) return;
+  const joints = reconstructJoints(frame, seq.meta?.dimensions, seq.bones);
+  renderPoseSilhouette(canvas, joints, seq.bones, { color: "#ffffff" });
+}
+
+function drawCardSilhouette(canvas, seq) {
+  drawCardFrame(canvas, seq, (seq.meta?.durationSec || 1) * 0.3);
+}
+
+// 试跳时让海报上的剪影跟着循环(卡片也"活了")
+function animateCardPose(i) {
+  clearInterval(cardAnimTimer);
+  const e = state.select.entries[i];
+  if (!e) return;
+  let t = 0;
+  cardAnimTimer = setInterval(() => {
+    if (state.phase !== "select") { clearInterval(cardAnimTimer); return; }
+    t = (t + 0.1) % (e.seq.meta?.durationSec || 1);
+    drawCardFrame(e._canvas, e.seq, t);
+  }, 90);
+}
+
+// 扇形布局:从右下角向左展开,选中卡贴角放大,越远越缩越小/越后仰
+function layoutCards() {
+  const n = state.select.entries.length;
+  state.select.entries.forEach((e, k) => {
+    const el = e.el;
+    if (!el) return;
+    const w = el.offsetWidth || 210;
+    const spread = Math.round(w * 0.66);
+    let off = ((k - state.select.selected) % n + n) % n; // 0=选中(贴角), 1..=向左展开
+    if (off === 0) {
+      el.style.transform = `translateX(0px) translateY(-10px) rotateY(0deg) scale(1.12)`;
+      el.style.zIndex = n;
+      el.style.opacity = "";
+    } else {
+      const rot = 18 + (off - 1) * 14;
+      const scale = Math.max(0.64, 0.88 - (off - 1) * 0.12);
+      el.style.transform = `translateX(${-off * spread}px) translateY(${off * 4}px) rotateY(${-rot}deg) scale(${scale})`;
+      el.style.zIndex = n - off;
+      el.style.opacity = "";
+    }
+  });
+}
+
+async function seqFor(entry) {
+  if (entry.dance.kind === "fbx") return loadFbxSequence(entry.dance.fbx, entry.song);
+  return applySongToSequence(buildDemoSequence(), entry.song);
+}
+
+async function enterSelect() {
+  state.phase = "select";
+  state.mode = "pk";
+  clearTimeout(state.select.revertTimer);
+  clearInterval(cardAnimTimer);
+  state.select.player = null;
+  document.body.classList.add("pk-mode");
+  // 选曲态只留:摄像头 + 教练 + 卡片;其余 HUD 收起
+  dom.result.classList.add("hidden");
+  dom.scorePanel.classList.add("hidden");
+  dom.refPanel.classList.add("hidden");
+  dom.controls.classList.add("hidden");
+  dom.dancePicker.classList.add("hidden");
+  dom.songPicker.classList.add("hidden");
+  dom.btnLoadRef.classList.add("hidden");
+  dom.animPicker.classList.add("hidden");
+  dom.centerMsg.classList.add("hidden");
+
+  const coach = await ensureCoach();
+  if (!coach) { setStatus("教练加载失败"); return; }
+  coach.object.visible = true;
+  coach.retargeter.reset();
+  layoutForMode(); // pk 布局:隐藏玩家 3D,显示教练
+
+  // 预载全部舞曲序列,试跳/开始都即时
+  const entries = CHALLENGE_DANCES.map((dance) => {
+    const song = SONGS.find((s) => s.id === dance.defaultSongId) || SONGS[0];
+    return { dance, song, skin: SELECT_SKIN[dance.id] || SELECT_SKIN.demo, seq: null, el: null };
+  });
+  await Promise.all(entries.map(async (e) => { e.seq = await seqFor(e); }));
+
+  state.select.entries = entries;
+  state.select.selected = 0;
+  buildSelectCards();
+  dom.songPick.classList.remove("hidden");
+  startAttract(0);
+  await startCamera();
+  setStatus("选一支舞 · 悬停试跳 · 双击开始");
+}
+
+function buildSelectCards() {
+  dom.songPickStrip.innerHTML = "";
+  state.select.entries.forEach((e, i) => {
+    const card = document.createElement("div");
+    card.className = "song-card";
+    card.style.setProperty("--sc-a", e.skin.a);
+    card.style.setProperty("--sc-b", e.skin.b);
+    const heat = "●".repeat(e.skin.diff) + "○".repeat(Math.max(0, 3 - e.skin.diff));
+    card.innerHTML = `
+      <div class="sc-cover"></div>
+      <img class="sc-sil" src="${SILHOUETTES[e.dance.id] || SILHOUETTES.demo}" alt="" draggable="false">
+      <div class="sc-heat">${heat}</div>
+      <div class="sc-info">
+        <div class="sc-title">${e.dance.label}</div>
+        <div class="sc-meta">♪ ${e.song.label} · BPM ${e.song.bpm}</div>
+      </div>`;
+    card.addEventListener("mouseenter", () => preview(i));
+    card.addEventListener("mouseleave", () => startAttract(state.select.selected));
+    card.addEventListener("click", () => {
+      if (state.select.selected === i) startSong(i); // 再点一次选中卡 = 开始(不用挪鼠标)
+      else { selectCard(i); preview(i); }
+    });
+    dom.songPickStrip.appendChild(card);
+    e.el = card;
+  });
+  selectCard(0);
+}
+
+function selectCard(i) {
+  state.select.selected = i;
+  state.select.entries.forEach((e, k) => e.el.classList.toggle("selected", k === i));
+  layoutCards();
+  // 弹出「准备开始」面板(烫金卡片)
+  const e = state.select.entries[i];
+  if (e) {
+    dom.readySong.textContent = `${e.dance.label} · ${e.song.label} · BPM ${e.song.bpm}`;
+    dom.ready.classList.remove("hidden");
+  }
+}
+
+function preview(i) {
+  const e = state.select.entries[i];
+  const coach = state.coach;
+  if (!e?.seq || !coach) return;
+  state.select.clock = 0;
+  state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
+  animateCardPose(i);
+  clearTimeout(state.select.revertTimer);
+  state.select.revertTimer = setTimeout(() => startAttract(state.select.selected), 5000);
+}
+
+function startAttract(i) {
+  const e = state.select.entries[i];
+  const coach = state.coach;
+  clearInterval(cardAnimTimer);
+  if (!e?.seq || !coach) return;
+  state.select.clock = 0;
+  state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
+  if (e._canvas) drawCardSilhouette(e._canvas, e.seq);
+}
+
+function startSong(i) {
+  const e = state.select.entries[i];
+  if (!e) return;
+  state.phase = "playing";
+  state.select.player = null;
+  clearTimeout(state.select.revertTimer);
+  clearInterval(cardAnimTimer);
+  dom.songPick.classList.add("hidden");
+  dom.ready.classList.add("hidden");
+  dom.controls.classList.toggle("hidden", !debugMode); // 只有工作人员模式才显示底部控制条
+  state.challengeDanceId = e.dance.id;
+  state.challengeSongId = e.song.id;
+  dom.danceSelect.value = e.dance.id;
+  dom.songSelect.value = e.song.id;
+  // 直接用预载序列,免重载
+  if (state.challenge?.session) state.challenge.session.stop();
+  state.challenge = { seq: e.seq, scorer: new ScoringAdapter(e.seq), running: false };
+  state.coachPlayer = null;
+  startChallenge().catch((err) => { stopAll(); setStatus("启动失败: " + err.message); });
+}
+// 「准备开始」面板的开始按钮
+dom.readyGo.addEventListener("click", () => startSong(state.select.selected));
 
 // ---------------------------------------------------------------------------
 // 表演模式:播放 FBX/GLB 内嵌动画(AnimationMixer)
@@ -673,13 +993,9 @@ async function startChallenge() {
     // Give the one in-flight frame time to arrive; frame timestamps remain capture-based.
     const lag = Math.min(.25, (lastPerf?.stages?.captureToResult?.p95Ms ?? 80) / 1000);
     for (const result of ch.scorer.advance(Math.max(0, t - lag))) {
-      if (!result.ongoing) { lastTier = ""; judgeFeedback(result.tier, result.combo); }
+      if (!result.ongoing) { lastTier = ""; judgeFeedback(result.tier, result.combo, result.score); }
     }
     updateScoreHUD({ acc: ch.previewAcc ?? 0 });
-    if (performance.now() - lastPoseAt > 700) {
-      dom.confFill.style.width = "0%";
-      dom.confLabel.textContent = "暂时看不清，请站回画面内";
-    }
     updateChallengeProgress(t, ch); beatPulse(t, ch);
     session.update();
   }, 25);
@@ -740,12 +1056,10 @@ function onFrame(frame, boneDefs) {
       flipFacing: state.flipFacing,
     });
   }
-  // 置信度
+  // 置信度(仅用于高光录制判断,不展示给玩家)
   const conf = frame.conf;
   const avg = conf && conf.length ? conf.reduce((a, b) => a + b, 0) / conf.length : 0;
   state.latestConf = avg;
-  dom.confFill.style.width = Math.round(avg * 100) + "%";
-  dom.confLabel.textContent = "置信度 " + Math.round(avg * 100) + "%";
 
   // 挑战判定
   const ch = state.challenge;
@@ -777,8 +1091,7 @@ function stopAll({ keepCamera = false } = {}) {
   stopMixer(); // 停动画并复位主舞者
   dom.btnStart.disabled = !state.avatar;
   dom.btnStop.disabled = true;
-  dom.confFill.style.width = "0%";
-  dom.confLabel.textContent = "置信度 --";
+  dom.comboBadge.classList.add("hidden");
   setStatus("已停止");
 }
 
@@ -805,9 +1118,16 @@ dom.resultAgain.addEventListener("click", () => {
   dom.result.classList.add("hidden");
   startChallenge().catch((e) => { stopAll(); setStatus("启动失败: " + e.message); });
 });
+// 结算「换一首」:留在本页,回到选曲
 dom.resultExit.addEventListener("click", () => {
-  stopAll();
-  location.href = "./";
+  stopAll({ keepCamera: true });
+  enterSelect().catch((e) => setStatus("选曲加载失败: " + e.message));
+});
+// 顶栏「选曲」:回到选曲态
+dom.btnHome.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (state.running) stopAll({ keepCamera: true });
+  enterSelect().catch((err) => setStatus("选曲加载失败: " + err.message));
 });
 
 // ---------------------------------------------------------------------------
@@ -821,7 +1141,7 @@ async function countdownTo(goAt, generation) {
     const tick = () => {
       if (generation !== startGeneration) { resolve(false); return; }
       const remaining = goAt - ctx.currentTime;
-      if (remaining <= 0) { dom.centerMsg.classList.add("hidden"); resolve(true); return; }
+      if (remaining <= 0) { dom.centerMsg.classList.add("hidden"); shutterCam(); resolve(true); return; }
       dom.centerMsgText.textContent = String(Math.min(3, Math.ceil(remaining)));
       setTimeout(tick, 25);
     };
@@ -879,6 +1199,8 @@ function resetScoreHUD() {
   dom.accPct.textContent = "0%";
   dom.progressFill.style.width = "0%";
   drawAccRing(0);
+  dom.comboBadge.classList.add("hidden");
+  dom.comboBadgeN.textContent = "0";
   // 清空动作预期滚动列
   for (const [, card] of moveCards) card.el.remove();
   moveCards.clear();
@@ -1015,29 +1337,133 @@ function updateChallengeProgress(t, ch) {
   [...dom.beats.children].forEach((el, i) => el.classList.toggle("on", i === beatIdx));
 }
 
+// ---------------------------------------------------------------------------
+// 结算头衔(称号)系统:评级 + 特殊成就给出有趣头衔,并暗示下一档头衔以刺激再来一局
+// ---------------------------------------------------------------------------
+const TITLE_LADDER = [
+  { grade: "S", title: "封神舞者", en: "DANCE LEGEND" },
+  { grade: "A", title: "节奏大师", en: "RHYTHM MASTER" },
+  { grade: "B", title: "舞台新星", en: "STAGE STAR" },
+  { grade: "C", title: "渐入佳境", en: "RISING DANCER" },
+  { grade: "D", title: "热身完毕", en: "WARM-UP DONE" },
+];
+const TITLE_TAGLINES = {
+  S: "这就是街舞的天花板",
+  A: "天生为舞台而生",
+  B: "再练一把就能封神",
+  C: "手感正在升温",
+  D: "下一把就是你的主场",
+};
+// 结算主色:整个结算界面的霓虹光源都用这一个变量驱动,保证配色统一
+const GRADE_COLORS = { S: "#ffd54a", A: "#39ffcf", B: "#4d7cff", C: "#c88bff", D: "#ff8a8a" };
+
+function titleFor(r) {
+  const t = r.tallies || {};
+  const total = (t.perfect ?? 0) + (t.great ?? 0) + (t.good ?? 0) + (t.miss ?? 0) || 1;
+  const perfect = t.perfect ?? 0;
+  const fullCombo = r.maxCombo >= total && total > 0;
+  const allPerfect = total > 0 && perfect === total;
+
+  // 特殊成就优先于评级头衔
+  if (allPerfect) return { title: "人机合一", en: "PERFECT DANCE", tagline: "一音不差,你就是这个舞台的神", special: true, next: null };
+  if (fullCombo && (r.grade === "S" || r.grade === "A")) return { title: "完美全连", en: "FULL COMBO", tagline: "零断连,全场为你尖叫", special: true, next: null };
+
+  const idx = TITLE_LADDER.findIndex((x) => x.grade === r.grade);
+  const base = idx >= 0 ? TITLE_LADDER[idx] : TITLE_LADDER[TITLE_LADDER.length - 1];
+  const next = idx > 0 ? TITLE_LADDER[idx - 1] : null;
+  return { title: base.title, en: base.en, tagline: TITLE_TAGLINES[r.grade] || "", special: false, next };
+}
+
+// 数字滚动:结算时把大数字从 0 滚到目标值(与 juice 共用时钟,天然支持 hit-stop)
+function countUp(el, to, { format = (v) => String(Math.round(v)), duration = 950, delay = 0 } = {}) {
+  animate({
+    duration, delay, ease: ease.cubicOut,
+    onUpdate: (t) => { el.textContent = format(to * t); },
+    onComplete: () => { el.textContent = format(to); },
+  });
+}
+
+// 数据条:宽度从 0 涨到目标百分比,与数字滚动节奏一致
+function fillBar(el, to, delay = 0) {
+  animate({
+    duration: 950, delay, ease: ease.cubicOut,
+    onUpdate: (t) => { el.style.width = (to * t).toFixed(2) + "%"; },
+    onComplete: () => { el.style.width = to + "%"; },
+  });
+}
+
+function celebrate(grade, special) {
+  const cx = window.innerWidth / 2, cy = window.innerHeight * 0.38;
+  const gradeRgb = (GRADE_COLORS[grade] || "#ffd54a").replace("#", "");
+  juice.flash("255,255,255", 0.3, 0.18);
+  juice.shake(10);
+  juice.ring(cx, cy, { size: 320, color: gradeRgb, width: 4, duration: 460 });
+  const big = special || grade === "S" || grade === "A";
+  const rounds = big ? 3 : 2;
+  for (let i = 0; i < rounds; i++) {
+    setTimeout(() => {
+      juice.burst(cx + (Math.random() - 0.5) * 300, cy - 20 + (Math.random() - 0.5) * 140, {
+        count: big ? 70 : 45, speed: big ? 560 : 430, ttl: 1.2,
+        colors: [gradeRgb, "255,61,129", "77,124,255", "57,255,207", "255,213,74"],
+      });
+    }, i * 220);
+  }
+}
+
+function showResult(r) {
+  const meta = titleFor(r);
+  const gradeColor = GRADE_COLORS[r.grade] || "#ffd54a";
+  dom.result.style.setProperty("--grade", gradeColor);
+  dom.resultGrade.textContent = r.grade;
+  dom.resultTitle.textContent = meta.title;
+  dom.resultTagline.textContent = `${meta.en} · ${meta.tagline}`.toUpperCase();
+  dom.resultSong.textContent = `${challengeDance().label} · ${challengeSong().label}`;
+  dom.resultNext.textContent = meta.next
+    ? `再冲一步 · 解锁「${meta.next.title}」`
+    : (meta.special ? "传奇成就已达成,接受全场膜拜吧!" : "已是本曲最高头衔,去刷新纪录吧!");
+
+  dom.result.classList.remove("hidden");
+  // 重新触发入场编排(移除再添加 .reveal,强制重排)
+  dom.result.classList.remove("reveal");
+  void dom.result.offsetWidth;
+  dom.result.classList.add("reveal");
+
+  // 先归零,保证「再来一次」时数字与数据条都能干净地从 0 重滚
+  dom.statScore.textContent = "0";
+  dom.statAcc.textContent = "0%";
+  dom.statCombo.textContent = "0";
+  dom.statHit.textContent = "0%";
+  dom.statAccBar.style.width = "0%";
+  dom.statComboBar.style.width = "0%";
+  dom.statHitBar.style.width = "0%";
+
+  // 游戏计分不用千分位逗号,纯数字更像街机
+  const fmtInt = (v) => Math.round(v).toString();
+  countUp(dom.statScore, r.score, { format: fmtInt, delay: 600 });
+  countUp(dom.statAcc, r.avgAcc * 100, { format: (v) => Math.round(v) + "%", delay: 700 });
+  countUp(dom.statCombo, r.maxCombo, { format: fmtInt, delay: 800 });
+  countUp(dom.statHit, r.hitRate * 100, { format: (v) => Math.round(v) + "%", delay: 900 });
+
+  // 数据条:连击按"达成全连的比例"填充,与两个百分比同尺度,一眼看懂离全连多远
+  const tales = r.tallies || {};
+  const totalNotes = (tales.perfect ?? 0) + (tales.great ?? 0) + (tales.good ?? 0) + (tales.miss ?? 0);
+  const comboPct = totalNotes ? Math.min(100, (r.maxCombo / totalNotes) * 100) : 0;
+  fillBar(dom.statAccBar, r.avgAcc * 100, 700);
+  fillBar(dom.statComboBar, comboPct, 800);
+  fillBar(dom.statHitBar, r.hitRate * 100, 900);
+
+  celebrate(r.grade, meta.special);
+}
+
 function finishChallenge() {
   const ch = state.challenge;
   if (!ch || !ch.running) return;
   ch.running = false;
   const r = ch.scorer.finalize();
   void highlights.finish(r);
-  if ($("highlight-consent").checked && state.mode === 'pk') $("highlight-dock").open = true;
-  dom.resultGrade.textContent = r.grade;
-  dom.resultGrade.className = "grade-" + r.grade.toLowerCase();
-  dom.resultScore.textContent = "得分 " + r.score;
-  dom.resultAcc.textContent = "全曲匹配 " + Math.round(r.avgAcc * 100) + "% · 命中 " + Math.round(r.hitRate * 100) + "%";
-  dom.resultCombo.textContent = "最大连击 " + r.maxCombo;
-  const tales = r.tallies || {};
-  dom.talliesPerfect.textContent = String(tales.perfect ?? 0);
-  dom.talliesGreat.textContent = String(tales.great ?? 0);
-  dom.talliesGood.textContent = String(tales.good ?? 0);
-  dom.talliesMiss.textContent = String(tales.miss ?? 0);
-  dom.result.classList.remove("hidden");
-  // 结算庆祝
-  juice.burst(window.innerWidth / 2, window.innerHeight * 0.5, { count: 80, speed: 550, ttl: 1.1 });
-  juice.flash("255,255,255", 0.3, 0.2);
-  juice.shake(12);
+  showResult(r);
   stopAll({ keepCamera: true });
+  scheduleReplay();
 }
 
 // ---------------------------------------------------------------------------
@@ -1047,7 +1473,25 @@ function setStatus(s) {
   dom.status.textContent = s;
 }
 
-// 键盘:空格 开始/停止,M 镜像
+// 判定命中:相框边缘闪对应颜色(金/青/蓝/红)
+const TIER_FLASH = { PERFECT: "#ffd54a", GREAT: "#39ffcf", GOOD: "#4d7cff", MISS: "#ff5f6d" };
+function flashCamFrame(tier) {
+  const f = dom.camWrap;
+  f.classList.remove("cam-flash");
+  void f.offsetWidth; // 重排以重触发动画
+  f.style.setProperty("--flash", TIER_FLASH[tier] || "#ffffff");
+  f.classList.add("cam-flash");
+}
+
+// 开跳瞬间:拍照式咔嚓白闪
+function shutterCam() {
+  const f = dom.camWrap;
+  f.classList.remove("cam-shutter");
+  void f.offsetWidth;
+  f.classList.add("cam-shutter");
+}
+
+// 键盘:空格 开始/停止,M 镜像,D 工作人员调试开关
 window.addEventListener("keydown", (e) => {
   if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   if (e.code === "Space") {
@@ -1056,10 +1500,14 @@ window.addEventListener("keydown", (e) => {
     else if (state.avatar) dom.btnStart.click();
   } else if (e.key === "m" || e.key === "M") {
     dom.btnMirror.click();
+  } else if (e.key === "d" || e.key === "D") {
+    debugMode = !debugMode;
+    applyDebugUI();
+    if (state.phase === "playing") dom.controls.classList.toggle("hidden", !debugMode);
   }
 });
 
-setMode("free");
+setMode("pk");
 setStatus("正在加载默认舞者…");
 
 // ---------------------------------------------------------------------------
@@ -1067,6 +1515,8 @@ setStatus("正在加载默认舞者…");
 // ---------------------------------------------------------------------------
 function applyLaunchParams() {
   const q = new URLSearchParams(location.search);
+  debugMode = q.get("debug") === "1";
+  applyDebugUI();
   const danceId = q.get("dance");
   const songId = q.get("song");
   if (danceId && CHALLENGE_DANCES.some((d) => d.id === danceId)) {

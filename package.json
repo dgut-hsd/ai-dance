@@ -5,6 +5,21 @@
   "type": "module",
   "description": "DANCE ARENA: 3D 舞者动捕 + 音乐游戏(音频同步 / 节拍 / 音符轨道)",
   "scripts": {
+    "start": "node server/index.js",
+    "test:browser": "playwright test",
     "test": "node --test --test-isolation=none \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "ali-oss": "^6.23.0",
+    "dotenv": "^18.0.4",
+    "express": "^5.2.1",
+    "ffmpeg-static": "^5.3.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

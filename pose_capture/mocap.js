@@ -177,7 +177,7 @@ export async function startPoseStream({
     withHands: m.hands,
     onReady: async () => {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" },
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" },
         audio: false,
       });
       video.srcObject = stream;

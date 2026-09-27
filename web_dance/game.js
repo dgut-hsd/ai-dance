@@ -11,9 +11,14 @@ import * as THREE from "three";
 import { createScene } from "./scene.js";
 import { CHALLENGE_DANCES, SONGS } from "./challenge-library.js";
 import { BUILTIN_DANCES } from "./dance-library.js";
-import { buildDemoSequence } from "./demo-sequence.js";
-import { reconstructJoints } from "../pose_capture/playback.js";
-import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
+
+// 每支舞的 3D 舞者白影剪影(离屏预渲染的招牌动作)
+const SILHOUETTES = {
+  demo: "assets/silhouettes/demo.png",
+  hiphop: "assets/silhouettes/hiphop.png",
+  salsa: "assets/silhouettes/salsa.png",
+  free: "assets/silhouettes/free.png",
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -62,7 +67,7 @@ function entriesFor(mode) {
       const skin = CARD_SKIN[d.id] || CARD_SKIN.demo;
       return {
         key: d.id,
-        tag: "跟跳",
+        tag: "PK",
         title: d.label,
         sub: `♪ ${song.label}`,
         bpm: song.bpm,
@@ -102,22 +107,10 @@ function entriesFor(mode) {
 }
 
 // ---------------------------------------------------------------------------
-// 卡片剪影:demo 谱面真实姿态,选中卡循环播放(Just Dance 式动态剪影)
-// ---------------------------------------------------------------------------
-const demoSeq = buildDemoSequence();
-const FPS = demoSeq.meta.fps || 30;
-
-function drawPoseAt(canvas, t, color) {
-  const i = Math.max(0, Math.min(demoSeq.frames.length - 1, Math.round(t * FPS)));
-  const joints = reconstructJoints(demoSeq.frames[i]);
-  renderPoseSilhouette(canvas, joints, undefined, { color });
-}
-
-// ---------------------------------------------------------------------------
 // 轮播
 // ---------------------------------------------------------------------------
 const carousel = $("carousel");
-let mode = "challenge";
+let mode = "pk";
 let entries = [];
 let selected = 0;
 
@@ -132,7 +125,7 @@ function buildCarousel() {
     card.style.setProperty("--card-b", e.b);
     card.innerHTML = `
       <div class="card-cover"></div>
-      <canvas width="220" height="220"></canvas>
+      <img class="card-sil" src="${SILHOUETTES[e.key] || SILHOUETTES.demo}" alt="" draggable="false">
       <div class="card-tag">${e.tag}</div>
       <div class="card-bottom">
         <div class="card-title">${e.title}</div>
@@ -145,8 +138,6 @@ function buildCarousel() {
       launch();
     });
     e._card = card;
-    e._canvas = card.querySelector("canvas");
-    drawPoseAt(e._canvas, e.poseT, "#ffffff");
     carousel.appendChild(card);
   }
   select(0);
@@ -167,34 +158,11 @@ function launch() {
   if (e) location.href = e.url;
 }
 
-// 选中卡的剪影动画(约 12fps 循环谱面)
-let animT = 0;
-let lastAnimFrame = -1;
-setInterval(() => {
-  const e = entries[selected];
-  if (!e || !e._canvas) return;
-  animT = (animT + 0.085) % demoSeq.meta.durationSec;
-  const f = Math.round(animT * FPS);
-  if (f === lastAnimFrame) return;
-  lastAnimFrame = f;
-  drawPoseAt(e._canvas, animT, "#ffffff");
-}, 85);
-
 // ---------------------------------------------------------------------------
-// 交互:模式切换 / 箭头 / 键盘 / 滚轮
+// 交互:箭头 / 键盘 / 滚轮
 // ---------------------------------------------------------------------------
-document.querySelectorAll(".mode-btn").forEach((b) =>
-  b.addEventListener("click", () => {
-    if (b.dataset.mode === mode) return;
-    mode = b.dataset.mode;
-    document.querySelectorAll(".mode-btn").forEach((x) => x.classList.toggle("active", x === b));
-    buildCarousel();
-  })
-);
-
 $("arrow-left").addEventListener("click", () => select(selected - 1));
 $("arrow-right").addEventListener("click", () => select(selected + 1));
-$("cta").addEventListener("click", launch);
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") select(selected - 1);

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="./style.css" />
+    <style>
+      html, body { background: #05070f; }
+    </style>
+  </head>
+  <body>
+    <div id="result" class="overlay reveal" style="--grade:#ffd54a">
+      <div class="result-bg" aria-hidden="true">
+        <i class="beam b1"></i><i class="beam b2"></i><i class="beam b3"></i>
+        <div class="floor-glow"></div>
+        <div class="result-vignette"></div>
+      </div>
+      <div class="result-inner">
+        <div id="result-grade-wrap">
+          <i class="rays" aria-hidden="true"></i>
+          <span id="result-grade">S</span>
+        </div>
+        <h2 id="result-title">封神舞者</h2>
+        <p id="result-tagline">DANCE LEGEND · 这就是街舞的天花板</p>
+        <div id="result-song">街舞 HIPHOP · 流行舞曲</div>
+        <div id="result-score">
+          <div class="score-num" id="stat-score">984320</div>
+          <div class="score-label">SCORE · 得分</div>
+        </div>
+        <div id="result-eq" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div id="result-stats">
+          <div class="stat">
+            <div class="stat-num" id="stat-acc">96%</div>
+            <div class="stat-bar"><i id="stat-acc-bar" style="width:96%"></i></div>
+            <div class="stat-label">动作还原</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" id="stat-combo">128</div>
+            <div class="stat-bar"><i id="stat-combo-bar" style="width:91%"></i></div>
+            <div class="stat-label">最大连击</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" id="stat-hit">100%</div>
+            <div class="stat-bar"><i id="stat-hit-bar" style="width:100%"></i></div>
+            <div class="stat-label">节拍命中</div>
+          </div>
+        </div>
+        <p id="result-next" class="result-next">再冲一步 · 解锁「节奏大师」</p>
+        <div id="result-actions">
+          <button id="result-again" class="btn primary lg">再来一次</button>
+          <button id="result-exit" class="btn ghost lg">结束挑战</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
