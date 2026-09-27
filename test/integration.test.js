@@ -4,9 +4,16 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-import { buildDemoSequence } from "../web_dance/demo-sequence.js";
 import { SongSession } from "../web_dance/audio.js";
+
+// demo 参考序列取自 songs/ 落盘产物(不再依赖 web_dance/demo-sequence.js)
+const seq = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../songs/demo-arena-loop/demo-arena-loop.json"), "utf8"),
+);
 
 function fakeAudioContext(clock = { t: 0 }) {
   const started = [];
@@ -28,7 +35,6 @@ function fakeAudioContext(clock = { t: 0 }) {
 }
 
 test("demo 序列 + SongSession 端到端:节拍栅格 + 12 个下拍音符全部命中", async () => {
-  const seq = buildDemoSequence();
   assert.equal(seq.schema, "dance-sequence/v1");
   assert.equal(seq.meta.timing.version, "timing/v1");
   assert.equal(seq.chart.version, "chart/v1");

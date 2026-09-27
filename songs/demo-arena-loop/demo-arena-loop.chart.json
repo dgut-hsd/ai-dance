@@ -1,0 +1,79 @@
+{
+  "schema": "chart/v1",
+  "sequenceFile": "demo-arena-loop.json",
+  "audio": "demo-beat.wav",
+  "notes": [
+    {
+      "id": "downbeat-0",
+      "t": 0,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-2",
+      "t": 2,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-4",
+      "t": 4,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-6",
+      "t": 6,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-8",
+      "t": 8,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-10",
+      "t": 10,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-12",
+      "t": 12,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-14",
+      "t": 14,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-16",
+      "t": 16,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-18",
+      "t": 18,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-20",
+      "t": 20,
+      "type": "pose",
+      "lane": "body"
+    },
+    {
+      "id": "downbeat-22",
+      "t": 22,
+      "type": "pose",
+      "lane": "body"
+    }
+  ]
+}

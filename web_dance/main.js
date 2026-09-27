@@ -16,11 +16,10 @@ import { createJuice } from "./ui-lab/juice.js";
 import { animate, ease } from "./ui-lab/tween.js";
 import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
 import { ScoringAdapter } from "./scoring-adapter.js";
-import { buildDemoSequence } from "./demo-sequence.js";
 import { SongSession, AudioEngine } from "./audio.js";
 import { HighlightController } from "./highlights.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
-import { SONGS, CHALLENGE_DANCES, loadFbxSequence } from "./challenge-library.js";
+import { loadSongIndex, dances, songs, danceById, songById, loadSequence } from "./song-library.js";
 
 // 动作预期(Just Dance 式右侧滚动列):把谱面音符当作"动作时刻",按时间差换算成纵向位移。
 const MOVE_NOW_LINE_Y = 10;          // "现在"判定线距滚动区顶部的像素
@@ -383,51 +382,35 @@ async function loadModel(url, type) {
 }
 
 // ---------------------------------------------------------------------------
-// 挑战舞曲选择(舞蹈 + 歌曲;配对表来自 challenge-library.js,与选歌主页共用)
+// 挑战舞曲选择(舞蹈 + 歌曲;歌单与序列都从 songs/ 目录按文件读取,与选歌主页共用)
 // ---------------------------------------------------------------------------
 function challengeDance() {
-  return CHALLENGE_DANCES.find((d) => d.id === state.challengeDanceId) || CHALLENGE_DANCES[0];
+  return danceById(state.challengeDanceId);
 }
 function challengeSong() {
-  return SONGS.find((s) => s.id === state.challengeSongId) || SONGS[0];
-}
-
-// 把歌曲的音频 + BPM 覆盖到序列上(用于内置 demo 序列换歌)
-function applySongToSequence(seq, song) {
-  seq.chart = { ...seq.chart, audio: song.url };
-  const bpm = song.bpm;
-  seq.meta.timing = { version: "timing/v1", bpm, offsetSec: 0, tempoMap: [{ t: 0, bpm }] };
-  const beat = 60 / bpm;
-  const beats = [];
-  for (let t = 0; t <= seq.meta.durationSec; t += beat) beats.push(+t.toFixed(3));
-  seq.meta.beatTimesSec = beats;
-  return seq;
+  return songById(state.challengeSongId);
 }
 
 async function rebuildChallenge() {
   const dance = challengeDance();
   const song = challengeSong();
+  if (!dance || !song) return;
   if (state.running) stopAll();
-  let seq;
-  if (dance.kind === "fbx") {
-    setStatus("正在生成舞曲:" + dance.label + "…");
-    seq = await loadFbxSequence(dance.fbx, song);
-  } else {
-    seq = applySongToSequence(buildDemoSequence(), song);
-  }
+  setStatus("正在加载舞曲:" + dance.label + "…");
+  const seq = await loadSequence(dance.danceId);
   state.challenge = { seq, scorer: new ScoringAdapter(seq), running: false };
   state.coachPlayer = null;
   setStatus(`已选:${dance.label} / ${song.label}`);
 }
 
 function setupChallengePickers() {
-  for (const d of CHALLENGE_DANCES) {
+  for (const d of dances()) {
     const o = document.createElement("option");
     o.value = d.id;
     o.textContent = d.label;
     dom.danceSelect.appendChild(o);
   }
-  for (const s of SONGS) {
+  for (const s of songs()) {
     const o = document.createElement("option");
     o.value = s.id;
     o.textContent = s.label;
@@ -438,9 +421,9 @@ function setupChallengePickers() {
 
   dom.danceSelect.addEventListener("change", () => {
     state.challengeDanceId = dom.danceSelect.value;
-    const dance = challengeDance();
-    state.challengeSongId = dance.defaultSongId;
-    dom.songSelect.value = dance.defaultSongId;
+    const dance = danceById(state.challengeDanceId);
+    state.challengeSongId = dance?.defaultSongId ?? state.challengeSongId;
+    dom.songSelect.value = state.challengeSongId;
     rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
   });
   dom.songSelect.addEventListener("change", () => {
@@ -448,7 +431,6 @@ function setupChallengePickers() {
     rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
   });
 }
-setupChallengePickers();
 
 // ---------------------------------------------------------------------------
 // 模式切换
@@ -813,7 +795,7 @@ async function ensurePerformanceAudio() {
   const audioContext = AudioCtor ? new AudioCtor() : null;
   const engine = new AudioEngine({ audioContext });
   engine.loop = true;
-  await engine.load("audio/pop-demo.wav");
+  await engine.load("../songs/hiphop/pop-demo.wav");
   performanceAudio = engine;
   return engine;
 }
@@ -1519,12 +1501,12 @@ function applyLaunchParams() {
   applyDebugUI();
   const danceId = q.get("dance");
   const songId = q.get("song");
-  if (danceId && CHALLENGE_DANCES.some((d) => d.id === danceId)) {
+  if (danceId && danceById(danceId)) {
     state.challengeDanceId = danceId;
     dom.danceSelect.value = danceId;
-    state.challengeSongId = challengeDance().defaultSongId;
+    state.challengeSongId = danceById(danceId).defaultSongId;
   }
-  if (songId && SONGS.some((s) => s.id === songId)) {
+  if (songId && songById(songId)) {
     state.challengeSongId = songId;
   }
   if (danceId && BUILTIN_DANCES.some((d) => d.id === danceId)) {
@@ -1535,7 +1517,19 @@ function applyLaunchParams() {
   if (["free", "challenge", "pk", "performance"].includes(mode)) setMode(mode);
   loadModel(DEFAULT_MODEL);
 }
-applyLaunchParams();
+
+// 启动:先导入歌单(songs/index.json),再组下拉、应用跳转参数
+async function init() {
+  try {
+    await loadSongIndex();
+  } catch (e) {
+    setStatus("歌单加载失败(需先运行 npm run export-songs):" + e.message);
+    return;
+  }
+  setupChallengePickers();
+  applyLaunchParams();
+}
+init();
 
 // Operators can export anonymous timing metrics; no images or poses are included.
 document.getElementById("export-perf").onclick = () => {

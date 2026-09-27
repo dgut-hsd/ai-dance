@@ -12,7 +12,9 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "replay": "node examples/replay-cli.js"
+    "replay": "node examples/replay-cli.js",
+    "export-chart": "node examples/export-chart-cli.js",
+    "export-songs": "node examples/export-songs-cli.js"
   },
   "devDependencies": {
     "vitest": "^2.1.9"

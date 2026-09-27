@@ -33,13 +33,13 @@ npm start
 3. **跟跳挑战**:点「跟跳挑战」→「开始」,舞台上会出现**两位舞者**——左侧是跳参考舞的
    3D 教练(由 `dance-sequence/v1` JSON 逐帧驱动),右侧是你(实时动捕);先 3-2-1-GO 倒计时,
    跟着教练跳,右下角实时计分(分数 / 连击 / 匹配度 / 评级)。底部「舞蹈」「歌曲」下拉可切换
-   舞曲:内置「合成示例舞」+ 仓库根 `fbx/` 里的 Mixamo 动作(Hip Hop / Salsa,已转成挑战序列,
+   舞曲:内置「合成示例舞」+ `songs/<danceId>/` 里的 Mixamo 动作(Hip Hop / Salsa,已转成挑战序列,
    短片段循环到 24s);也可「加载参考 JSON」(即 `pose_capture` 导出的文件)。
-4. **舞者表演**:底部「动画」下拉可切换舞蹈。默认列出**内置舞曲**(仓库根 `fbx/` 目录里的
-   Mixamo 动作,如 Hip Hop Dancing / Salsa Dancing),加上模型**内嵌的 FBX/GLB 动画**
+4. **舞者表演**:底部「动画」下拉可切换舞蹈。默认列出**内置舞曲**(`songs/<danceId>/<danceId>.fbx`
+   里的 Mixamo 动作,如 hiphop / salsa),加上模型**内嵌的 FBX/GLB 动画**
    (默认 Michelle 自带桑巴舞 SambaDance)。内置舞曲做**世界空间重定向**(先按骨骼名匹配,
    再用源/目标骨架的休息姿态差对齐朝向,避免 Mixamo FBX 与 glTF 骨架的 90° 朝向错位),
-   只保留旋转轨道(原地跳),短片段自动循环播放。想加新舞:把 FBX 丢进仓库根 `fbx/`,
+   只保留旋转轨道(原地跳),短片段自动循环播放。想加新舞:把 FBX 放进 `songs/<danceId>/<danceId>.fbx`,
    在 `dance-library.js` 的 `BUILTIN_DANCES` 里补一行。
 5. 快捷键:`空格` 开始/停止,`M` 切换左右镜像。
 
@@ -55,9 +55,8 @@ npm start
 | `retarget.js` | 契约帧 → 骨架(脊柱方向对齐 + 四肢两骨 IK + 头偏差 + 根运动:水平位移/跳跃) |
 | `ik.js` | 两骨 IK 求解器(位置级,带 pole 弯折方向约束) |
 | `score.js` | 舞蹈挑战实时评分 |
-| `demo-sequence.js` | 内置合成示例舞(开箱即玩) |
-| `dance-library.js` | 内置舞曲库:加载 `fbx/` 里的 Mixamo 动作并重定向到当前骨架 |
-| `challenge-library.js` | 挑战舞曲库:FBX 动作 → `dance-sequence/v1` 序列 + 歌曲列表 |
+| `song-library.js` | 运行时歌单/序列读取层:导入 `songs/index.json`,按 danceId 读 `songs/<danceId>/<danceId>.json` 并重基音频路径 |
+| `dance-library.js` | 内置舞曲库:加载 `songs/<danceId>/<danceId>.fbx` 里的 Mixamo 动作并重定向到当前骨架 |
 
 ## 原理(把「契约帧」搬到 3D 骨架)
 

@@ -2,23 +2,17 @@
  * game.js — DANCE ARENA 选歌主页(Just Dance 式卡片轮播)。
  *
  * 背景复用 scene.js 的三渲二舞池(Dance Spotlight 聚光灯),
- * 卡片上的动作剪影取自 demo-sequence 的真实谱面帧(stick-figure 剪影),
- * 数据复用 challenge-library / dance-library,跳转参数由 main.js 的
+ * 卡片上的动作剪影取自 songs/demo-arena-loop 参考序列帧(stick-figure 剪影),
+ * 挑战卡片数据来自 songs/index.json(song-library.js),跳转参数由 main.js 的
  * applyLaunchParams 接收(mode / dance / song / autoload)。
  */
 
 import * as THREE from "three";
 import { createScene } from "./scene.js";
-import { CHALLENGE_DANCES, SONGS } from "./challenge-library.js";
+import { loadSongIndex, loadSequence, dances, songs } from "./song-library.js";
 import { BUILTIN_DANCES } from "./dance-library.js";
-
-// 每支舞的 3D 舞者白影剪影(离屏预渲染的招牌动作)
-const SILHOUETTES = {
-  demo: "assets/silhouettes/demo.png",
-  hiphop: "assets/silhouettes/hiphop.png",
-  salsa: "assets/silhouettes/salsa.png",
-  free: "assets/silhouettes/free.png",
-};
+import { reconstructJoints } from "../pose_capture/playback.js";
+import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -57,23 +51,23 @@ const CARD_SKIN = {
 };
 
 function songOf(id) {
-  return SONGS.find((s) => s.id === id) || SONGS[0];
+  return songs().find((s) => s.id === id) || songs()[0];
 }
 
 function entriesFor(mode) {
   if (mode === "challenge" || mode === "pk") {
-    return CHALLENGE_DANCES.map((d) => {
+    return dances().map((d) => {
       const song = songOf(d.defaultSongId);
       const skin = CARD_SKIN[d.id] || CARD_SKIN.demo;
       return {
         key: d.id,
-        tag: "PK",
+        tag: "跟跳",
         title: d.label,
-        sub: `♪ ${song.label}`,
-        bpm: song.bpm,
+        sub: `♪ ${song?.label ?? ""}`,
+        bpm: song?.bpm ?? null,
         diff: skin.diff,
         a: skin.a, b: skin.b, poseT: skin.poseT,
-        url: `./dance.html?mode=${mode}&dance=${d.id}&song=${song.id}&autoload=1`,
+        url: `./dance.html?mode=${mode}&dance=${d.id}&song=${d.defaultSongId}&autoload=1`,
       };
     });
   }
@@ -107,10 +101,23 @@ function entriesFor(mode) {
 }
 
 // ---------------------------------------------------------------------------
+// 卡片剪影:songs/demo-arena-loop 参考序列(加载后)的真实姿态,选中卡循环播放
+// ---------------------------------------------------------------------------
+let previewSeq = null; // songs/demo-arena-loop 的 dance-sequence/v1(异步加载)
+
+function drawPoseAt(canvas, t, color) {
+  if (!previewSeq) return;
+  const fps = previewSeq.meta.fps || 30;
+  const i = Math.max(0, Math.min(previewSeq.frames.length - 1, Math.round(t * fps)));
+  const joints = reconstructJoints(previewSeq.frames[i]);
+  renderPoseSilhouette(canvas, joints, undefined, { color });
+}
+
+// ---------------------------------------------------------------------------
 // 轮播
 // ---------------------------------------------------------------------------
 const carousel = $("carousel");
-let mode = "pk";
+let mode = "challenge";
 let entries = [];
 let selected = 0;
 
@@ -118,6 +125,7 @@ function buildCarousel() {
   entries = entriesFor(mode);
   selected = 0;
   carousel.innerHTML = "";
+  if (!entries.length) return; // 歌单未加载完
   for (const e of entries) {
     const card = document.createElement("div");
     card.className = "card";
@@ -125,7 +133,7 @@ function buildCarousel() {
     card.style.setProperty("--card-b", e.b);
     card.innerHTML = `
       <div class="card-cover"></div>
-      <img class="card-sil" src="${SILHOUETTES[e.key] || SILHOUETTES.demo}" alt="" draggable="false">
+      <canvas width="220" height="220"></canvas>
       <div class="card-tag">${e.tag}</div>
       <div class="card-bottom">
         <div class="card-title">${e.title}</div>
@@ -134,10 +142,12 @@ function buildCarousel() {
       </div>`;
     card.addEventListener("click", () => {
       const idx = entries.indexOf(e);
-      select(idx);
-      launch();
+      if (idx === selected) launch();
+      else select(idx);
     });
     e._card = card;
+    e._canvas = card.querySelector("canvas");
+    drawPoseAt(e._canvas, e.poseT, "#ffffff");
     carousel.appendChild(card);
   }
   select(0);
@@ -158,11 +168,46 @@ function launch() {
   if (e) location.href = e.url;
 }
 
+// 选中卡的剪影动画(约 12fps 循环谱面)
+let animT = 0;
+let lastAnimFrame = -1;
+setInterval(() => {
+  const e = entries[selected];
+  if (!e || !e._canvas || !previewSeq) return;
+  animT = (animT + 0.085) % previewSeq.meta.durationSec;
+  const fps = previewSeq.meta.fps || 30;
+  const f = Math.round(animT * fps);
+  if (f === lastAnimFrame) return;
+  lastAnimFrame = f;
+  drawPoseAt(e._canvas, animT, "#ffffff");
+}, 85);
+
 // ---------------------------------------------------------------------------
-// 交互:箭头 / 键盘 / 滚轮
+// 交互:模式切换 / 箭头 / 键盘 / 滚轮
 // ---------------------------------------------------------------------------
+document.querySelectorAll(".mode-btn").forEach((b) =>
+  b.addEventListener("click", () => {
+    if (b.dataset.mode === mode) return;
+    mode = b.dataset.mode;
+    document.querySelectorAll(".mode-btn").forEach((x) => x.classList.toggle("active", x === b));
+// 歌单 + demo 参考序列都从 songs/ 读入;都就绪后再建卡片
+Promise.all([loadSongIndex(), loadSequence("demo-arena-loop")])
+  .then(([, seq]) => {
+    previewSeq = seq;
+    if (mode === "challenge") buildCarousel();
+  })
+  .catch((e) => {
+    const st = document.getElementById("song-title");
+    if (st) st.textContent = "歌单加载失败";
+    const tab = document.getElementById("song-sub");
+    if (tab) tab.textContent = e.message;
+  });
+  })
+);
+
 $("arrow-left").addEventListener("click", () => select(selected - 1));
 $("arrow-right").addEventListener("click", () => select(selected + 1));
+$("cta").addEventListener("click", launch);
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") select(selected - 1);

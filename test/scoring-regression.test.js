@@ -30,7 +30,7 @@ test('no player frames still advances misses; no timing-only points',()=>{
 });
 test('equal poses prefer nearest beat and reset starts clean',()=>{
   const s=new ScoringAdapter(sequence()); s.judge(.36,frame(.36)); s.judge(.5,frame(.5));
-  s.advance(.7); assert.equal(s.results.find(r=>r.noteId==='1').tier,'PERFECT');
+  s.advance(.8); assert.equal(s.results.find(r=>r.noteId==='1').tier,'PERFECT');
   s.reset(); assert.equal(s.results.length,0); assert.equal(s.score,0);
 });
 test('low visible completeness cannot earn points',()=>{

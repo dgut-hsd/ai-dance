@@ -6,5 +6,6 @@ export * from "./timing.js";
 export * from "./eventScorer.js";
 export * from "./engine.js";
 export * from "./chartBuilder.js";
+export * from "./chartCodec.js";
 export * from "./metrics.js";
 export * from "./replay.js";
