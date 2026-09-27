@@ -21,3 +21,5 @@ Thumbs.db
 # Local artifacts
 *.log
 .env
+.highlight-data/
+.npm-cache/

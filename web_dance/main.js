@@ -17,6 +17,7 @@ import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
 import { ScoringAdapter } from "./scoring-adapter.js";
 import { buildDemoSequence } from "./demo-sequence.js";
 import { SongSession, AudioEngine } from "./audio.js";
+import { HighlightController } from "./highlights.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
 import { SONGS, CHALLENGE_DANCES, loadFbxSequence } from "./challenge-library.js";
 
@@ -119,6 +120,15 @@ let challengeTimer = null;
 let lastPoseAt = 0;
 let lastCaptureToRender = null;
 let lastPerf = null;
+const highlights = new HighlightController({
+  stage: dom.stage, camera: dom.cam, fx: dom.fx,
+  panel: $("highlight-jobs"), consent: $("highlight-consent"), deviceInput: $("highlight-device-token"),
+  getState: () => ({
+    score: state.challenge?.scorer.score || 0, combo: state.challenge?.scorer.combo || 0,
+    tier: state.challenge?.scorer.lastTier || '', acc: state.challenge?.previewAcc || 0,
+    conf: performance.now() - lastPoseAt < 700 ? state.latestConf : 0,
+  }),
+});
 
 // ---------------------------------------------------------------------------
 // 游戏手感层(juice):冲击波 / 火花 / 闪光 / 震屏 / 暗角 / hit-stop
@@ -224,6 +234,7 @@ function renderLoop() {
     // 兼容两种 scene 版本:合成器版走 scene.render(),老版直接渲染
     if (scene.render) scene.render();
     else scene.renderer.render(scene.scene, scene.camera);
+    highlights.draw(); // Copy WebGL immediately, before its drawing buffer can be cleared.
   } catch (e) {
     // 渲染异常绝不能再中断整页初始化(否则按钮都不会挂载)
     console.error("renderLoop error:", e);
@@ -642,6 +653,11 @@ async function startChallenge() {
   if (generation !== startGeneration) { stopAll(); return; }
   if (!state.running) return;
 
+  if (state.mode === 'pk') {
+    await highlights.prepare(session.engine, () => generation !== startGeneration);
+    if (generation !== startGeneration) { highlights.abort(); return; }
+  }
+
   // 倒计时:GO 时刻 = songTime 0 = 音频起点(绝对 ctx 时间锚定,不用 setTimeout 猜)
   const ctx = session.engine.ctx;
   if (ctx.state === "suspended") { try { await ctx.resume(); } catch { /* noop */ } }
@@ -649,6 +665,7 @@ async function startChallenge() {
   await session.start(goAt); // 预调度音频与时钟
   ch.scorer.latency.outputLatencySec = ctx.outputLatency || 0;
   if (!await countdownTo(goAt, generation)) return;
+  highlights.start();
   ch.running = true;
   challengeTimer = setInterval(() => {
     if (!ch.running) return;
@@ -740,6 +757,7 @@ function onFrame(frame, boneDefs) {
 }
 
 function stopAll({ keepCamera = false } = {}) {
+  highlights.abort();
   startGeneration++;
   clearInterval(challengeTimer);
   challengeTimer = null;
@@ -776,6 +794,7 @@ dom.btnStart.addEventListener("click", async () => {
       await startFree();
     }
   } catch (e) {
+    stopAll();
     setStatus("启动失败: " + e.message);
     dom.btnStart.disabled = false;
   }
@@ -784,7 +803,7 @@ dom.btnStart.addEventListener("click", async () => {
 dom.btnStop.addEventListener("click", () => stopAll());
 dom.resultAgain.addEventListener("click", () => {
   dom.result.classList.add("hidden");
-  startChallenge().catch((e) => setStatus("启动失败: " + e.message));
+  startChallenge().catch((e) => { stopAll(); setStatus("启动失败: " + e.message); });
 });
 dom.resultExit.addEventListener("click", () => {
   stopAll();
@@ -815,7 +834,7 @@ async function countdownTo(goAt, generation) {
 // ---------------------------------------------------------------------------
 function updateScoreHUD(res) {
   dom.score.textContent = Math.round(state.challenge.scorer.score);
-  const combo = res.combo;
+  const combo = res.combo ?? state.challenge.scorer.combo;
   dom.comboN.textContent = combo;
   dom.combo.classList.toggle("hot", combo > 0 && combo % 10 === 0);
   drawAccRing(res.acc);
@@ -1001,6 +1020,8 @@ function finishChallenge() {
   if (!ch || !ch.running) return;
   ch.running = false;
   const r = ch.scorer.finalize();
+  void highlights.finish(r);
+  if ($("highlight-consent").checked && state.mode === 'pk') $("highlight-dock").open = true;
   dom.resultGrade.textContent = r.grade;
   dom.resultGrade.className = "grade-" + r.grade.toLowerCase();
   dom.resultScore.textContent = "得分 " + r.score;

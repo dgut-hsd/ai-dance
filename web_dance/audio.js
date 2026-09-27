@@ -400,6 +400,7 @@ export class AudioEngine {
     this._ctxIsExternal = !!audioContext;
     this._buffer = null;
     this._src = null;
+    this._recordingTaps = new Set();
     this._startAt = null;
     this._offsetSec = 0;
     this._pausedAt = null;
@@ -422,6 +423,17 @@ export class AudioEngine {
   }
 
   get state() { return this._state; }
+  // A separate branch records clean game music without changing speaker output.
+  createRecordingTap() {
+    const node = this.ctx.createMediaStreamDestination();
+    this._recordingTaps.add(node);
+    this._src?.connect(node);
+    return { stream: node.stream, disconnect: () => {
+      this._recordingTaps.delete(node);
+      try { this._src?.disconnect(node); } catch { /* source already ended */ }
+      node.stream.getTracks().forEach(track => track.stop());
+    } };
+  }
   get durationSec() { return this._durationSec; }
   setDurationSec(sec) { this._durationSec = sec; }
 
@@ -487,6 +499,7 @@ export class AudioEngine {
       const src = this.ctx.createBufferSource();
       src.buffer = this._buffer;
       src.connect(this.ctx.destination);
+      for (const tap of this._recordingTaps) src.connect(tap);
       src.loop = this._loop;
       src.onended = () => { if (this._src === src) this._handleEnded(); };
       src.start(when, offsetSec + this._audioOffsetSec);

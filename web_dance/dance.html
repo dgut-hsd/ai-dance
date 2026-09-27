@@ -5,10 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DANCE ARENA — 3D 舞蹈动捕</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./highlight.css" />
   </head>
   <body>
     <canvas id="stage"></canvas>
     <canvas id="fx"></canvas>
+    <details id="highlight-dock">
+      <summary>我的高光 · 录制与领取</summary>
+      <label><input id="highlight-consent" type="checkbox">记录我的真人 PK 高光</label>
+      <small>开启后录制真人画面与游戏音乐，结束后上传并保留 7 天。持领取码者可观看和下载；此设备可删除视频。</small>
+      <details><summary>设备设置</summary>
+        <label>设备密钥<input id="highlight-device-token" type="password" autocomplete="off" placeholder="由工作人员填写；本机体验可留空"></label>
+      </details>
+      <p id="highlight-message" role="status">勾选后开始真人 PK，跳完即可扫码领取。</p>
+      <div id="highlight-jobs"></div>
+    </details>
 
     <!-- 顶栏 -->
     <header id="topbar">

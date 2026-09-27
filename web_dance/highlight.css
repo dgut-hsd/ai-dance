@@ -1,0 +1,17 @@
+.highlight-view { margin:0; min-height:100vh; background:radial-gradient(ellipse at top,#163553,#080c1a 65%); color:#edf3ff; font-family:system-ui,sans-serif; }
+.highlight-view main { max-width:880px; margin:0 auto; padding:56px 22px; }
+.highlight-view .eyebrow { letter-spacing:.2em; color:#52ffd0; font-size:14px; }
+.highlight-view h1 { font-size:clamp(27px,5vw,46px); line-height:1.2; }
+.highlight-view video { width:100%; border-radius:18px; background:#000; margin:18px 0; }
+.highlight-view .hint, #view-expiry { color:#a6b5cc; font-size:14px; line-height:1.8; }
+.download-highlight, #refresh-highlight { display:inline-block; padding:15px 24px; border:0; border-radius:12px; color:#071927; background:#52ffd0; font-weight:700; text-decoration:none; cursor:pointer; }
+[hidden] { display:none !important; }
+#highlight-dock { position:fixed; right:12px; top:66px; z-index:50; width:min(330px,88vw); max-height:70vh; overflow:auto; border:1px solid #4d7caa; border-radius:12px; background:#10182bef; color:#edf3ff; padding:12px; font:14px/1.6 system-ui,sans-serif; }
+#highlight-dock summary { cursor:pointer; color:#52ffd0; }
+#highlight-dock input[type=password] { box-sizing:border-box; width:100%; color:#fff; background:#080c1a; border:1px solid #4d7caa; border-radius:6px; padding:8px; }
+#highlight-dock small { display:block; color:#a6b5cc; }
+.highlight-job { border-top:1px solid #4d7caa; margin-top:12px; padding:12px 0; }
+.highlight-job img { width:130px; height:130px; background:white; display:block; margin:0 auto; }
+.highlight-job a { color:#52ffd0; display:block; margin-bottom:8px; }
+.highlight-job button { margin:0 8px 4px 0; }
+#highlight-message { color:#ffd87d; }
