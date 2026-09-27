@@ -1,5 +1,5 @@
 /**
- * dance-library.js — 内置舞曲库:加载仓库根 fbx/ 里的 Mixamo FBX 动作片段,
+ * dance-library.js — 内置舞曲库:加载 songs/<danceId>/ 里保存的 Mixamo FBX 动作片段,
  * 并做「世界空间重定向」(rest-pose 对齐)套到当前舞者骨架。
  *
  * 为什么不能直接照搬旋转轨道:
@@ -12,11 +12,11 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 
-// 内置舞曲清单。url 相对 web_dance/ 页面,即仓库根的 fbx/ 目录。
-// 想加新舞:把 FBX 丢进仓库根 fbx/,在这里补一行即可。
+// 内置舞曲清单。url 相对 web_dance/ 页面,即 songs/<danceId>/<danceId>.fbx(原始 Mixamo 源)。
+// 想加新舞:把 FBX 放进 songs/<danceId>/<danceId>.fbx,在这里补一行即可。
 export const BUILTIN_DANCES = [
-  { id: "hiphop", label: "Hip Hop Dancing", url: "../fbx/Hip Hop Dancing.fbx" },
-  { id: "salsa", label: "Salsa Dancing", url: "../fbx/Salsa Dancing.fbx" },
+  { id: "hiphop", label: "Hip Hop Dancing", url: "../songs/hiphop/hiphop.fbx" },
+  { id: "salsa", label: "Salsa Dancing", url: "../songs/salsa/salsa.fbx" },
 ];
 
 const SAMPLING_FPS = 30; // bake 采样率

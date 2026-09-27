@@ -5,6 +5,12 @@
   "type": "module",
   "description": "DANCE ARENA: 3D 舞者动捕 + 音乐游戏(音频同步 / 节拍 / 音符轨道)",
   "scripts": {
-    "test": "node --test --test-isolation=none \"test/*.test.js\""
+    "test": "node --test --test-isolation=none \"test/*.test.js\"",
+    "export-chart": "node scoring/examples/export-chart-cli.js",
+    "replay": "node scoring/examples/replay-cli.js",
+    "export-songs": "node scoring/examples/export-songs-cli.js"
+  },
+  "devDependencies": {
+    "three": "^0.160.0"
   }
 }

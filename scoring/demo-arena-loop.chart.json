@@ -1,0 +1,497 @@
+{
+  "version": "chart/v1",
+  "danceId": "demo-arena-loop",
+  "audioOffsetSec": 0,
+  "judgeOffsetSec": 0,
+  "timingWindows": {
+    "perfect": 0.05,
+    "great": 0.1,
+    "good": 0.15
+  },
+  "notes": [
+    {
+      "t": 0,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 0,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 0.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 15,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 1,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 30,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 1.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 45,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 2,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 60,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 2.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 75,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 3,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 90,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 3.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 105,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 4,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 120,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 4.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 135,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 150,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 5.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 165,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 6,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 180,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 6.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 195,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 7,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 210,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 7.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 225,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 8,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 240,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 8.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 255,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 9,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 270,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 9.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 285,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 10,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 300,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 10.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 315,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 11,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 330,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 11.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 345,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 12,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 360,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 12.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 375,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 13,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 390,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 13.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 405,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 14,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 420,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 14.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 435,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 15,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 450,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 15.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 465,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 16,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 480,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 16.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 495,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 17,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 510,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 17.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 525,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 18,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 540,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 18.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 555,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 19,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 570,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 19.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 585,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 20,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 600,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 20.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 615,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 21,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 630,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 21.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 645,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 22,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 660,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 22.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 675,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 23,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 690,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    },
+    {
+      "t": 23.5,
+      "type": "pose",
+      "lane": "body",
+      "refFrameIdx": 705,
+      "window": {
+        "early": -0.25,
+        "late": 0.25
+      }
+    }
+  ],
+  "meta": {
+    "source": "synthetic",
+    "builtFromReference": "scoring/examples/song-sources.js(buildDemoSequence)"
+  }
+}

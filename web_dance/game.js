@@ -2,16 +2,15 @@
  * game.js — DANCE ARENA 选歌主页(Just Dance 式卡片轮播)。
  *
  * 背景复用 scene.js 的三渲二舞池(Dance Spotlight 聚光灯),
- * 卡片上的动作剪影取自 demo-sequence 的真实谱面帧(stick-figure 剪影),
- * 数据复用 challenge-library / dance-library,跳转参数由 main.js 的
+ * 卡片上的动作剪影取自 songs/demo-arena-loop 参考序列帧(stick-figure 剪影),
+ * 挑战卡片数据来自 songs/index.json(song-library.js),跳转参数由 main.js 的
  * applyLaunchParams 接收(mode / dance / song / autoload)。
  */
 
 import * as THREE from "three";
 import { createScene } from "./scene.js";
-import { CHALLENGE_DANCES, SONGS } from "./challenge-library.js";
+import { loadSongIndex, loadSequence, dances, songs } from "./song-library.js";
 import { BUILTIN_DANCES } from "./dance-library.js";
-import { buildDemoSequence } from "./demo-sequence.js";
 import { reconstructJoints } from "../pose_capture/playback.js";
 import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 
@@ -52,23 +51,23 @@ const CARD_SKIN = {
 };
 
 function songOf(id) {
-  return SONGS.find((s) => s.id === id) || SONGS[0];
+  return songs().find((s) => s.id === id) || songs()[0];
 }
 
 function entriesFor(mode) {
   if (mode === "challenge" || mode === "pk") {
-    return CHALLENGE_DANCES.map((d) => {
+    return dances().map((d) => {
       const song = songOf(d.defaultSongId);
       const skin = CARD_SKIN[d.id] || CARD_SKIN.demo;
       return {
         key: d.id,
         tag: "跟跳",
         title: d.label,
-        sub: `♪ ${song.label}`,
-        bpm: song.bpm,
+        sub: `♪ ${song?.label ?? ""}`,
+        bpm: song?.bpm ?? null,
         diff: skin.diff,
         a: skin.a, b: skin.b, poseT: skin.poseT,
-        url: `./dance.html?mode=${mode}&dance=${d.id}&song=${song.id}&autoload=1`,
+        url: `./dance.html?mode=${mode}&dance=${d.id}&song=${d.defaultSongId}&autoload=1`,
       };
     });
   }
@@ -102,14 +101,15 @@ function entriesFor(mode) {
 }
 
 // ---------------------------------------------------------------------------
-// 卡片剪影:demo 谱面真实姿态,选中卡循环播放(Just Dance 式动态剪影)
+// 卡片剪影:songs/demo-arena-loop 参考序列(加载后)的真实姿态,选中卡循环播放
 // ---------------------------------------------------------------------------
-const demoSeq = buildDemoSequence();
-const FPS = demoSeq.meta.fps || 30;
+let previewSeq = null; // songs/demo-arena-loop 的 dance-sequence/v1(异步加载)
 
 function drawPoseAt(canvas, t, color) {
-  const i = Math.max(0, Math.min(demoSeq.frames.length - 1, Math.round(t * FPS)));
-  const joints = reconstructJoints(demoSeq.frames[i]);
+  if (!previewSeq) return;
+  const fps = previewSeq.meta.fps || 30;
+  const i = Math.max(0, Math.min(previewSeq.frames.length - 1, Math.round(t * fps)));
+  const joints = reconstructJoints(previewSeq.frames[i]);
   renderPoseSilhouette(canvas, joints, undefined, { color });
 }
 
@@ -125,6 +125,7 @@ function buildCarousel() {
   entries = entriesFor(mode);
   selected = 0;
   carousel.innerHTML = "";
+  if (!entries.length) return; // 歌单未加载完
   for (const e of entries) {
     const card = document.createElement("div");
     card.className = "card";
@@ -141,8 +142,8 @@ function buildCarousel() {
       </div>`;
     card.addEventListener("click", () => {
       const idx = entries.indexOf(e);
-      select(idx);
-      launch();
+      if (idx === selected) launch();
+      else select(idx);
     });
     e._card = card;
     e._canvas = card.querySelector("canvas");
@@ -172,9 +173,10 @@ let animT = 0;
 let lastAnimFrame = -1;
 setInterval(() => {
   const e = entries[selected];
-  if (!e || !e._canvas) return;
-  animT = (animT + 0.085) % demoSeq.meta.durationSec;
-  const f = Math.round(animT * FPS);
+  if (!e || !e._canvas || !previewSeq) return;
+  animT = (animT + 0.085) % previewSeq.meta.durationSec;
+  const fps = previewSeq.meta.fps || 30;
+  const f = Math.round(animT * fps);
   if (f === lastAnimFrame) return;
   lastAnimFrame = f;
   drawPoseAt(e._canvas, animT, "#ffffff");
@@ -188,7 +190,18 @@ document.querySelectorAll(".mode-btn").forEach((b) =>
     if (b.dataset.mode === mode) return;
     mode = b.dataset.mode;
     document.querySelectorAll(".mode-btn").forEach((x) => x.classList.toggle("active", x === b));
-    buildCarousel();
+// 歌单 + demo 参考序列都从 songs/ 读入;都就绪后再建卡片
+Promise.all([loadSongIndex(), loadSequence("demo-arena-loop")])
+  .then(([, seq]) => {
+    previewSeq = seq;
+    if (mode === "challenge") buildCarousel();
+  })
+  .catch((e) => {
+    const st = document.getElementById("song-title");
+    if (st) st.textContent = "歌单加载失败";
+    const tab = document.getElementById("song-sub");
+    if (tab) tab.textContent = e.message;
+  });
   })
 );
 
