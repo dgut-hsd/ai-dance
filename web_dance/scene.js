@@ -23,8 +23,8 @@ export function createScene(canvas) {
   renderer.toneMappingExposure = 1.0;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x05070f);
-  scene.fog = new THREE.FogExp2(0x05070f, 0.03);
+  scene.background = new THREE.Color(0x0a1020);
+  scene.fog = new THREE.FogExp2(0x0a1020, 0.02);
 
   const camera = new THREE.PerspectiveCamera(
     50, window.innerWidth / window.innerHeight, 0.1, 120
@@ -56,6 +56,11 @@ export function createScene(canvas) {
   key.shadow.camera.far = 20;
   key.shadow.bias = -0.0004;
   scene.add(key);
+
+  // 正面补光(暖白、不投影):让舞者正面/脸看得清,与背后彩色轮廓光区分
+  const frontFill = new THREE.DirectionalLight(0xfff3e6, 4.0);
+  frontFill.position.set(0, 1.7, 4.5);
+  scene.add(frontFill);
 
   const rimPink = new THREE.DirectionalLight(0xff5fa2, 2.2);
   rimPink.position.set(-3.5, 2.2, -4);

@@ -18,13 +18,13 @@ const token = () => randomBytes(24).toString('base64url');
 const hash = s => createHash('sha256').update(String(s || '')).digest();
 const equal = (a, b) => timingSafeEqual(hash(a), hash(b));
 const fail = (status, message) => Object.assign(new Error(message), { status });
-const MAX_BYTES = 200 * 1024 * 1024;
+const MAX_BYTES = 512 * 1024 * 1024;
 const DAY = 86400000;
 const mimeTypes = new Set(['video/webm', 'video/mp4']);
 
 export async function createApp(options = {}) {
   const data = path.resolve(options.dataDir || process.env.HIGHLIGHT_DATA_DIR || path.join(root, '.highlight-data'));
-  const publicBase = (options.publicBase || process.env.PUBLIC_BASE_URL || 'http://localhost:8000').replace(/\/$/, '');
+  const publicBase = (options.publicBase || process.env.PUBLIC_BASE_URL || `http://localhost:${process.env.PORT || 8000}`).replace(/\/$/, '');
   const deviceToken = options.deviceToken ?? process.env.DEVICE_TOKEN ?? '';
   const mode = options.storage || process.env.STORAGE_MODE || 'local';
   if (!['local', 'oss'].includes(mode)) throw new Error('STORAGE_MODE must be local or oss');
@@ -156,6 +156,17 @@ export async function createApp(options = {}) {
     return j;
   };
   app.get('/api/highlights/config', device, (req, res) => res.json({ storage: mode, maxBytes: MAX_BYTES, maxDuration: 600, publicBase }));
+  // Staff console: list all sessions. Requires the device token (or localhost); ownerToken is
+  // returned so staff can retry/delete any session from the backend page.
+  app.get('/api/highlights', device, (req, res) => {
+    res.json([...jobs.values()].sort((a, b) => b.createdAt - a.createdAt).map(j => ({
+      id: j.id, ownerToken: j.ownerToken, status: j.status, mime: j.mime,
+      createdAt: j.createdAt, expiresAt: j.expiresAt, readyAt: j.readyAt, retries: j.retries || 0,
+      error: j.error, duration: j.clip ? j.clip.duration + 2 : null, result: j.metadata?.result || null,
+      shareUrl: `${publicBase}/v/${j.id}`,
+      ...(j.status === 'ready' ? { videoUrl: `/api/highlights/${j.id}/media`, posterUrl: `/api/highlights/${j.id}/poster` } : {}),
+    })));
+  });
   app.post('/api/highlights', device, async (req, res) => {
     if (!mimeTypes.has(req.body?.mime)) throw fail(400, '不支持的录像格式');
     if ([...jobs.values()].filter(j => ['uploading', 'queued', 'processing'].includes(j.status)).length >= 20)
@@ -228,6 +239,32 @@ export async function createApp(options = {}) {
     const j = find(req);
     res.type('svg').send(await QRCode.toString(`${publicBase}/v/${j.id}`, { type: 'svg', margin: 2, width: 240 }));
   });
+  // 直链签名 URL:OSS 模式走自定义域名签名(24 小时),本地模式走本机媒体地址。
+  // 缓存一段时间,避免 /staff 自动刷新时二维码因签名每次不同而闪烁。
+  const signedUrlCache = new Map();
+  const mediaUrl = (j, download) => {
+    const now = Date.now();
+    const cached = signedUrlCache.get(j.id);
+    if (cached && cached.until > now + 3600000) return download ? cached.download : cached.play;
+    const expires = Math.max(1, Math.min(86400, Math.floor((j.expiresAt - now) / 1000)));
+    const entry = {
+      play: delivery ? delivery.signatureUrl(object(j, 'highlight.mp4'), { expires }) : `${publicBase}/api/highlights/${j.id}/media`,
+      download: delivery ? delivery.signatureUrl(object(j, 'highlight.mp4'), { expires, response: { 'content-disposition': 'attachment; filename="dance-highlight.mp4"' } }) : `${publicBase}/api/highlights/${j.id}/media?download=1`,
+      until: now + expires * 1000,
+    };
+    signedUrlCache.set(j.id, entry);
+    return download ? entry.download : entry.play;
+  };
+  app.get('/api/highlights/:id/qr-play', async (req, res) => {
+    const j = find(req);
+    if (j.status !== 'ready') throw fail(409, '视频尚未生成');
+    res.type('svg').send(await QRCode.toString(mediaUrl(j, false), { type: 'svg', margin: 2, width: 240 }));
+  });
+  app.get('/api/highlights/:id/qr-download', async (req, res) => {
+    const j = find(req);
+    if (j.status !== 'ready') throw fail(409, '视频尚未生成');
+    res.type('svg').send(await QRCode.toString(mediaUrl(j, true), { type: 'svg', margin: 2, width: 240 }));
+  });
   for (const [route, name] of [['media', 'highlight.mp4'], ['poster', 'poster.jpg']]) {
     app.get(`/api/highlights/:id/${route}`, (req, res) => {
       const j = find(req);
@@ -235,11 +272,13 @@ export async function createApp(options = {}) {
       const download = route === 'media' && req.query.download === '1';
       if (delivery) return res.redirect(delivery.signatureUrl(object(j, name), {
         expires: Math.max(1, Math.min(300, Math.floor((j.expiresAt - Date.now()) / 1000))),
-        response: { 'content-type': route === 'media' ? 'video/mp4' : 'image/jpeg',
-          'content-disposition': `${download ? 'attachment' : 'inline'}; filename="dance-highlight.${route === 'media' ? 'mp4' : 'jpg'}"` },
+        // 对象上传时已带正确 Content-Type,不要再覆盖它(OSS 会拒绝 response-content-type)。
+        response: { 'content-disposition': `${download ? 'attachment' : 'inline'}; filename="dance-highlight.${route === 'media' ? 'mp4' : 'jpg'}"` },
       }));
       if (download) res.attachment('dance-highlight.mp4');
-      res.sendFile(path.join(workDir(j), name));
+      // Data lives under .highlight-data; allow its dot-prefixed path segment
+      // (send otherwise ignores dot-directories and returns 404 "Not Found").
+      res.sendFile(path.join(workDir(j), name), { dotfiles: 'allow' });
     });
   }
   // 谱面编辑器:上传舞曲文件夹(fbx+音频)并保存谱面 → 落盘 songs/ + 更新 index.json
@@ -273,6 +312,7 @@ export async function createApp(options = {}) {
   });
 
   app.get('/v/:id', (req, res) => res.sendFile(path.join(root, 'web_dance', 'highlight.html')));
+  app.get('/staff', (req, res) => res.sendFile(path.join(root, 'web_dance', 'staff.html')));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.
   for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx'])
     app.use(`/${dir}`, express.static(path.join(root, dir), { dotfiles: 'deny' }));

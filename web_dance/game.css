@@ -65,6 +65,16 @@ html, body {
   background: linear-gradient(90deg, rgba(255,61,129,0.25), rgba(77,124,255,0.25));
   box-shadow: 0 0 18px rgba(255, 61, 129, 0.35);
 }
+.mode-title {
+  color: #fff;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  letter-spacing: 1px;
+  border: 1px solid var(--accent);
+  background: linear-gradient(90deg, rgba(255,61,129,0.25), rgba(77,124,255,0.25));
+  box-shadow: 0 0 18px rgba(255, 61, 129, 0.35);
+}
 #top-hint { margin-left: auto; font-size: 12px; color: var(--muted); }
 
 /* ---- 卡片轮播 ---- */
@@ -112,12 +122,20 @@ html, body {
     radial-gradient(circle at 78% 12%, rgba(255,255,255,0.35), transparent 42%),
     repeating-linear-gradient(115deg, rgba(255,255,255,0.06) 0 2px, transparent 2px 14px);
 }
-.card canvas {
+.card-sil {
   position: absolute;
   left: 50%; top: 46%;
   transform: translate(-50%, -50%);
   width: 74%; height: 62%;
+  object-fit: contain;
   filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.45));
+}
+.card.selected .card-sil {
+  animation: sil-float 3s ease-in-out infinite;
+}
+@keyframes sil-float {
+  0%, 100% { transform: translate(-50%, -50%); }
+  50% { transform: translate(-50%, calc(-50% - 7px)); }
 }
 .card-bottom {
   position: absolute; left: 0; right: 0; bottom: 0;
@@ -180,25 +198,7 @@ html, body {
   padding: 4px 12px; border-radius: 999px;
   backdrop-filter: blur(6px);
 }
-#cta {
-  margin-left: auto;
-  font-size: 20px; font-weight: 900; letter-spacing: 4px;
-  color: #fff;
-  padding: 16px 52px;
-  border: none; border-radius: 999px;
-  cursor: pointer;
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
-  box-shadow: 0 0 26px rgba(255, 61, 129, 0.55), 0 10px 30px rgba(0, 0, 0, 0.5);
-  transition: transform 0.12s ease, box-shadow 0.15s ease;
-}
-#cta:hover { transform: scale(1.05); box-shadow: 0 0 40px rgba(255, 61, 129, 0.8), 0 10px 30px rgba(0, 0, 0, 0.5); }
-#cta:active { transform: scale(0.97); }
-#cta.pulse { animation: cta-pulse 1.6s ease-in-out infinite; }
-@keyframes cta-pulse {
-  0%, 100% { box-shadow: 0 0 22px rgba(255, 61, 129, 0.45), 0 10px 30px rgba(0, 0, 0, 0.5); }
-  50% { box-shadow: 0 0 44px rgba(255, 61, 129, 0.85), 0 10px 30px rgba(0, 0, 0, 0.5); }
-}
-#dock-hint { font-size: 12px; color: var(--muted); max-width: 220px; text-align: right; }
+#dock-hint { margin-left: auto; font-size: 12px; color: var(--muted); max-width: 220px; text-align: right; }
 
 /* ---- 四角霓虹框 ---- */
 .hud-corner {
@@ -216,6 +216,5 @@ html, body {
   .card { width: 168px; height: 252px; }
   #carousel { gap: 14px; }
   #song-title { font-size: 19px; }
-  #cta { font-size: 16px; padding: 13px 34px; letter-spacing: 2px; }
   #dock-hint, #top-hint { display: none; }
 }

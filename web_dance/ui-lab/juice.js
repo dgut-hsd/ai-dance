@@ -21,6 +21,7 @@ export function createJuice({ canvas, shakeTarget }) {
   let flash = null;  // 全屏闪光
   let vig = 0;       // 暗角强度(衰减)
   let shakeAmp = 0;
+  let punchAmp = 0;  // 镜头缩放冲击(打击感)
 
   const cap = () => { if (parts.length > 800) parts.splice(0, parts.length - 800); };
 
@@ -74,6 +75,7 @@ export function createJuice({ canvas, shakeTarget }) {
   }
 
   function shake(amount = 8) { shakeAmp = Math.max(shakeAmp, amount); }
+  function punch(amount = 0.03) { punchAmp = Math.max(punchAmp, amount); }
   function flashScreen(color = "255,255,255", alpha = 0.5, ttl = 0.18) { flash = { color, alpha, life: 0, ttl }; }
   function vignette(strength = 0.3) { vig = Math.max(vig, strength); }
   function hitStop(ms = 80) { ticker.hitStop(ms); }
@@ -81,13 +83,14 @@ export function createJuice({ canvas, shakeTarget }) {
   ticker.add({
     update(_now, dt) {
       shakeAmp = Math.max(0, shakeAmp - dt * 55);
+      punchAmp = Math.max(0, punchAmp - dt * 0.3);
       vig = Math.max(0, vig - dt * 1.4);
       let sx = 0, sy = 0;
       if (shakeAmp > 0) {
         sx = (Math.random() * 2 - 1) * shakeAmp;
         sy = (Math.random() * 2 - 1) * shakeAmp;
       }
-      if (shakeTarget) shakeTarget.style.transform = `translate3d(${sx}px, ${sy}px, 0)`;
+      if (shakeTarget) shakeTarget.style.transform = `translate3d(${sx}px, ${sy}px, 0) scale(${(1 + punchAmp).toFixed(4)})`;
 
       ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
@@ -165,5 +168,5 @@ export function createJuice({ canvas, shakeTarget }) {
     },
   });
 
-  return { ring, sparks, burst, shake, flash: flashScreen, vignette, hitStop };
+  return { ring, sparks, burst, shake, punch, flash: flashScreen, vignette, hitStop };
 }
