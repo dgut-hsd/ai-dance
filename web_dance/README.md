@@ -15,6 +15,11 @@ python -m http.server 8000
 # 或直接进游戏页 http://localhost:8000/web_dance/dance.html
 ```
 
+谱面编辑器(`chart-editor.html`)的「保存到歌单」需要写 `songs/` 与更新 `index.json`,
+必须由 Node 服务提供(`server/index.js`,`npm start`),`python -m http.server` 只读不能保存。
+编辑器流程:上传「舞曲文件夹」(内含 fbx + 音频) → 在时间轴打判定点 → 保存到歌单
+(自动生成 `songs/<danceId>/` 目录、`<danceId>.json` + `<danceId>.chart.json`,并在 `songs/index.json` 追加该曲)。
+
 选歌主页 → 游戏页的跳转参数:`?mode=challenge&dance=hiphop&song=pop-demo&autoload=1`
 (`mode` 三选一,`dance`/`song` 为库内 id,`autoload=1` 自动加载默认舞者)。
 

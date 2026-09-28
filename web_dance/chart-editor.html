@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>谱面编辑器 — DANCE ARENA</title>
+<style>
+  :root {
+    --bg: #0c0e14; --panel: #151927; --line: #2a3150; --text: #dfe5ff;
+    --dim: #7d87ab; --accent: #4cc2ff; --warn: #ffb347; --good: #6fe3a1;
+    --sel: #ff5c8a; --px: 1;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .toolbar label { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); }
+  .toolbar .spacer { flex: 1; }
+  .sp { width: 6px; height: 20px; border-left: 1px solid var(--line); margin: 0 4px; }
+  select, input[type=number], input[type=text], button {
+    background: #0f1322; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 4px 8px; font: inherit; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #14506b; border-color: #1d75a0; }
+  main { display: grid; grid-template-columns: 240px 1fr; gap: 12px; padding: 12px; }
+  .left { display: flex; flex-direction: column; gap: 8px; }
+  .posebox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .posebox canvas { display: block; width: 100%; image-rendering: pixelated; }
+  #pose, #notePose { background: #10141f26; }
+  .props { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+  .props h3 { margin: 0 0 6px; font-size: 12px; color: var(--dim); font-weight: 600; }
+  .props .grid { display: grid; grid-template-columns: auto 1fr; gap: 5px 8px; align-items: center; }
+  .props .bones { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 6px; }
+  .props .bonechips button { padding: 2px 6px; font-size: 11px; }
+  .props .bonechips button.on { background: #14506b; border-color: var(--accent); }
+  ul#noteList { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  ul#noteList li { display: flex; gap: 6px; align-items: center; padding: 4px 8px;
+    border-bottom: 1px solid #202741; cursor: pointer; }
+  ul#noteList li.sel { background: #1a2240; }
+  ul#noteList li b { color: var(--accent); min-width: 52px; font-weight: 600; }
+  ul#noteList li .tag { font-size: 11px; color: var(--dim); }
+  ul#noteList li .del { margin-left: auto; color: var(--sel); background: none; border: none; cursor: pointer; }
+  .right { display: flex; flex-direction: column; gap: 8px; }
+  #timelineWrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px; }
+  #timeline { display: block; }
+  #legend { display: flex; gap: 14px; color: var(--dim); font-size: 11px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+  .status { color: var(--good); }
+</style>
+</head>
+<body>
+<header class="toolbar">
+  <label>舞曲文件夹 <input type="file" id="folderFile" webkitdirectory multiple></label>
+  <label>曲子
+    <select id="songSel"><option value="">— 选择已有歌曲 —</option></select>
+  </label>
+  <label>目录名(ID) <input type="text" id="danceId" maxlength="64" spellcheck="false" placeholder="songs/ 下的目录名" style="width:150px"></label>
+  <span class="sp"></span>
+  <label>BPM <input type="number" id="bpm" step="1" min="20" max="300" style="width:64px"></label>
+  <label>偏移s <input type="number" id="offset" step="0.01" style="width:72px"></label>
+  <label><input type="checkbox" id="snap" checked> 吸附节拍</label>
+  <span class="sp"></span>
+  <button id="btnFill1">每拍</button>
+  <button id="btnFill2">每2拍</button>
+  <button id="btnFill4">每4拍</button>
+  <button id="btnClear">清空</button>
+  <button id="btnPlay" class="primary">播放 ▶</button>
+  <button id="btnReset">放弃草稿</button>
+  <span class="spacer"></span>
+  <button id="btnSave" class="primary">保存到歌单</button>
+</header>
+<main>
+  <section class="left">
+    <div class="posebox">
+      <canvas id="pose" width="220" height="286"></canvas>
+      <div class="status" id="info">未载入</div>
+    </div>
+    <div class="props" id="props">
+      <h3>未选中音符</h3>
+    </div>
+    <h3 style="margin:2px 2px 0;color:var(--dim);font-size:12px">判定点簿</h3>
+    <ul id="noteList"></ul>
+  </section>
+  <section class="right">
+    <div id="legend">
+      <span><i class="dot" style="background:var(--accent)"></i>pose 判定点</span>
+      <span><i class="dot" style="background:var(--warn)"></i>hold 判定点</span>
+      <span><i class="dot" style="background:#ff5c8a"></i>选中</span>
+      <span>弱拍 / 强拍 / 播放头</span>
+    </div>
+    <div id="timelineWrap"><canvas id="timeline"></canvas></div>
+  </section>
+</main>
+<script type="importmap">
+{"imports":{
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module" src="./chart-editor.js"></script>
+</body>
+</html>
