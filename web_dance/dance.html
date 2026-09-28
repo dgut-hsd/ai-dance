@@ -10,26 +10,13 @@
   <body>
     <canvas id="stage"></canvas>
     <canvas id="fx"></canvas>
-    <details id="highlight-dock">
-      <summary>我的高光 · 录制与领取</summary>
-      <label><input id="highlight-consent" type="checkbox">记录我的真人 PK 高光</label>
-      <small>开启后录制真人画面与游戏音乐，结束后上传并保留 7 天。持领取码者可观看和下载；此设备可删除视频。</small>
-      <details><summary>设备设置</summary>
-        <label>设备密钥<input id="highlight-device-token" type="password" autocomplete="off" placeholder="由工作人员填写；本机体验可留空"></label>
-      </details>
-      <p id="highlight-message" role="status">勾选后开始真人 PK，跳完即可扫码领取。</p>
-      <div id="highlight-jobs"></div>
-    </details>
 
-    <!-- 顶栏 -->
-    <header id="topbar">
+    <!-- 顶栏(玩家默认隐藏,工作人员按 D 显示) -->
+    <header id="topbar" class="hidden">
       <div id="logo">DANCE<span>ARENA</span></div>
-      <a id="btn-home" href="./" title="返回选歌主页">选歌主页</a>
+      <a id="btn-home" href="#" title="返回选曲">选曲</a>
       <nav id="modes">
-        <button data-mode="free" class="mode-btn active">自由模式</button>
-        <button data-mode="challenge" class="mode-btn">跟跳挑战</button>
-        <button data-mode="pk" class="mode-btn">真人 PK</button>
-        <button data-mode="performance" class="mode-btn">舞者表演</button>
+        <span class="mode-title">真人 PK</span>
       </nav>
       <div id="statusbar">
         <span id="status">初始化…</span>
@@ -38,29 +25,32 @@
       </div>
     </header>
 
-    <details style="position:fixed;top:65px;left:12px;z-index:30;background:#101522;color:#eee;padding:8px;max-height:65vh;overflow:auto">
+    <details id="staff-perf" style="position:fixed;top:65px;left:12px;z-index:30;background:#101522;color:#eee;padding:8px;max-height:65vh;overflow:auto">
       <summary>设备性能（工作人员）</summary>
       <button id="export-perf">导出性能报告</button>
       <pre id="perf-details">开始后自动采样，无需玩家校准。</pre>
     </details>
-    <!-- 初始加载提示 -->
+    <!-- 初始加载提示(只显示品牌标题,不显示加载字样) -->
     <div id="menu" class="overlay">
-      <h1 class="menu-title">正在加载<span>舞者</span></h1>
-      <p class="menu-sub">正在准备默认舞者，请稍候…</p>
+      <h1 class="menu-title">来跳舞<span>！</span></h1>
       <p id="menu-status" class="menu-status"></p>
     </div>
 
     <!-- 游戏 HUD -->
     <div id="hud" class="hidden">
-      <!-- 左下:摄像头 -->
-      <div id="cam-panel" class="panel">
-        <div class="panel-title">你的动作 <span class="live-dot"></span></div>
+      <!-- 左下:摄像头(暗底金箔相框 + 国庆印章) -->
+      <div id="cam-panel">
+        <div class="cam-banner">
+          <span class="cam-live">● LIVE</span>
+          <span class="cam-banner-title">你的舞台</span>
+        </div>
         <div id="cam-wrap">
           <video id="cam" autoplay playsinline muted></video>
           <canvas id="cam-stick" width="320" height="240"></canvas>
+          <i class="cam-corner tl"></i><i class="cam-corner tr"></i>
+          <i class="cam-corner bl"></i><i class="cam-corner br"></i>
+          <div class="cam-seal">国庆<br>嘉年华</div>
         </div>
-        <div id="conf-bar"><div id="conf-fill"></div></div>
-        <div id="conf-label">置信度 --</div>
       </div>
 
       <!-- 右上:舞蹈动作(Just Dance 式滚动列:当前 + 接下来的动作剪影) -->
@@ -88,8 +78,8 @@
         <div id="progress"><div id="progress-fill"></div></div>
       </div>
 
-      <!-- 底部控制条 -->
-      <div id="controls">
+      <!-- 底部控制条(工作人员调试用,默认隐藏) -->
+      <div id="controls" class="hidden">
         <button id="btn-start" class="btn primary" disabled>开始</button>
         <button id="btn-stop" class="btn" disabled>停止</button>
         <button id="btn-mirror" class="btn" title="左右镜像">镜像:开</button>
@@ -119,26 +109,86 @@
       </div>
     </div>
 
-    <!-- 判定文字(PERFECT / GREAT / MISS / COMBO) -->
-    <div id="judge" class="hidden"></div>
+    <!-- 判定反馈(PERFECT / GREAT / GOOD / MISS + 得分飘字) -->
+    <div id="judge" class="hidden">
+      <div id="judge-tier">PERFECT</div>
+      <div id="judge-sub"></div>
+    </div>
+    <!-- 连击徽章(顶部,命中脉动 / 每 10 连爆发) -->
+    <div id="combo-badge" class="hidden">
+      <div id="combo-badge-n">0</div>
+      <div id="combo-badge-label">COMBO</div>
+    </div>
+
+    <!-- 选曲(整合进 PK 页):大标语 + 海报卡片条 -->
+    <div id="song-pick" class="hidden">
+      <div id="song-pick-title">来跳舞！</div>
+      <div id="song-pick-strip"></div>
+    </div>
+
+    <!-- 准备开始(选中卡片后弹出) -->
+    <div id="ready" class="hidden">
+      <div class="ready-title">准备开始</div>
+      <div class="ready-song" id="ready-song">—</div>
+      <label class="ready-consent"><input id="highlight-record-consent" type="checkbox" checked> 录制我的高光时刻</label>
+      <button id="ready-go">开始挑战</button>
+    </div>
 
     <!-- 中央提示:倒计时 -->
     <div id="center-msg" class="hidden"><div id="center-msg-text">3</div></div>
 
     <!-- 结算 -->
     <div id="result" class="overlay hidden">
-      <h2 id="result-grade" class="grade-s">S</h2>
-      <p id="result-score">得分 0</p>
-      <p id="result-acc">平均匹配 0%</p>
-      <p id="result-combo">最大连击 0</p>
-      <table id="result-tallies">
-        <tr><td class="t-perfect">PERFECT</td><td id="tallies-perfect">0</td></tr>
-        <tr><td class="t-great">GREAT</td><td id="tallies-great">0</td></tr>
-        <tr><td class="t-good">GOOD</td><td id="tallies-good">0</td></tr>
-        <tr><td class="t-miss">MISS</td><td id="tallies-miss">0</td></tr>
-      </table>
-      <button id="result-again" class="btn primary lg">再来一次</button>
-      <button id="result-exit" class="btn lg">结束挑战</button>
+      <div class="result-bg" aria-hidden="true">
+        <i class="beam b1"></i><i class="beam b2"></i><i class="beam b3"></i>
+        <div class="floor-glow"></div>
+        <div class="result-vignette"></div>
+      </div>
+      <div class="result-inner">
+        <div id="result-grade-wrap">
+          <i class="rays" aria-hidden="true"></i>
+          <span id="result-grade">S</span>
+        </div>
+        <h2 id="result-title">封神舞者</h2>
+        <p id="result-tagline">DANCE LEGEND</p>
+        <div id="result-song"></div>
+        <div id="result-score">
+          <div class="score-num" id="stat-score">0</div>
+          <div class="score-label">SCORE · 得分</div>
+        </div>
+        <div id="result-eq" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div id="result-stats">
+          <div class="stat">
+            <div class="stat-num" id="stat-acc">0%</div>
+            <div class="stat-bar"><i id="stat-acc-bar"></i></div>
+            <div class="stat-label">动作还原</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" id="stat-combo">0</div>
+            <div class="stat-bar"><i id="stat-combo-bar"></i></div>
+            <div class="stat-label">最大连击</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" id="stat-hit">0%</div>
+            <div class="stat-bar"><i id="stat-hit-bar"></i></div>
+            <div class="stat-label">节拍命中</div>
+          </div>
+        </div>
+        <p id="result-next" class="result-next"></p>
+        <div id="result-actions">
+          <button id="result-again" class="btn primary lg">再来一次</button>
+          <button id="result-exit" class="btn ghost lg">换一首</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 高光回放(本地即时播放) -->
+    <div id="replay" class="overlay hidden">
+      <video id="replay-video" controls playsinline></video>
+      <button id="replay-close" class="btn ghost">关闭回放</button>
     </div>
 
     <script type="importmap">

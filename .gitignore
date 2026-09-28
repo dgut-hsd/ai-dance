@@ -23,3 +23,5 @@ Thumbs.db
 .env
 .highlight-data/
 .npm-cache/
+test-results/
+playwright-report/

@@ -13,7 +13,7 @@ import { Retargeter } from "./retarget.js";
 // 想用自己的 ReadyPlayerMe 角色,可直接在「加载本地 FBX/GLB」里填 URL 或文件,例如:
 //   https://models.readyplayer.me/YOUR_AVATAR_ID.glb
 export const DEFAULT_MODEL = "../models/Michelle.glb";
-export const TARGET_HEIGHT = 1.8; // 模型归一化到 1.8 个场景单位
+export const TARGET_HEIGHT = 2.2; // 模型归一化到 2.2 个场景单位(更大、更醒目)
 
 export function detectExt(url) {
   const clean = String(url).split("?")[0].split("#")[0].toLowerCase();

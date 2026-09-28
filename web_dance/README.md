@@ -10,10 +10,13 @@
 
 ```bash
 # 在仓库根目录
-python -m http.server 8000
+npm install
+npm start
 # 浏览器打开 http://localhost:8000/web_dance/ (选歌主页)
 # 或直接进游戏页 http://localhost:8000/web_dance/dance.html
 ```
+
+真人 PK 高光录制、剪辑和扫码领取需要此 Node 后台。Python 静态服务器只能运行游戏，不能处理视频。默认本地存储无需云凭证；手机访问与阿里云配置见 [高光功能说明](../docs/highlights-v1.md)。
 
 选歌主页 → 游戏页的跳转参数:`?mode=challenge&dance=hiphop&song=pop-demo&autoload=1`
 (`mode` 三选一,`dance`/`song` 为库内 id,`autoload=1` 自动加载默认舞者)。

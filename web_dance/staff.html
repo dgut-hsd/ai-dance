@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>高光后台 · DANCE ARENA</title>
+  <link rel="stylesheet" href="/web_dance/staff.css">
+</head>
+<body>
+  <header>
+    <h1>高光后台</h1>
+    <a id="back" href="/web_dance/">返回游戏</a>
+  </header>
+
+  <section class="settings">
+    <label>设备密钥
+      <input id="device-token" type="password" autocomplete="off" placeholder="与 .env 的 DEVICE_TOKEN 一致；本机体验可留空">
+    </label>
+    <label>文案风格
+      <select id="copy-style">
+        <option value="challenge">挑战向（默认）</option>
+        <option value="attitude">态度向</option>
+        <option value="showoff">炫耀向</option>
+        <option value="meme">玩梗向</option>
+      </select>
+    </label>
+    <button id="refresh" class="btn">刷新</button>
+    <span id="status"></span>
+  </section>
+
+  <main id="jobs"></main>
+
+  <!-- 下载弹窗:扫码下载(需点击「下载」才出现) -->
+  <div id="download-modal" class="modal hidden">
+    <div class="modal-mask" data-close></div>
+    <div class="modal-box">
+      <div class="modal-head"><span>扫码下载</span><button class="modal-close" data-close>✕</button></div>
+      <p class="modal-hint">请用户用手机扫下方二维码下载视频</p>
+      <img id="download-qr" class="qr" alt="扫码下载">
+      <a id="download-link" class="btn" href="#" target="_blank" rel="noopener">在电脑上下载</a>
+    </div>
+  </div>
+
+  <script type="module" src="/web_dance/staff.js"></script>
+</body>
+</html>

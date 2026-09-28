@@ -41,7 +41,9 @@ test('API and real video: upload, transcode, QR, ranges, restart, expiry and iso
   const temp = await mkdtemp(path.join(os.tmpdir(), 'dance-highlights-'));
   let service, server;
   const start = async () => {
-    service = await createApp({ dataDir: path.join(temp, 'jobs'), deviceToken: 'test-device', storage: 'local' });
+    // Dot-prefixed data dir mirrors the production default (.highlight-data); the
+    // media/poster sendFile must allow that segment or it 404s as a hidden file.
+    service = await createApp({ dataDir: path.join(temp, '.jobs'), deviceToken: 'test-device', storage: 'local' });
     server = service.app.listen(0, '127.0.0.1'); await once(server, 'listening');
     return `http://127.0.0.1:${server.address().port}`;
   };
@@ -49,7 +51,7 @@ test('API and real video: upload, transcode, QR, ranges, restart, expiry and iso
   try {
     await runFFmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
       '-t', '3', '-c:v', 'libvpx', '-deadline', 'realtime', '-c:a', 'libopus', path.join(temp, 'source.webm')]);
-    await runFFmpeg(['-f', 'lavfi', '-i', 'color=c=navy:s=1280x720', '-frames:v', '1', path.join(temp, 'card.png')]);
+    await runFFmpeg(['-f', 'lavfi', '-i', 'color=c=navy:s=1080x1920', '-frames:v', '1', path.join(temp, 'card.png')]);
     let base = await start();
     const request = (url, options = {}) => fetch(base + url, options);
     const create = () => request('/api/highlights', { method: 'POST', headers: { 'X-Device-Token': 'test-device', 'Content-Type': 'application/json' }, body: JSON.stringify({ mime: 'video/webm' }) });
@@ -81,10 +83,10 @@ test('API and real video: upload, transcode, QR, ranges, restart, expiry and iso
     assert.equal(video.status, 206); assert.equal((await video.arrayBuffer()).byteLength, 128);
     assert.match((await request(url + '/media?download=1')).headers.get('content-disposition'), /attachment/);
     assert.equal((await request(`/api/highlights/${other.id}`)).status, 200);
-    const output = await readFile(path.join(temp, 'jobs', job.id, 'highlight.mp4'));
+    const output = await readFile(path.join(temp, '.jobs', job.id, 'highlight.mp4'));
     assert.ok(output.indexOf(Buffer.from('moov')) < output.indexOf(Buffer.from('mdat')), 'faststart metadata precedes video');
     // Decode the complete output, including audio and score card, to detect broken output streams.
-    await runFFmpeg(['-i', path.join(temp, 'jobs', job.id, 'highlight.mp4'), '-f', 'null', '-']);
+    await runFFmpeg(['-i', path.join(temp, '.jobs', job.id, 'highlight.mp4'), '-f', 'null', '-']);
     await stop(); base = await start();
     assert.equal((await (await request(url)).json()).status, 'ready');
     assert.equal((await request(url, { method: 'DELETE', headers })).status, 200);
