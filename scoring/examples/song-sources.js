@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { BONE_DEFS } from "../../pose_capture/contract.js";
-import { DIMS, fbxClipToSequence as fbxClipToSequenceCore, makeSequence as makeSequenceCore } from "../src/fbxToSequence.js";
+import { DIMS, fbxClipToSequence as fbxClipToSequenceCore, makeSequence as makeSequenceCore, hipRootYaw, shoulderAxisOf } from "../src/fbxToSequence.js";
 
 export const FBX_DANCES = [
   { id: "hiphop", label: "Hip Hop Dancing", fbx: "Hip Hop Dancing.fbx" },
@@ -304,7 +304,16 @@ export function fbxClipToSequence(clip, root, { bpm = 120, audio = "pop-demo.wav
     };
     const bones = BONE_DEFS.map((b) => norm(sub(joints[b.child], joints[b.parent])));
 
-    frames.push({ t: +t.toFixed(3), bones, conf: new Array(BONE_DEFS.length).fill(1) });
+    // 与 pose_capture/contract.js / fbxToSequence.js 同式,保证评分侧 yaw 对齐拿得到基准
+    const rootYaw = hipRootYaw(joints);
+    const shoulderAxis = shoulderAxisOf(joints);
+    frames.push({
+      t: +t.toFixed(3),
+      bones,
+      ...(Number.isFinite(rootYaw) ? { rootYaw } : {}),
+      ...(shoulderAxis ? { shoulderAxis } : {}),
+      conf: new Array(BONE_DEFS.length).fill(1)
+    });
   }
 
   return makeSequence(frames, { bpm, audio, danceId, durationSec: dur });

@@ -68,6 +68,18 @@ const norm = (v) => {
   const l = Math.hypot(v[0], v[1], v[2]);
   return l < 1e-6 ? [0, 0, 0] : [v[0] / l, v[1] / l, v[2] / l];
 };
+// 契约 §1/§2.5:rootYaw = atan2(hipAxis.z, hipAxis.x),hipAxis = right_hip - left_hip。
+// 缺 rootYaw 时 chartCodec 的 targetYaw 为 undefined,评分侧 yaw 对齐拿不到基准。
+function hipRootYaw(joints) {
+  const r = joints?.right_hip, l = joints?.left_hip;
+  if (!r || !l) return undefined;
+  return Math.atan2(r[2] - l[2], r[0] - l[0]);
+}
+// 肩轴 = normalize(右肩 - 左肩);与 pose_capture/contract.js computeShoulderAxis 同式。
+function shoulderAxisOf(joints) {
+  const r = joints?.right_shoulder, l = joints?.left_shoulder;
+  return r && l ? norm(sub(r, l)) : undefined;
+}
 export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
   const beat = 60 / bpm;
   const notes = [];
@@ -132,8 +144,16 @@ export function fbxClipToSequence(THREE, clip, root, { bpm = 120, audio = "pop-d
         : [0, 0, 0],
     };
     const bones = BONE_DEFS.map((b) => norm(sub(joints[b.child], joints[b.parent])));
-    frames.push({ t: +t.toFixed(3), bones, conf: new Array(BONE_DEFS.length).fill(1) });
+    const rootYaw = hipRootYaw(joints);
+    const shoulderAxis = shoulderAxisOf(joints);
+    frames.push({
+      t: +t.toFixed(3),
+      bones,
+      ...(Number.isFinite(rootYaw) ? { rootYaw } : {}),
+      ...(shoulderAxis ? { shoulderAxis } : {}),
+      conf: new Array(BONE_DEFS.length).fill(1)
+    });
   }
   return makeSequence(frames, { bpm, audio, danceId, durationSec: dur });
 }
-export { DIMS, SAMPLING_FPS };
+export { DIMS, SAMPLING_FPS, hipRootYaw, shoulderAxisOf };

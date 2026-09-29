@@ -9,6 +9,19 @@ import { ScoringEngine } from "../scoring/src/engine.js";
 import { parseChart, parseTimingWindows } from "../scoring/src/chartCodec.js";
 const BONE_COUNT = DEFAULT_BONE_WEIGHTS.length;
 const TIER_MULT = { PERFECT: 1.0, GREAT: 0.8, GOOD: 0.6, MISS: 0 };
+// 采样窗:契约 §4.2 的 ±0.050/0.100/0.150 是 timingWindows(判定档位),不是采样窗。
+// 真机跟跳实测 ±0.25 偏紧(再加上音频延迟就系统性判 miss),放宽到 ±0.30。
+// 上限受 test/scoring-regression.test.js「音符在 advance(0.8) 前结算」约束,不可再放大。
+const JUDGE_WINDOW = 0.3;
+// 采样窗放宽后档位同步放宽,否则 windowEdge 内仍被 GAME_BANDS 判成 miss。
+const JUDGE_BANDS = [
+  { edge: 0.10, grade: "perfect", value: 1 },
+  { edge: 0.18, grade: "great", value: 0.8 },
+  { edge: 0.26, grade: "good", value: 0.6 },
+  { edge: JUDGE_WINDOW, grade: "miss", value: 0 },
+];
+// eventScorer 的 minPoseScore 缺省 0.55:姿态分被跨源/遮挡压到 0.55 以下会静默判 miss。
+const MIN_POSE_SCORE = 0.4;
 const gradeFor = (value) => value >= .9 ? "S" : value >= .8 ? "A" : value >= .7 ? "B" : value >= .6 ? "C" : "D";
 export class ScoringAdapter {
   constructor(sequence) {
@@ -19,11 +32,13 @@ export class ScoringAdapter {
     this.chart = sequence.chart || { version: "chart/v2", notes: sequence.frames
       .filter((_, i) => i % Math.max(1, Math.round(this.fps * .5)) === 0)
       .map((f, i) => ({ id: `auto-${i}`, t: f.t, type: "pose" })) };
-    this.timingBands = parseTimingWindows(this.chart) ?? undefined;
+    this.timingBands = parseTimingWindows(this.chart) ?? JUDGE_BANDS;
     try { this.events = parseChart(sequence, this.chart); } catch (e) {
       console.warn("[ScoringAdapter] chart parse failed, judging disabled:", e);
       this.events = [];
     }
+    // 采样窗在谱面层放宽(逐音符 window 优先于 chart 缺省值,故逐条覆盖)
+    this.events = this.events.map((e) => ({ ...e, window: { early: -JUDGE_WINDOW, late: JUDGE_WINDOW } }));
     this.reset();
   }
   reset() {
@@ -31,7 +46,12 @@ export class ScoringAdapter {
     this.lastTier = null; this.results = []; this.finished = false;
     this.tallies = {}; this._pendingFeedback = [];
     this.lastFrameT = Number.NEGATIVE_INFINITY;
-    this.engine = new ScoringEngine(this.events, { bands: this.timingBands });
+    this.engine = new ScoringEngine(this.events, {
+      bands: this.timingBands,
+      windowEdge: JUDGE_WINDOW,
+      minPoseScore: MIN_POSE_SCORE,
+      yawMode: "rootYaw",
+    });
   }
   frameAt(t) {
     // Exports may have missing frames: use timestamps rather than array index / fps.
@@ -100,7 +120,11 @@ export class ScoringAdapter {
       nb[i] = [b[0] * inv, b[1] * inv, b[2] * inv];
       if (nc) nc[i] = Math.min(1, Math.max(0, nc[i]));
     }
-    return { t, bones: nb, conf: nc ?? new Array(BONE_COUNT).fill(1) };
+    // yawMode:"rootYaw" 依赖这个字段,丢了它 alignPlayer 会拿 ?? 0 当基准空转。
+    // 契约 §1:rootYaw = atan2(hipAxis.z, hipAxis.x),hipAxis = right_hip - left_hip(canonical)。
+    const out = { t, bones: nb, conf: nc ?? new Array(BONE_COUNT).fill(1) };
+    if (Number.isFinite(frame.rootYaw)) out.rootYaw = frame.rootYaw;
+    return out;
   }
   _onEvent(r) {
     const tier = String(r.grade).toUpperCase();
