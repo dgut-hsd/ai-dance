@@ -184,7 +184,7 @@ function redraw() {
     const n = state.notes[i];
     const x = noteXCss(n);
     const cw = noteWCss(n);
-    ctx.fillStyle = i === state.sel ? "#ff5c8a" : (n.type === "hold" ? "#ffb347" : "#4cc2ff");
+    ctx.fillStyle = i === state.sel ? "#ff5c8a" : "#4cc2ff";
     ctx.globalAlpha = i === state.sel ? 1 : 0.85;
     ctx.fillRect(x, NOTE_Y, cw, 24);
     ctx.globalAlpha = 1;
@@ -256,7 +256,7 @@ window.addEventListener("pointerup", () => {
 // ---- 音符操作 ----------------------------------------------------------------
 
 function addNote(t) {
-  const n = { id: `m-${Date.now()}`, t: +t.toFixed(3), type: "pose", lane: "body",
+  const n = { id: `m-${Date.now()}`, t: +t.toFixed(3), type: "pose",
     difficulty: state.seq?.meta?.difficulty ?? 2, window: null, bones: null };
   state.notes.push(n);
   selectNote(state.notes.length - 1);
@@ -287,7 +287,7 @@ function fillEveryN(step) {
   const out = [];
   const beats = beatTimes();
   for (let i = 0; i < beats.length; i += step) {
-    out.push({ id: `auto-${i}`, t: beats[i], type: "pose", lane: "body",
+    out.push({ id: `auto-${i}`, t: beats[i], type: "pose",
       difficulty: state.seq?.meta?.difficulty ?? 2, window: null, bones: null });
   }
   state.notes = out;
@@ -328,7 +328,7 @@ function renderProps() {
       <label>时刻(s)</label><input type="number" id="pTime" step="0.01" value="${n.t.toFixed(3)}">
       <label>类型</label><select id="pType">
         <option value="pose"${n.type === "pose" ? " selected" : ""}>pose</option>
-        <option value="hold"${n.type === "hold" ? " selected" : ""}>hold</option>
+        <option value="gesture"${n.type === "gesture" ? " selected" : ""}>gesture</option>
       </select>
       <label>难度</label><input type="number" id="pDiff" step="1" min="1" max="10" value="${n.difficulty ?? 2}">
       <label>判定窗</label><select id="pWin">

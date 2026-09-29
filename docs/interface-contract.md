@@ -4,7 +4,8 @@
 > 本文档是「离线参考序列」与「实时玩家帧」之间的**合同**。两条链路各自把数据
 > 转成同一种帧格式后,评分模块才能直接对它们求差。
 >
-> **冻结记录**:§4.1 `timing/v1` 与 §4.2 `chart/v1` 已于本次修订**冻结为 v1.0**;
+> **冻结记录**:§4.1 `timing/v1` 与 §4.2 `chart/v1` 已于本次修订**冻结为 v1.0**;§4.2 `chart/v2`
+> 为音符类型精简版(仅 `pose`/`gesture`,移除 `beat`/`hold` 与 `lanes`)。
 > 后续变更必须升版本号,不得静默修改。其余 `[待定]` 项维持 DRAFT。
 > 配套音频引擎接口设计见 `docs/audio-engine-api.md`。
 
@@ -196,7 +197,7 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
     "beatTimesSec": [0.0, 0.5, 1.0, 1.5],  // [兼容] 节拍标记,恒等于 timing.beatTimesSec(§4.1)
     "timing": { ... },                     // §4.1 timing/v1(冻结):BPM/变速/拍号/下拍
     "audio": "audio/mixamo-hiphop-001.ogg",// [可选] 歌曲文件,路径相对本 JSON 所在目录
-    "chart": { ... },                      // §4.2 chart/v1(冻结):音符轨道 + 判定窗
+    "chart": { ... },                      // §4.2 chart/v2(冻结):音符轨道 + 判定窗
     "difficulty": 2          // [可选] 1-5,待定分级规则
   },
   "bones": [                 // 骨骼表(名字+端点),冗余存储便于离线端自查
@@ -274,10 +275,12 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 
 ---
 
-## 4.2 谱面 schema(`chart/v1`)—【冻结 v1.0】
+## 4.2 谱面 schema(`chart/v2`)—【冻结 v2.0】
 
 > 音符轨道:在节拍栅格上标出「哪些时刻要做动作判定」。是「跟跳」升级成「音游」的
 > 事件层,与 `score.js` 的连续相似度评分**正交**(连续 = 基底分,音符 = 节奏 bonus + 连击)。
+> v2.0 相比已冻结的 v1.0 精简:音符类型仅保留 `pose`(姿态判定)+ `gesture`(手势舞,引擎待补手部模型),
+> 移除 `beat`/`hold` 及多轨道 `lanes`。判定模型统一为「到点判姿态相似度 + 时机偏移」。
 
 ### 位置
 
@@ -289,7 +292,7 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 
 ```jsonc
 "chart": {
-  "version": "chart/v1",
+  "version": "chart/v2",
   "danceId": "mixamo-hiphop-001",      // [可选] 冗余校验:须与序列文件 danceId 一致
   "audio": "audio/mixamo-hiphop-001.ogg", // 音频文件路径(相对序列文件目录)
   "audioOffsetSec": 0.0,               // 音频里「歌曲 0.000s」对应的采样起点秒数(静音前导/延迟补偿)
@@ -297,11 +300,6 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
   "timingWindows": {                    // 判定窗(秒);缺省 = ±0.050 / ±0.100 / ±0.150
     "perfect": 0.050, "great": 0.100, "good": 0.150
   },
-  "lanes": [                            // [可选] 轨道定义(HUD 显示)
-    { "key": "left-hand",  "label": "左手", "side": "left" },
-    { "key": "right-hand", "label": "右手", "side": "right" },
-    { "key": "body",       "label": "全身", "side": "center" }
-  ],
   "notes": [ /* Note 对象,按 t 升序 */ ]
 }
 ```
@@ -313,36 +311,16 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `t` | number | ✅ | 命中时刻(歌曲时间,秒),`0 <= t <= durationSec` |
-| `type` | string | ✅ | `"beat"` \| `"pose"` \| `"hold"` \| `"gesture"` |
+| `type` | string | ✅ | `"pose"` \| `"gesture"` |
 | `id` | string | ❌ | 稳定 id(编辑器/调试/去重) |
-| `lane` | string | ❌ | 轨道 key,须存在于 `lanes[].key`(若有 `lanes`) |
-
-**`beat`(节奏重音,瞬时)**:
-
-```jsonc
-{ "id": "n001", "t": 1.000, "type": "beat", "lane": "body",
-  "bones": [0, 1, 2, 3, 4],   // [可选] 参与比对的骨骼子集;缺省 = 当前模式全部骨骼
-  "threshold": 0.55 }         // [可选] 命中阈值,覆盖全局判定线
-```
 
 **`pose`(关键姿势)**:
 
 ```jsonc
-{ "id": "n002", "t": 2.500, "type": "pose", "lane": "body",
+{ "id": "n002", "t": 2.500, "type": "pose",
   "refFrameIdx": 120,         // [可选] 参考帧下标;缺省 = round(t * meta.fps)
   "bones": [2, 3],            // [可选] 骨骼子集;缺省 = 全部
   "threshold": 0.7 }
-```
-
-**`hold`(保持动作)**:
-
-```jsonc
-{ "id": "n003", "t": 4.000, "type": "hold", "lane": "body",
-  "endT": 5.500,              // 必填,> t
-  "refFrameIdx": 180,
-  "bones": [2, 3],
-  "threshold": 0.55,          // 起手命中阈值
-  "minHold": 0.45 }           // [可选] 持续期间最低相似度,缺省 = threshold
 ```
 
 **`gesture`(手势舞)**:
@@ -357,27 +335,24 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 
 - 到点 `t` 进入判定窗;`judgeTime = t + 全局offset + judgeOffsetSec`;取该时刻玩家最近一帧。
 - `|命中偏移|` 落窗:≤`perfect`→PERFECT,≤`great`→GREAT,≤`good`→GOOD,否则 MISS(消费该 note)。
-- `beat/pose/gesture`:单次采样即结算。
-- `hold`:起手窗内达标 → 进入 HOLD;之后每 tick 在 `[t, endT]` 采样,跌破 `minHold` 提前结束(GOOD);
-  撑满 → 按区间均值落 tier。
+- `pose/gesture`:单次采样即结算。
 
 ### 不变量(解析时校验,违反即拒)
 
-- `notes` 按 `t` 升序;`hold` 另有 `endT > t`,并列时按 `endT` 升序。
+- `notes` 按 `t` 升序。
 - 所有 `t` ∈ `[0, durationSec]`(越界警告并 clamp)。
 - `refFrameIdx` ∈ `[0, numFrames-1]`;`bones` 下标 ∈ `[0, boneCount-1]`,且与 `meta.danceType` 骨骼表一致。
-- `version` 必须为 `"chart/v1"`;未知版本快速失败。
+- `version` 必须为 `"chart/v1"` 或 `"chart/v2"`;未知版本快速失败。
 
 ### 独立 chart 文件(编辑器交换格式)
 
 ```jsonc
 {
-  "schema": "chart/v1",
+  "schema": "chart/v2",
   "danceId": "mixamo-hiphop-001",
   "sequenceFile": "mixamo-hiphop-001.json",   // 关联的 dance-sequence/v1 文件
   "audio": "audio/mixamo-hiphop-001.ogg",
   "timingWindows": { "perfect": 0.050, "great": 0.100, "good": 0.150 },
-  "lanes": [ /* 同上 */ ],
   "notes": [ /* 同上 */ ]
 }
 ```
@@ -422,7 +397,7 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 | 参考文件放置目录与命名 | 离线端 | 建议 `reference/` |
 | 评分模块如何拿到实时帧(回调签名) | 实时端 | [待定] |
 | `timing/v1` schema(§4.1) | 双方 | ✅ 冻结 v1.0 |
-| `chart/v1` schema(§4.2) | 双方 | ✅ 冻结 v1.0 |
+| `chart/v2` schema(§4.2,posé/gesture 精简版) | 双方 | ✅ 冻结 v2.0(v1.0 淘汰) |
 | 音频文件格式/采样率(建议 ogg/44100Hz)与 `audio` 相对路径约定 | 离线端 | [待定] |
 | 判定窗默认值(±50/100/150ms,§4.2) | 双方 | 建议采用 |
 | 延迟补偿 `offset` 校准流程(`docs/audio-engine-api.md` §3.4) | 双方 | [待定] |

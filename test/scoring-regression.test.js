@@ -8,7 +8,7 @@ import { reconstructJoints } from "../pose_capture/playback.js";
 const bones = Array.from({length:10},()=>[0,1,0]);
 const frame = (t=0) => ({t,bones,conf:Array(10).fill(1)});
 const sequence = () => ({meta:{fps:2,durationSec:1},bones:BONE_DEFS,frames:[frame(0),frame(.5),frame(1)],
-  chart:{version:'chart/v1',notes:[0,.5,1].map((t,i)=>({id:String(i),t,type:'pose',lane:'body'}))}});
+  chart:{version:'chart/v2',notes:[0,.5,1].map((t,i)=>({id:String(i),t,type:'pose'}))}});
 test('zero pose on time is a miss with zero score',()=>{
   const r=scoreEvent({t:1},{t:1,poseScore:0,conf:Array(10).fill(1)},{});
   assert.equal(r.grade,'miss'); assert.equal(r.eventScore,0);
@@ -20,7 +20,7 @@ test('one hit and two misses cannot earn S / 100%; finalize is idempotent',()=>{
   assert.deepEqual(s.finalize(),r);
 });
 test('chart is sole source; final note at duration is settled',()=>{
-  const seq=sequence(); seq.chart.notes=[{id:'end',t:1,type:'pose',lane:'body'}];
+  const seq=sequence(); seq.chart.notes=[{id:'end',t:1,type:'pose'}];
   const s=new ScoringAdapter(seq); s.judge(1,frame(1));
   const r=s.finalize(); assert.equal(r.tallies.perfect,1); assert.equal(r.tallies.miss,0);
 });

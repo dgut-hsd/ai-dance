@@ -1,5 +1,5 @@
 // One chart, one judgement stream for feedback, score and final results.
-// 运行时判定主机:scoring/src 的 ScoringEngine(chart/v1 → 事件 → 流式判定),
+// 运行时判定主机:scoring/src 的 ScoringEngine(chart/v2 → 事件 → 流式判定),
 // 替代 audio.js 的 NoteJudge;姿态匹配复用 poseScore + DEFAULT_BONE_WEIGHTS。
 import { LatencyModel } from "./audio.js";
 import { BONE_DEFS, resolveMode } from "../pose_capture/contract.js";
@@ -16,9 +16,9 @@ export class ScoringAdapter {
     this.fps = sequence.meta?.fps || 30;
     this.defs = sequence.bones || resolveMode(sequence.meta?.danceType).bones;
     this.latency = new LatencyModel();
-    this.chart = sequence.chart || { version: "chart/v1", notes: sequence.frames
+    this.chart = sequence.chart || { version: "chart/v2", notes: sequence.frames
       .filter((_, i) => i % Math.max(1, Math.round(this.fps * .5)) === 0)
-      .map((f, i) => ({ id: `auto-${i}`, t: f.t, type: "pose", lane: "body" })) };
+      .map((f, i) => ({ id: `auto-${i}`, t: f.t, type: "pose" })) };
     this.timingBands = parseTimingWindows(this.chart) ?? undefined;
     try { this.events = parseChart(sequence, this.chart); } catch (e) {
       console.warn("[ScoringAdapter] chart parse failed, judging disabled:", e);

@@ -13,7 +13,7 @@ import { ScoringEngine } from "../src/engine.js";
 const seq = makeReference(STANDARD_BEATS); // fps 30
 
 describe("parseTimingWindows", () => {
-  it("chart/v1 timingWindows -> 引擎 bands", () => {
+  it("chart/v2 timingWindows -> 引擎 bands", () => {
     const bands = parseTimingWindows({ timingWindows: { perfect: 0.06, great: 0.12, good: 0.2 } });
     expect(bands.map((b) => [b.edge, b.grade, b.value])).toEqual([
       [0.06, "perfect", 1],
@@ -46,18 +46,23 @@ describe("parseChart", () => {
     expect(ev[0].difficulty).toBe(2);
     expect(ev[0].moveId).toBe("n0");
   });
-  it("refFrameIdx 缺省 = round(t*fps);beat/hold 同样可解析", () => {
+  it("refFrameIdx 缺省 = round(t*fps);v1 谱面同样兼容解析", () => {
     const ev = parseChart(seq, {
       version: "chart/v1",
       notes: [
-        { id: "b1", t: 1, type: "beat" },
-        { id: "h2", t: 1.5, type: "hold", endT: 2 },
+        { id: "p1", t: 1, type: "pose" },
+        { id: "p2", t: 1.5, type: "pose" },
       ],
     });
     expect(ev[0].refFrameIdx).toBe(30);
-    expect(ev[0].noteType).toBe("beat");
+    expect(ev[0].noteType).toBe("pose");
     expect(ev[1].refFrameIdx).toBe(45);
-    expect(ev[1].noteType).toBe("hold");
+    expect(ev[1].noteType).toBe("pose");
+  });
+  it("未知版本快速失败;v2 谱面正常解析", () => {
+    expect(() => parseChart(seq, { version: "chart/v3", notes: [{ t: 1, type: "pose" }] }))
+      .toThrow(/chart\/v1\|chart\/v2|v[12]/);
+    expect(parseChart(seq, { version: "chart/v2", notes: [{ t: 1, type: "pose" }] })).toHaveLength(1);
   });
   it("bones 子集把其余骨骼权重归零", () => {
     const ev = parseChart(seq, {
@@ -97,21 +102,21 @@ describe("parseChart", () => {
   });
   it("全部 gesture 被跳过 → 抛错", () => {
     expect(() =>
-      parseChart(seq, { version: "chart/v1", notes: [{ t: 1, type: "gesture" }] })
+      parseChart(seq, { version: "chart/v2", notes: [{ t: 1, type: "gesture" }] })
     ).toThrow(/无可用事件/);
   });
   it("非法结构抛错", () => {
     expect(() => parseChart(seq, { notes: [] })).toThrow(/version|schema/);
-    expect(() => parseChart(seq, { version: "chart/v1", schema: "chart/v1" })).toThrow(/notes/);
-    expect(() => parseChart(seq, { version: "chart/v1", notes: [{}] })).toThrow(/合法 t/);
+    expect(() => parseChart(seq, { version: "chart/v2", schema: "chart/v2" })).toThrow(/notes/);
+    expect(() => parseChart(seq, { version: "chart/v2", notes: [{}] })).toThrow(/合法 t/);
     expect(() =>
-      parseChart(seq, { version: "chart/v1", note: "x", notes: [{ t: 1, type: "pose", weights: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }] })
+      parseChart(seq, { version: "chart/v2", note: "x", notes: [{ t: 1, type: "pose", weights: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }] })
     ).toThrow(/权重和须 > 0/);
   });
   it("读取参考序列内嵌 seq.chart(契约权威位置)", () => {
     const withChart = {
       ...seq,
-      chart: { version: "chart/v1", notes: [{ id: "e0", t: 1, type: "pose", refFrameIdx: 30 }] },
+      chart: { version: "chart/v2", notes: [{ id: "e0", t: 1, type: "pose", refFrameIdx: 30 }] },
     };
     const ev = parseChart(withChart, null);
     expect(ev).toHaveLength(1);
@@ -119,7 +124,7 @@ describe("parseChart", () => {
   });
   it("解析独立 chart 文件(schema/sequenceFile 包装,编辑器交换格式)", () => {
     const standalone = {
-      schema: "chart/v1",
+      schema: "chart/v2",
       danceId: seq.danceId,
       sequenceFile: "test-dance.json",
       notes: [{ id: "s0", t: 1, type: "pose" }],
@@ -134,7 +139,7 @@ describe("parseChart", () => {
     ], { seq }));
     const content = serializeChart(events, { seq });
     const standalone = toStandaloneChart(content, { seq });
-    expect(standalone.schema).toBe("chart/v1");
+    expect(standalone.schema).toBe("chart/v2");
     expect(standalone.sequenceFile).toBe(`${seq.danceId}.json`);
     expect(standalone.version).toBeUndefined();
     expect(parseChart(seq, standalone)).toHaveLength(1);
@@ -147,13 +152,13 @@ describe("parseChart", () => {
 });
 
 describe("serializeChart -> parseChart 往返", () => {
-  it("事件导出为 chart/v1 后回读,事件等价", () => {
+  it("事件导出为 chart/v2 后回读,事件等价", () => {
     const events = [
       { t: 0.5, noteType: "pose", refFrameIdx: 15, weights: DEFAULT_BONE_WEIGHTS, difficulty: 2, window: { early: -0.25, late: 0.25 }, moveId: "a" },
-      { t: 1.25, noteType: "beat", refFrameIdx: 38, weights: DEFAULT_BONE_WEIGHTS, difficulty: 3, window: { early: -0.25, late: 0.25 }, moveId: "b" },
+      { t: 1.25, noteType: "pose", refFrameIdx: 38, weights: DEFAULT_BONE_WEIGHTS, difficulty: 3, window: { early: -0.25, late: 0.25 }, moveId: "b" },
     ];
     const chart = serializeChart(events, { seq, source: "annotated" });
-    expect(chart.version).toBe("chart/v1");
+    expect(chart.version).toBe("chart/v2");
     const back = parseChart(seq, chart);
     expect(back).toHaveLength(2);
     for (let i = 0; i < 2; i++) {
@@ -186,7 +191,7 @@ describe("serializeChart -> parseChart 往返", () => {
 describe("引擎消费 parseChart 输出", () => {
   it("沉默帧命中目标 → perfect", () => {
     const chart = {
-      version: "chart/v1",
+      version: "chart/v2",
       notes: [{ t: 1, type: "pose", refFrameIdx: 30, window: { early: -0.2, late: 0.25 } }],
     };
     const events = parseChart(seq, chart);
@@ -207,7 +212,7 @@ describe("引擎消费 parseChart 输出", () => {
   });
   it("窗口外玩家帧 → miss(事件在 ingest 时刻即结算)", () => {
     const chart = {
-      version: "chart/v1",
+      version: "chart/v2",
       notes: [{ t: 1, type: "pose", refFrameIdx: 30 }],
     };
     const events = parseChart(seq, chart);

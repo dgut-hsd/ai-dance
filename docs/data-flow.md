@@ -79,7 +79,7 @@
 
 - `refFrameIdx` → "判哪一帧"（缺省 `round(t*fps)`）；`bones` → "判哪些骨"；`threshold` → 达线标准。
 - 姿态数据仍在参考文件，chart 只引用索引 —— **音符判定 = chart + 参考文件 + 玩家帧 三方协同**。
-- 权威位置 = 参考文件内嵌 `seq.chart`；独立 `reference/<danceId>.chart.json` 仅作编辑器交换格式（`{schema:"chart/v1", sequenceFile,...}`），导出时合并回内嵌。
+- 权威位置 = 参考文件内嵌 `seq.chart`；独立 `reference/<danceId>.chart.json` 仅作编辑器交换格式（`{schema:"chart/v2", sequenceFile,...}`），导出时合并回内嵌。
 
 ### timing：节拍栅格（时间维坐标系）
 

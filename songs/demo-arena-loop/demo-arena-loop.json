@@ -48378,7 +48378,7 @@
     }
   ],
   "chart": {
-    "version": "chart/v1",
+    "version": "chart/v2",
     "audio": "demo-beat.wav",
     "notes": [
       {

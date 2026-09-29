@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-detect_beats.py — 离线节拍检测:音频 → timing/v1(可选 chart/v1)。
+detect_beats.py — 离线节拍检测:音频 → timing/v1(可选 chart/v2)。
 
 依赖 numpy;WAV 用标准库读取,mp3/ogg/flac/m4a 用 miniaudio(pip install miniaudio)。
 算法(无 librosa/aubio/scipy):
@@ -221,8 +221,8 @@ def make_chart(audio_path, timing, notes_per_bar=1, beats_per_bar=4):
         for k in range(notes_per_bar):
             t = bar_t + k * period
             if t <= dbs[-1] + period:
-                notes.append({"id": f"n-{round(t, 3)}", "t": round(t, 3), "type": "pose", "lane": "body"})
-    return {"version": "chart/v1", "audio": audio_path, "notes": notes}
+                notes.append({"id": f"n-{round(t, 3)}", "t": round(t, 3), "type": "pose"})
+    return {"version": "chart/v2", "audio": audio_path, "notes": notes}
 
 
 def selftest():
@@ -243,7 +243,7 @@ def selftest():
 
 
 def main(argv):
-    ap = argparse.ArgumentParser(description="音频 → timing/v1(可选 chart/v1)")
+    ap = argparse.ArgumentParser(description="音频 → timing/v1(可选 chart/v2)")
     ap.add_argument("--selftest", action="store_true", help="校验内置 WAV 的 BPM 恢复")
     ap.add_argument("audio", nargs="?", help="输入 WAV 文件(selftest 时可省略)")
     ap.add_argument("--out", help="timing JSON 输出路径(缺省打印到 stdout)")

@@ -181,14 +181,14 @@ export class TimingMap {
 }
 
 // ---------------------------------------------------------------------------
-// NoteChart — chart/v1 谱面解析 + 时间窗查询
+// NoteChart — chart/v2 谱面解析 + 时间窗查询(v1 兼容)
 // ---------------------------------------------------------------------------
 export const DEFAULT_WINDOWS_MS = Object.freeze({ perfect: 50, great: 100, good: 150 });
 
 export class NoteChart {
   constructor(chart, durationSec = Infinity) {
-    if (!chart || chart.version !== "chart/v1") {
-      throw new Error(`chart version must be "chart/v1", got "${chart?.version}"`);
+    if (!chart || !/^chart\/v[12]$/.test(String(chart.version))) {
+      throw new Error(`chart version must be "chart/v1" or "chart/v2", got "${chart?.version}"`);
     }
     this.chart = chart;
     this.durationSec = durationSec;
@@ -207,14 +207,11 @@ export class NoteChart {
       const n = this.notes[i];
       if (typeof n.t !== "number") throw new Error("note.t must be a number");
       if (i > 0 && n.t < this.notes[i - 1].t) {
-        throw new Error("chart/v1 notes must be sorted ascending by t");
-      }
-      if (n.type === "hold" && !(n.endT > n.t)) {
-        throw new Error("hold note endT must be > t");
+        throw new Error("chart notes must be sorted ascending by t");
       }
       // 越界:警告 + clamp(不破坏排序)
       if (n.t < 0 || n.t > durationSec) {
-        console.warn(`chart/v1 note t=${n.t} out of [0, ${durationSec}], clamped`);
+        console.warn(`chart/v2 note t=${n.t} out of [0, ${durationSec}], clamped`);
         n.t = clamp(n.t, 0, durationSec);
       }
     }
@@ -617,7 +614,7 @@ export class NoteJudge {
     return this.latency.judgeTimeAt(t + this.chart.judgeOffsetSec);
   }
 
-  // 每帧(或每 tick)驱动;返回本 tick 新产生的判定(含 hold 进行中)
+  // 每帧(或每 tick)驱动;返回本 tick 新产生的判定
   tick(songTime) {
     const out = [];
     const goodSec = this.windowsMs.good / 1000;
@@ -626,54 +623,19 @@ export class NoteJudge {
       const st = this._states[i];
       const judgeTime = this._judgeTimeAt(note.t);
 
-      if (note.type === "hold") {
-        const minHold = note.minHold ?? note.threshold ?? this.defaultThreshold;
-        if (st.phase === "pending" && songTime >= judgeTime + goodSec) {
-          const start = this._bestInWindow(note, judgeTime, goodSec);
-          const th = note.threshold ?? this.defaultThreshold;
-          if (!start || start.acc < th) {
-            out.push(this._settle(i, note, { tier: "MISS", acc: start?.acc ?? 0, deltaSec: start?.deltaSec ?? 0 }));
-          } else {
-            st.phase = "active";
-            st.minAcc = start.acc;
-            st.startTier = tierFromTiming(start.deltaSec, this.windowsMs);
-            st.broke = false;
-            out.push(this._makeResult(note, st.startTier, start.acc, start.deltaSec, true));
-          }
-        } else if (st.phase === "active") {
-          const cur = this.buffer.sampleNearest(this._judgeTimeAt(songTime), goodSec);
-          if (cur) {
-            const acc = this._compare(this.refAt(songTime, note), cur.frame, note);
-            if (acc < st.minAcc) st.minAcc = acc;
-            if (acc < minHold) st.broke = true;
-          } else { st.broke = true; st.minAcc = 0; }
-          if (songTime >= this._judgeTimeAt(note.endT) + goodSec) {
-            let tier;
-            if (st.broke) tier = "GOOD";
-            else if (st.minAcc >= PERFECT_ACC) tier = "PERFECT";
-            else if (st.minAcc >= GREAT_ACC) tier = "GREAT";
-            else tier = "GOOD";
-            tier = minTier(st.startTier, tier);
-            out.push(this._settle(i, note, { tier, acc: st.minAcc, deltaSec: 0 }));
-          } else {
-            out.push(this._makeResult(note, tierFromAcc(st.minAcc, minHold), st.minAcc, 0, true));
-          }
+      if (st.phase === "pending" && songTime >= judgeTime + goodSec) {
+        const best = this._bestInWindow(note, judgeTime, goodSec);
+        const th = note.threshold ?? this.defaultThreshold;
+        let r;
+        if (!best) {
+          r = this._settle(i, note, { tier: "MISS", acc: 0, deltaSec: 0 });
+        } else if (best.acc < th) {
+          r = this._settle(i, note, { tier: "MISS", acc: best.acc, deltaSec: best.deltaSec });
+        } else {
+          const tier = minTier(tierFromTiming(best.deltaSec, this.windowsMs), tierFromAcc(best.acc, th));
+          r = this._settle(i, note, { tier, acc: best.acc, deltaSec: best.deltaSec });
         }
-      } else {
-        if (st.phase === "pending" && songTime >= judgeTime + goodSec) {
-          const best = this._bestInWindow(note, judgeTime, goodSec);
-          const th = note.threshold ?? this.defaultThreshold;
-          let r;
-          if (!best) {
-            r = this._settle(i, note, { tier: "MISS", acc: 0, deltaSec: 0 });
-          } else if (best.acc < th) {
-            r = this._settle(i, note, { tier: "MISS", acc: best.acc, deltaSec: best.deltaSec });
-          } else {
-            const tier = minTier(tierFromTiming(best.deltaSec, this.windowsMs), tierFromAcc(best.acc, th));
-            r = this._settle(i, note, { tier, acc: best.acc, deltaSec: best.deltaSec });
-          }
-          out.push(r);
-        }
+        out.push(r);
       }
     }
     for (const r of out) this.onJudgement?.(r);
@@ -735,10 +697,6 @@ export class NoteJudge {
     }
     this._stats[tier.toLowerCase()]++;
     return { noteId: note.id, noteType: note.type, tier, acc, deltaSec, combo: this.combo, score };
-  }
-
-  _makeResult(note, tier, acc, deltaSec, ongoing) {
-    return { noteId: note.id, noteType: note.type, tier, acc, deltaSec, combo: this.combo, score: 0, ongoing };
   }
 
   finish() {
