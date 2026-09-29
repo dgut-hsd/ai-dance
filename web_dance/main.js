@@ -107,6 +107,7 @@ const dom = {
   songPick: $("song-pick"),
   songPickStrip: $("song-pick-strip"),
   ready: $("ready"),
+  readyBackdrop: $("ready-backdrop"),
   readySong: $("ready-song"),
   readyGo: $("ready-go"),
   result: $("result"),
@@ -449,6 +450,7 @@ function setMode(mode) {
   dom.songPicker.classList.toggle("hidden", !isChallenge);
   dom.animPicker.classList.toggle("hidden", !isPerformance);
   document.body.classList.toggle("pk-mode", isPk);
+  scene.setSplitLayout(isPk);
   if (isChallenge && !state.challenge) {
     rebuildChallenge().catch((e) => setStatus("舞曲加载失败:" + e.message));
   }
@@ -476,7 +478,7 @@ function layoutForMode() {
     state.avatar.object.visible = false;
     if (state.coach) {
       state.coach.object.visible = true;
-      state.coach.object.position.x = 1.6;
+      state.coach.object.position.x = 0;
     }
     scene.camera.position.set(0, 1.9, 6.6);
     scene.controls.target.set(0, 0.95, 0);
@@ -608,8 +610,7 @@ function layoutCards() {
 }
 
 async function seqFor(entry) {
-  if (entry.dance.kind === "fbx") return loadFbxSequence(entry.dance.fbx, entry.song);
-  return applySongToSequence(buildDemoSequence(), entry.song);
+  return loadSequence(entry.dance.danceId);
 }
 
 async function enterSelect() {
@@ -619,8 +620,10 @@ async function enterSelect() {
   clearInterval(cardAnimTimer);
   state.select.player = null;
   document.body.classList.add("pk-mode");
+  scene.setSplitLayout(true);
   // 选曲态只留:摄像头 + 教练 + 卡片;其余 HUD 收起
   dom.result.classList.add("hidden");
+  closeReady();
   dom.scorePanel.classList.add("hidden");
   dom.refPanel.classList.add("hidden");
   dom.controls.classList.add("hidden");
@@ -637,8 +640,8 @@ async function enterSelect() {
   layoutForMode(); // pk 布局:隐藏玩家 3D,显示教练
 
   // 预载全部舞曲序列,试跳/开始都即时
-  const entries = CHALLENGE_DANCES.map((dance) => {
-    const song = SONGS.find((s) => s.id === dance.defaultSongId) || SONGS[0];
+  const entries = dances().map((dance) => {
+    const song = songById(dance.defaultSongId) || songs()[0];
     return { dance, song, skin: SELECT_SKIN[dance.id] || SELECT_SKIN.demo, seq: null, el: null };
   });
   await Promise.all(entries.map(async (e) => { e.seq = await seqFor(e); }));
@@ -649,7 +652,7 @@ async function enterSelect() {
   dom.songPick.classList.remove("hidden");
   startAttract(0);
   await startCamera();
-  setStatus("选一支舞 · 悬停试跳 · 双击开始");
+  setStatus("选一支舞 · 单击预览 · 双击准备开始");
 }
 
 function buildSelectCards() {
@@ -668,12 +671,11 @@ function buildSelectCards() {
         <div class="sc-title">${e.dance.label}</div>
         <div class="sc-meta">♪ ${e.song.label} · BPM ${e.song.bpm}</div>
       </div>`;
-    card.addEventListener("mouseenter", () => preview(i));
-    card.addEventListener("mouseleave", () => startAttract(state.select.selected));
     card.addEventListener("click", () => {
-      if (state.select.selected === i) startSong(i); // 再点一次选中卡 = 开始(不用挪鼠标)
-      else { selectCard(i); preview(i); }
+      selectCard(i);
+      preview(i);
     });
+    card.addEventListener("dblclick", () => openReady(i));
     dom.songPickStrip.appendChild(card);
     e.el = card;
   });
@@ -684,13 +686,28 @@ function selectCard(i) {
   state.select.selected = i;
   state.select.entries.forEach((e, k) => e.el.classList.toggle("selected", k === i));
   layoutCards();
-  // 弹出「准备开始」面板(烫金卡片)
+}
+
+function openReady(i) {
+  selectCard(i);
   const e = state.select.entries[i];
   if (e) {
     dom.readySong.textContent = `${e.dance.label} · ${e.song.label} · BPM ${e.song.bpm}`;
+    dom.readyBackdrop.classList.remove("hidden");
     dom.ready.classList.remove("hidden");
+    dom.readyGo.focus();
   }
 }
+
+function closeReady() {
+  dom.ready.classList.add("hidden");
+  dom.readyBackdrop.classList.add("hidden");
+}
+
+dom.readyBackdrop.addEventListener("click", closeReady);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !dom.ready.classList.contains("hidden")) closeReady();
+});
 
 function preview(i) {
   const e = state.select.entries[i];
@@ -721,7 +738,7 @@ function startSong(i) {
   clearTimeout(state.select.revertTimer);
   clearInterval(cardAnimTimer);
   dom.songPick.classList.add("hidden");
-  dom.ready.classList.add("hidden");
+  closeReady();
   dom.controls.classList.toggle("hidden", !debugMode); // 只有工作人员模式才显示底部控制条
   state.challengeDanceId = e.dance.id;
   state.challengeSongId = e.song.id;

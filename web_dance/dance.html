@@ -9,6 +9,7 @@
   </head>
   <body>
     <canvas id="stage"></canvas>
+    <div id="stage-bridge" aria-hidden="true"></div>
     <canvas id="fx"></canvas>
 
     <!-- 顶栏(玩家默认隐藏,工作人员按 D 显示) -->
@@ -123,12 +124,14 @@
     <!-- 选曲(整合进 PK 页):大标语 + 海报卡片条 -->
     <div id="song-pick" class="hidden">
       <div id="song-pick-title">来跳舞！</div>
+      <div id="song-pick-hint">单击预览 · 双击准备开始</div>
       <div id="song-pick-strip"></div>
     </div>
 
     <!-- 准备开始(选中卡片后弹出) -->
-    <div id="ready" class="hidden">
-      <div class="ready-title">准备开始</div>
+    <div id="ready-backdrop" class="hidden" aria-hidden="true"></div>
+    <div id="ready" class="hidden" role="dialog" aria-modal="true" aria-labelledby="ready-title">
+      <div class="ready-title" id="ready-title">准备开始</div>
       <div class="ready-song" id="ready-song">—</div>
       <label class="ready-consent"><input id="highlight-record-consent" type="checkbox" checked> 录制我的高光时刻</label>
       <button id="ready-go">开始挑战</button>

@@ -31,6 +31,29 @@ html, body {
   display: block;
 }
 
+#stage-bridge { display: none; }
+
+.pk-mode #stage-bridge {
+  position: fixed;
+  display: block;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 30% 7% at 72% 74%, rgba(77,124,255,0.12), transparent 75%),
+    linear-gradient(90deg, rgba(6,9,20,0.18) 0%, transparent 45%, transparent 100%);
+}
+.pk-mode #stage-bridge::after {
+  content: "";
+  position: absolute;
+  left: 30%;
+  right: 3%;
+  top: 74%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(57,255,207,0.16) 18%, rgba(77,124,255,0.34) 66%, transparent);
+  box-shadow: 0 0 13px rgba(77,124,255,0.2);
+}
+
 /* 全屏动效层(juice):冲击波/火花/闪光,叠加在画面最上层,不拦截鼠标 */
 #fx {
   position: fixed;
@@ -341,11 +364,43 @@ html, body {
   backdrop-filter: blur(8px);
 }
 .pk-mode #cam-panel {
-  left: 2vw;
+  left: 2.5vw;
   top: 50%;
   bottom: auto;
-  width: clamp(360px, min(44vw, 74vh), 960px);
+  width: min(39vw, 72vh);
   transform: translateY(-50%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.pk-mode .cam-banner {
+  position: absolute;
+  left: 8px;
+  top: -34px;
+  z-index: 2;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.pk-mode .cam-banner-title { font-size: 13px; letter-spacing: 1px; text-shadow: 0 0 12px rgba(57,255,207,0.5); }
+.pk-mode #cam-wrap {
+  border: 0;
+  border-radius: 3px;
+  box-shadow: 0 16px 42px rgba(0,0,0,0.28);
+  -webkit-mask-image: radial-gradient(ellipse 110% 110% at 0% 30%, #000 0 66%, transparent 100%);
+  mask-image: radial-gradient(ellipse 110% 110% at 0% 30%, #000 0 66%, transparent 100%);
+}
+.pk-mode .cam-corner, .pk-mode .cam-seal { display: none; }
+.pk-mode #ref-panel,
+.pk-mode #score-panel {
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(90deg, transparent, rgba(5,9,22,0.65));
+  box-shadow: none;
+  backdrop-filter: none;
 }
 /* 招牌横幅(金箔描边) */
 .cam-banner {
@@ -897,6 +952,15 @@ html, body {
   0%, 100% { transform: translateX(-50%) scale(1); }
   50% { transform: translateX(-50%) scale(1.05); }
 }
+#song-pick-hint {
+  position: absolute;
+  right: 24px;
+  bottom: 365px;
+  color: rgba(232,237,255,0.82);
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.85);
+}
 #song-pick-strip {
   position: absolute; right: 24px; bottom: 22px;
   width: 0; height: 330px;
@@ -972,6 +1036,7 @@ html, body {
 
 @media (max-width: 900px) {
   #song-pick-title { font-size: 64px; top: 70px; }
+  #song-pick-hint { bottom: 300px; }
   .song-card { width: 168px; height: 236px; }
   #song-pick-strip { height: 270px; bottom: 16px; }
   .sc-title { font-size: 16px; }
@@ -979,10 +1044,19 @@ html, body {
 }
 
 /* 准备开始:烫金卡片(黑底 + 缎面金箔,亮而不刺眼) */
+#ready-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: rgba(2, 4, 13, 0.36);
+  backdrop-filter: blur(2px);
+}
 #ready {
-  position: fixed; right: 24px; bottom: 384px;
+  position: fixed;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
   z-index: 36;
-  width: 324px;
+  width: min(360px, calc(100vw - 32px));
   padding: 20px 22px 18px;
   display: flex; flex-direction: column; align-items: center; gap: 9px;
   border-radius: 10px;
@@ -1049,8 +1123,8 @@ html, body {
 #ready-go:hover { filter: brightness(1.06); transform: translateY(-1px); }
 #ready-go:active { transform: translateY(2px); border-bottom-width: 2px; }
 @keyframes readyIn {
-  0% { opacity: 0; transform: translateY(24px) scale(0.9); }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+  0% { opacity: 0; transform: translate(-50%, calc(-50% + 24px)) scale(0.9); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 .hidden { display: none !important; }
