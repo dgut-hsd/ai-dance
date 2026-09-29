@@ -135,28 +135,64 @@ export function createScene(canvas) {
 }
 
 // ---------------------------------------------------------------------------
-// 地板 + 边缘灯带 + 脚下光池
+// 切角主舞台 + 分区台面 + 侧面灯槽 + 脚下光池
 // ---------------------------------------------------------------------------
 function buildFloor() {
   const g = new THREE.Group();
+  const sides = 8;
+  const startAngle = Math.PI / sides;
 
-  const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(6.5, 72),
-    new THREE.MeshStandardMaterial({ color: 0x0a0d16, roughness: 0.38, metalness: 0.6 })
+  // 上窄下宽的两级切面形成真正的舞台轮廓，台面仍位于 y=0。
+  const deck = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.55, 5.9, 0.12, sides, 1, false, startAngle),
+    [
+      new THREE.MeshStandardMaterial({ color: 0x29405a, roughness: 0.38, metalness: 0.72 }),
+      new THREE.MeshStandardMaterial({ color: 0x0b1020, roughness: 0.45, metalness: 0.55 }),
+      new THREE.MeshStandardMaterial({ color: 0x080b14, roughness: 0.7, metalness: 0.3 }),
+    ]
   );
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  g.add(floor);
+  deck.position.y = -0.06;
+  deck.receiveShadow = true;
+  g.add(deck);
 
-  const edge = new THREE.Mesh(
-    new THREE.TorusGeometry(5.7, 0.02, 16, 128),
-    new THREE.MeshStandardMaterial({
-      color: 0x000000, emissive: 0x39ffcf, emissiveIntensity: 1.6, roughness: 0.5, metalness: 0,
-    })
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.9, 6.15, 0.28, sides, 1, false, startAngle),
+    [
+      new THREE.MeshStandardMaterial({ color: 0x142138, roughness: 0.5, metalness: 0.65 }),
+      new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.5, metalness: 0.5 }),
+      new THREE.MeshStandardMaterial({ color: 0x070c15, roughness: 0.75, metalness: 0.25 }),
+    ]
   );
-  edge.rotation.x = -Math.PI / 2;
-  edge.position.y = 0.012;
-  g.add(edge);
+  base.position.y = -0.26;
+  g.add(base);
+
+  // 外圈八块深浅交错的饰板，中央留给舞者，避免纹理干扰动作。
+  const panelMaterials = [0x141e34, 0x18243a].map((color) =>
+    new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.38, side: THREE.DoubleSide })
+  );
+  const topLight = new THREE.MeshBasicMaterial({ color: 0x50d9dc, transparent: true, opacity: 0.72 });
+  const sideLight = new THREE.MeshBasicMaterial({ color: 0x338fae, transparent: true, opacity: 0.7 });
+  for (let i = 0; i < sides; i++) {
+    const a = startAngle + i * Math.PI * 2 / sides;
+    const b = startAngle + (i + 1) * Math.PI * 2 / sides;
+    const gap = 0.025;
+    const points = [
+      [3.35, a + gap], [5.08, a + gap],
+      [5.08, b - gap], [3.35, b - gap],
+    ];
+    const positions = new Float32Array(points.flatMap(([r, theta]) => [r * Math.sin(theta), 0.008, r * Math.cos(theta)]));
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setIndex([0, 1, 2, 0, 2, 3]);
+    geometry.computeVertexNormals();
+    const panel = new THREE.Mesh(geometry, panelMaterials[i % 2]);
+    panel.receiveShadow = true;
+    g.add(panel);
+
+    const edgePoint = (radius, theta, y) => new THREE.Vector3(radius * Math.sin(theta), y, radius * Math.cos(theta));
+    addLightBar(g, edgePoint(5.45, a + gap, 0.022), edgePoint(5.45, b - gap, 0.022), 0.022, topLight);
+    addLightBar(g, edgePoint(5.99, a + 0.13, -0.245), edgePoint(5.99, b - 0.13, -0.245), 0.035, sideLight);
+  }
 
   // 脚下光池:饱和青色,additive
   const pool = new THREE.Mesh(
@@ -171,6 +207,14 @@ function buildFloor() {
   g.add(pool);
 
   return g;
+}
+
+function addLightBar(group, from, to, radius, material) {
+  const direction = new THREE.Vector3().subVectors(to, from);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, direction.length(), 6), material);
+  bar.position.copy(from).add(to).multiplyScalar(0.5);
+  bar.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  group.add(bar);
 }
 
 // ---------------------------------------------------------------------------
