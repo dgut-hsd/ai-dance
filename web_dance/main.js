@@ -20,13 +20,10 @@ import { SongSession, AudioEngine } from "./audio.js";
 import { HighlightController } from "./highlights.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
 import { loadSongIndex, dances, songs, danceById, songById, loadSequence } from "./song-library.js";
-
-// 动作预期(Just Dance 式右侧滚动列):把谱面音符当作"动作时刻",按时间差换算成纵向位移。
-const MOVE_NOW_LINE_Y = 10;          // "现在"判定线距滚动区顶部的像素
-const MOVE_FALLBACK_INTERVAL = 2.0;  // 无谱面时,按此固定间隔生成动作时刻
-const MOVE_HORIZON = 3;              // 最多展示接下来 N 个动作
-const MOVE_EXIT_SEC = 0.45;          // 卡片滑过判定线后的淡出时长
-const MOVE_ENTER_SEC = 0.30;         // 新卡片淡入时长
+import { parseChart } from "../scoring/src/chartCodec.js";
+import {
+  createSilhouetteRenderer, renderSilhouetteFrame, canvasToPng, pickSignatureTimes,
+} from "./silhouette.js";
 
 // ---------------------------------------------------------------------------
 // 状态
@@ -76,8 +73,6 @@ const dom = {
   cam: $("cam"),
   camStick: $("cam-stick"),
   camWrap: $("cam-wrap"),
-  refPanel: $("ref-panel"),
-  moveTrack: $("move-track"),
   beats: $("beats"),
   scorePanel: $("score-panel"),
   grade: $("grade"),
@@ -106,6 +101,11 @@ const dom = {
   centerMsgText: $("center-msg-text"),
   songPick: $("song-pick"),
   songPickStrip: $("song-pick-strip"),
+  poseHint: $("pose-hint"),
+  judgeStage: $("judge-stage"),
+  judgeTrack: $("judge-track"),
+  poseHintFill: $("pose-hint-fill"),
+  poseHintName: $("pose-hint-name"),
   ready: $("ready"),
   readyBackdrop: $("ready-backdrop"),
   readySong: $("ready-song"),
@@ -330,6 +330,8 @@ function renderLoop() {
       const t = state.challenge.session?.songTime ?? 0;
       state.coachPlayer.update(t);
     }
+    // 右下判定轨道:剪影从右往左流入判定平台,抵达平台即消失
+    updatePoseLane();
     if (lastCaptureToRender != null) {
       renderPerf.record("captureToRenderSubmit", performance.now() - lastCaptureToRender);
       lastCaptureToRender = null;
@@ -444,7 +446,6 @@ function setMode(mode) {
   const isPk = mode === "pk";
   const isPerformance = mode === "performance";
   dom.scorePanel.classList.toggle("hidden", !isChallenge);
-  dom.refPanel.classList.toggle("hidden", !isChallenge);
   dom.btnLoadRef.classList.toggle("hidden", !isChallenge || isPk);
   dom.dancePicker.classList.toggle("hidden", !isChallenge);
   dom.songPicker.classList.toggle("hidden", !isChallenge);
@@ -540,6 +541,50 @@ const SILHOUETTES = {
   salsa: "assets/silhouettes/salsa.png",
 };
 
+// ---------------------------------------------------------------------------
+// 页面内剪影兜底:没有预生成 PNG(或加载失败)时,直接用当前舞者的 3D 模型
+// 离屏渲染一张白影。核心逻辑来自 tools/gen-silhouettes.mjs,提取成 web_dance/silhouette.js。
+// 只在真的需要时才建渲染器(会多占一个 WebGL 上下文),用完把模型放回主场景。
+// ---------------------------------------------------------------------------
+let silhouetteRenderer = null;
+
+function ensureSilhouetteRenderer() {
+  if (!silhouetteRenderer) silhouetteRenderer = createSilhouetteRenderer({ size: 512 });
+  return silhouetteRenderer;
+}
+
+// 挑该序列最展开的「招牌动作」时刻,渲染成 PNG dataURL;失败返回 null
+function inPageSilhouette(entry) {
+  const avatar = state.avatar;
+  if (!avatar || !entry?.seq || state.running) return null; // 正在跳的时候别动玩家的模型
+  const seq = entry.seq;
+  const bones = resolveMode(state.danceType).bones;
+  const jointsAt = (frame) => reconstructJoints(frame, seq.meta?.dimensions, seq.bones);
+  const sig = pickSignatureTimes(seq, jointsAt, { count: 1 })[0];
+  const t = sig ? sig.t : (seq.meta?.durationSec || 1) * 0.3;
+
+  const sil = ensureSilhouetteRenderer();
+  const home = scene.scene;
+  let dataUrl = null;
+  try {
+    sil.attach(avatar.object);       // 借到离屏场景
+    sil.whiten(avatar.object);       // 纯白材质
+    const canvas = renderSilhouetteFrame({
+      sil, object3D: avatar.object, skeletons: avatar.skeletons,
+      retargeter: avatar.retargeter, seq, t, boneDefs: bones,
+    });
+    dataUrl = canvasToPng(canvas);
+  } catch (e) {
+    console.warn("[silhouette] 页面内渲染失败:", e);
+  } finally {
+    sil.restoreMaterials();
+    home.add(avatar.object);         // 放回主场景
+    avatar.retargeter.reset();       // 还原休息姿态,别影响后续显示
+    avatar.skeletons?.forEach((s) => s.update());
+  }
+  return dataUrl;
+}
+
 // 循环播放序列(吸引态 / 试跳),教练原地跟跳不消费根运动
 function makeLoopCoachPlayer(seq, retargeter, boneDefs) {
   const frames = seq.frames || [];
@@ -568,6 +613,303 @@ function drawCardFrame(canvas, seq, t) {
 
 function drawCardSilhouette(canvas, seq) {
   drawCardFrame(canvas, seq, (seq.meta?.durationSec || 1) * 0.3);
+}
+
+// ---------------------------------------------------------------------------
+// 右下判定轨道(Just Dance 式):剪影从右往左流入判定平台,抵达平台的那一瞬间剪影消失。
+// 数据与判定共用同一份谱面(chart/v1 → 判定事件):谱面上的动作点时刻 = 剪影抵达平台的时刻。
+// ---------------------------------------------------------------------------
+const LANE_LEAD_SEC = 2.4;   // 剪影从右侧入场、滑到判定平台所需的时长(= 提前量)
+const LANE_ARRIVE_X = 46;    // 判定平台中心的横坐标(轨道内像素)
+const LANE_FIG_W = 98;       // 单个剪影宽度
+const LANE_FIG_H = 142;      // 单个剪影高度
+const LANE_MOTION_LOOKBACK = 0.4; // 箭头方向:比较动作点与它前 0.4s 的姿势
+const LANE_MOTION_MIN = 0.06;     // 关节位移小于此值视为"定住造型",不标箭头
+
+const poseHintCache = new WeakMap(); // seq -> 动作事件数组
+const laneFigs = new Map();          // "t" -> { el, arrived }
+let laneLabel = "";                  // 上次写入的标签文本
+let laneProgress = -1;               // 上次写入的进度条数值
+let laneStageLift = -1;              // 上次写入的判定平台律动位移
+// 排查性能用:?nohint=1 可整体关掉右下角判定轨道,便于对比帧率
+const poseHintDisabled = new URLSearchParams(location.search).get("nohint") === "1";
+
+function poseEventsFor(seq) {
+  if (!seq) return [];
+  if (poseHintCache.has(seq)) return poseHintCache.get(seq);
+  let events = [];
+  try {
+    events = parseChart(seq, seq.chart);
+  } catch {
+    events = [];
+  }
+  // 没有谱面时回退:每 0.5s 采一帧当动作点
+  if (!events.length && seq.frames?.length) {
+    const fps = seq.meta?.fps || 30;
+    const step = Math.max(1, Math.round(fps * 0.5));
+    events = seq.frames.filter((_, i) => i % step === 0).map((f) => ({ t: f.t }));
+  }
+  poseHintCache.set(seq, events);
+  return events;
+}
+
+// 参考序列里最接近 t 的一帧(导出可能缺帧,按时间戳二分而不是按 fps 下标)
+function frameAtTime(seq, t) {
+  const frames = seq?.frames || [];
+  if (!frames.length) return null;
+  let lo = 0, hi = frames.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (frames[mid].t < t) lo = mid + 1; else hi = mid; }
+  if (!lo) return frames[0];
+  if (lo >= frames.length) return frames[frames.length - 1];
+  return t - frames[lo - 1].t <= frames[lo].t - t ? frames[lo - 1] : frames[lo];
+}
+
+// 当前在跳哪支舞、跳到第几秒(选曲试跳 / 正式挑战都算;表演模式不显示)
+function activePoseSource() {
+  if (state.phase === "select") {
+    const e = state.select.entries[state.select.selected];
+    if (!e?.seq) return null;
+    // 吸引态/试跳是循环播放,时钟要对时长取模,否则播过一轮后提示会停在最后一个动作
+    return { seq: e.seq, t: state.select.clock % (e.seq.meta?.durationSec || 1) };
+  }
+  if (state.mode === "challenge" || state.mode === "pk") {
+    const ch = state.challenge;
+    if (ch?.seq) return { seq: ch.seq, t: ch.running ? (ch.session?.songTime ?? 0) : 0 };
+  }
+  return null;
+}
+
+// 拍长(秒):优先序列拍栅格,其次 bpm,最后 0.5s
+function beatDurFor(seq) {
+  const beats = seq?.meta?.beatTimesSec;
+  if (beats && beats.length > 1) {
+    const d = beats[1] - beats[0];
+    if (d > 0.05) return d;
+  }
+  const bpm = seq?.meta?.timing?.bpm || seq?.meta?.bpm;
+  if (bpm > 0) return 60 / bpm;
+  return 0.5;
+}
+
+function laneRemove(key) {
+  const fig = laneFigs.get(key);
+  if (!fig) return;
+  fig.el.remove();
+  laneFigs.delete(key);
+}
+
+function laneClear() {
+  for (const key of [...laneFigs.keys()]) laneRemove(key);
+}
+
+// 造一张剪影:只画动作的真实姿势(不做镜像)——单手上举的动作就该只有那只手举着。
+// 同时算出这个动作"哪个部位往哪动",在旁边标一支方向箭头(上举 → 向上箭头,下蹲 → 向下箭头)。
+function laneMakeFig(key, ev, seq, dpr) {
+  const el = document.createElement("div");
+  el.className = "lane-fig";
+  el.style.width = LANE_FIG_W + "px";
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(LANE_FIG_W * dpr);
+  canvas.height = Math.round(LANE_FIG_H * dpr);
+  el.appendChild(canvas);
+  dom.judgeTrack.appendChild(el);
+  const nodeT = ev.targetT ?? ev.t;
+  const frame = frameAtTime(seq, nodeT);
+  if (frame) {
+    const joints = reconstructJoints(frame, seq.meta?.dimensions, seq.bones);
+    renderPoseSilhouette(canvas, joints, seq.bones, { color: "#ffd7a6" });
+    const arrow = laneMotionArrow(seq, nodeT, joints, dpr);
+    if (arrow) el.appendChild(arrow);
+  }
+  const fig = { el, arrived: false };
+  laneFigs.set(key, fig);
+  return fig;
+}
+
+// 剪影渲染器内部的"姿势包围盒 → 画布像素"映射(与 stick-figure.js 的常量保持一致),
+// 用它把"正在动的那个关节"换算到画布坐标,箭头才能贴在动作旁边而不是乱飘。
+const ARROW_MAP_JOINTS = [
+  "left_shoulder", "left_elbow", "left_wrist",
+  "right_shoulder", "right_elbow", "right_wrist",
+  "left_hip", "left_knee", "left_ankle",
+  "right_hip", "right_knee", "right_ankle",
+  "nose",
+];
+const ARROW_PAD_FRAC = 0.10;
+
+function laneJointToPixel(joints, name, dpr) {
+  const pts = ARROW_MAP_JOINTS.map((n) => joints[n]).filter(Boolean);
+  if (!pts.length || !joints[name]) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p[0] < minX) minX = p[0];
+    if (p[0] > maxX) maxX = p[0];
+    if (p[1] < minY) minY = p[1];
+    if (p[1] > maxY) maxY = p[1];
+  }
+  const W = LANE_FIG_W * dpr;
+  const H = LANE_FIG_H * dpr;
+  const bw = Math.max(1e-6, maxX - minX);
+  const bh = Math.max(1e-6, maxY - minY);
+  const pad = Math.min(W, H) * ARROW_PAD_FRAC;
+  const scale = Math.min((W - 2 * pad) / bw, (H - 2 * pad) / bh);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const p = joints[name];
+  return {
+    x: (W / 2 + (p[0] - cx) * scale) / dpr,
+    y: (H / 2 - (p[1] - cy) * scale) / dpr,
+  };
+}
+
+// 比较两个姿势,找位移最大的关节(候选都是看得出来的末端/根节点)
+function laneBestMotion(jointsFrom, jointsTo) {
+  const CANDIDATES = [
+    "left_wrist", "right_wrist", "left_elbow", "right_elbow",
+    "left_ankle", "right_ankle", "left_knee", "right_knee",
+    "hips_center", "nose",
+  ];
+  let best = null;
+  for (const name of CANDIDATES) {
+    const a = jointsFrom[name];
+    const b = jointsTo[name];
+    if (!a || !b) continue;
+    const mx = b[0] - a[0];
+    const my = b[1] - a[1];
+    const mag = Math.hypot(mx, my);
+    if (!best || mag > best.mag) best = { name, mx, my, mag };
+  }
+  return best;
+}
+
+// 这个动作"哪个部位往哪动":比较动作点与它前面的姿势,取位移最大的关节。
+// 慢舞(幅度小)自动拉长回溯窗口到 0.8s;整首的第一个动作没有更早的姿势,就用往后 0.4s 的起手方向。
+function laneMotionArrow(seq, nodeT, jointsNow, dpr) {
+  const dims = seq.meta?.dimensions;
+  let best = null;
+  for (const lb of [LANE_MOTION_LOOKBACK, LANE_MOTION_LOOKBACK * 2]) {
+    const prevFrame = frameAtTime(seq, nodeT - lb);
+    if (!prevFrame) continue;
+    const cand = laneBestMotion(reconstructJoints(prevFrame, dims, seq.bones), jointsNow);
+    if (cand && (!best || cand.mag > best.mag)) best = cand;
+    if (best && best.mag >= LANE_MOTION_MIN) break;
+  }
+  const firstT = seq.frames?.[0]?.t ?? 0;
+  if ((!best || best.mag < LANE_MOTION_MIN) && nodeT - LANE_MOTION_LOOKBACK <= firstT + 1e-6) {
+    const nextFrame = frameAtTime(seq, nodeT + LANE_MOTION_LOOKBACK);
+    if (nextFrame) {
+      const cand = laneBestMotion(jointsNow, reconstructJoints(nextFrame, dims, seq.bones));
+      if (cand && (!best || cand.mag > best.mag)) best = cand;
+    }
+  }
+  if (!best || best.mag < LANE_MOTION_MIN) return null; // 几乎没动(定住造型)就不标箭头
+
+  const ux = best.mx / best.mag;
+  const uy = best.my / best.mag;
+  const anchor = laneJointToPixel(jointsNow, best.name, dpr);
+  const body = laneJointToPixel(jointsNow, "hips_center", dpr);
+  if (!anchor) return null;
+
+  // 出箭头的方向:运动方向 + 远离身体的方向(否则下蹲/手落下的动作箭头会压在身体上)
+  let dx = ux;
+  let dy = -uy; // 屏幕 y 向下
+  if (body) {
+    const ox = anchor.x - body.x;
+    const oy = anchor.y - body.y;
+    const olen = Math.hypot(ox, oy);
+    if (olen > 1) {
+      dx = dx * 0.55 + (ox / olen) * 0.85;
+      dy = dy * 0.55 + (oy / olen) * 0.85;
+    }
+  }
+  const dlen = Math.hypot(dx, dy) || 1;
+  dx /= dlen;
+  dy /= dlen;
+
+  const arrow = document.createElement("i");
+  arrow.className = "lane-arrow";
+  // 箭头基准朝上(0°):屏幕顺时针角度 = atan2(dx, dy)
+  const deg = Math.atan2(dx, dy) * 180 / Math.PI;
+  const push = 36;
+  // 限制在剪影框内,否则举手/下落类动作的箭头会被轨道边缘裁掉
+  const x = Math.min(LANE_FIG_W - 6, Math.max(6, anchor.x + dx * push));
+  const y = Math.min(LANE_FIG_H - 6, Math.max(10, anchor.y + dy * push));
+  arrow.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${deg.toFixed(1)}deg)`;
+  return arrow;
+}
+
+function updatePoseLane() {
+  if (!dom.poseHint) return;
+  if (poseHintDisabled || !dom.judgeTrack) { dom.poseHint.classList.add("hidden"); laneClear(); return; }
+  const src = activePoseSource();
+  if (!src) { dom.poseHint.classList.add("hidden"); laneClear(); return; }
+  dom.poseHint.classList.remove("hidden");
+
+  const { seq, t } = src;
+  const events = poseEventsFor(seq);
+  if (!events.length) return;
+
+  // 轨道几何:右侧入场 → 左侧判定平台,走到平台正好花 LANE_LEAD_SEC 秒(这就是"提前量")
+  const trackW = dom.judgeTrack.clientWidth || 396;
+  const pxPerSec = Math.max(1, (trackW - LANE_ARRIVE_X) / LANE_LEAD_SEC);
+  const dpr = globalThis.devicePixelRatio || 1;
+
+  // 这一帧应该还在轨道上的剪影:还没到平台的(含刚到的正在淡出)
+  const live = new Set();
+  for (const ev of events) {
+    const dt = ev.t - t;
+    if (dt > LANE_LEAD_SEC) break;
+    if (dt < -0.05 && !laneFigs.has(ev.t.toFixed(3))) continue; // 早过点的,直接跳过
+    const key = ev.t.toFixed(3);
+    live.add(key);
+    let fig = laneFigs.get(key);
+    if (!fig) fig = laneMakeFig(key, ev, seq, dpr);
+    if (fig.arrived) continue; // 已抵达:停在平台上等淡出动画结束,不再更新位置
+
+    // 位置:平台处 x = LANE_ARRIVE_X,越早的动作越靠左
+    const x = LANE_ARRIVE_X + Math.max(0, dt) * pxPerSec;
+    fig.el.style.transform = `translateX(${(x - LANE_FIG_W / 2).toFixed(1)}px)`;
+    fig.el.classList.toggle("near", dt <= 0.45);
+
+    // 抵达判定平台:剪影立刻消失(淡出 + 放大),平台同时弹一下
+    if (dt <= 0) {
+      fig.arrived = true;
+      fig.el.classList.add("arrive");
+      setTimeout(() => laneRemove(key), 300);
+    }
+  }
+  // 清掉已经不在视野里的
+  for (const key of [...laneFigs.keys()]) if (!live.has(key)) laneRemove(key);
+
+  // 律动:判定平台跟着拍点上下浮一下(越接近拍点越高)
+  const beat = beatDurFor(seq);
+  const frac = ((t / beat) % 1 + 1) % 1;
+  const lift = 6 * Math.exp(-frac * 6);
+  if (dom.judgeStage && Math.abs(lift - laneStageLift) > 0.2) {
+    laneStageLift = lift;
+    dom.judgeStage.style.transform = `translateY(${(-lift).toFixed(2)}px)`;
+  }
+
+  // 标签:下一个动作名 + 还有几秒到它(0.1s 粒度,避免每帧写 DOM)
+  let i = 0;
+  for (let k = events.length - 1; k >= 0; k--) if (events[k].t <= t) { i = k; break; }
+  const cur = events[i];
+  const next = events[Math.min(events.length - 1, i + 1)];
+  const up = next.t > t ? next : cur;
+  const remain = Math.max(0, up.t - t);
+  const text = (up.moveId || "") + (remain > 0.05 ? ` · ${remain.toFixed(1)}s` : " · 就是现在");
+  if (text !== laneLabel && dom.poseHintName) {
+    laneLabel = text;
+    dom.poseHintName.textContent = text;
+  }
+
+  // 进度条:上一个节点 → 下一个节点,走满 = 现在就该做它
+  const gap = Math.max(0.2, next.t - cur.t);
+  const p = t < cur.t ? 0 : Math.min(1, (t - cur.t) / gap);
+  if (p - laneProgress >= 0.005 || p < laneProgress) {
+    laneProgress = p;
+    if (dom.poseHintFill) dom.poseHintFill.style.width = (p * 100).toFixed(1) + "%";
+  }
 }
 
 // 试跳时让海报上的剪影跟着循环(卡片也"活了")
@@ -616,13 +958,15 @@ async function enterSelect() {
   clearTimeout(state.select.revertTimer);
   clearInterval(cardAnimTimer);
   state.select.player = null;
+  laneClear();
+  laneProgress = -1;
+  laneLabel = "";
   document.body.classList.add("pk-mode");
   scene.setSplitLayout(true);
   // 选曲态只留:摄像头 + 教练 + 卡片;其余 HUD 收起
   dom.result.classList.add("hidden");
   closeReady();
   dom.scorePanel.classList.add("hidden");
-  dom.refPanel.classList.add("hidden");
   dom.controls.classList.add("hidden");
   dom.dancePicker.classList.add("hidden");
   dom.songPicker.classList.add("hidden");
@@ -668,6 +1012,12 @@ function buildSelectCards() {
         <div class="sc-title">${e.dance.label}</div>
         <div class="sc-meta">♪ ${e.song.label} · BPM ${e.song.bpm}</div>
       </div>`;
+    // 预生成 PNG 缺失/加载失败时,页面内用 3D 舞者实时渲染一张白影剪影
+    const silImg = card.querySelector(".sc-sil");
+    silImg.addEventListener("error", () => {
+      const dataUrl = inPageSilhouette(e);
+      if (dataUrl) silImg.src = dataUrl;
+    }, { once: true });
     card.addEventListener("click", () => {
       selectCard(i);
       preview(i);
@@ -732,6 +1082,9 @@ function startSong(i) {
   if (!e) return;
   state.phase = "playing";
   state.select.player = null;
+  laneClear();
+  laneProgress = -1;
+  laneLabel = "";
   clearTimeout(state.select.revertTimer);
   clearInterval(cardAnimTimer);
   dom.songPick.classList.add("hidden");
@@ -1197,126 +1550,11 @@ function resetScoreHUD() {
   drawAccRing(0);
   dom.comboBadge.classList.add("hidden");
   dom.comboBadgeN.textContent = "0";
-  // 清空动作预期滚动列
-  for (const [, card] of moveCards) card.el.remove();
-  moveCards.clear();
-}
-
-// ---------------------------------------------------------------------------
-// 动作预期:Just Dance 式右侧滚动列
-// ---------------------------------------------------------------------------
-const moveCards = new Map(); // timeKey -> { el, canvas, label, born }
-
-// 动作时刻列表(秒,升序):优先谱面音符;无谱面则按固定间隔生成
-function getMoveTimes(ch) {
-  const notes = ch.session?.chart?.notes;
-  if (notes && notes.length) return notes.map((n) => n.t);
-  const dur = ch.seq.meta.durationSec || 0;
-  const out = [];
-  for (let t = 0; t <= dur + 1e-6; t += MOVE_FALLBACK_INTERVAL) out.push(+t.toFixed(3));
-  return out;
-}
-
-// 在右上角渲染一条竖直滚动列(Just Dance 式):
-//   - 顶部判定线处「钉住」当前动作(白色剪影 + 粉色发光 + 呼吸脉动);
-//   - 下方接下来的动作随歌曲时间向上滚动(灰色 → 最远深灰),到点后升格为当前。
-function renderMoveColumn(ch, now) {
-  const track = dom.moveTrack;
-  if (!track) return;
-  const times = getMoveTimes(ch);
-  const dims = ch.seq.meta.dimensions || {};
-  const bones = ch.seq.bones;
-
-  // 自适应尺寸:卡片高度随滚动区宽度变化;canvas 后台像素按 dpr 放大保证清晰
-  const trackW = track.clientWidth || 150;
-  const dpr = globalThis.devicePixelRatio || 1;
-  const cardH = Math.round(Math.min(120, Math.max(80, trackW * 0.75)));
-  const gap = Math.round(cardH * 0.16);
-  const spacing = cardH + gap;
-
-  // 滚动速度:按最小动作间隔算,保证卡片永不重叠
-  let minGap = Infinity;
-  for (let i = 1; i < times.length; i++) minGap = Math.min(minGap, times[i] - times[i - 1]);
-  if (!isFinite(minGap) || minGap <= 0) minGap = MOVE_FALLBACK_INTERVAL;
-  const pxPerSec = spacing / minGap;
-
-  // 当前动作下标(最大的 t <= now)
-  let curIdx = -1;
-  for (let i = times.length - 1; i >= 0; i--) if (times[i] <= now) { curIdx = i; break; }
-
-  // 可见卡片:退出中的(上一个动作)+ 当前(钉住)+ 接下来 N 个
-  const cards = [];
-  if (curIdx >= 0) {
-    const exitElapsed = now - times[curIdx]; // 上一个动作已退出多久
-    if (curIdx - 1 >= 0 && exitElapsed < MOVE_EXIT_SEC) {
-      cards.push({ t: times[curIdx - 1], tier: "exit", exitElapsed });
-    }
-    cards.push({ t: times[curIdx], tier: "active" });
-  }
-  for (let i = curIdx + 1; i <= curIdx + MOVE_HORIZON && i < times.length; i++) {
-    cards.push({ t: times[i], tier: i === curIdx + MOVE_HORIZON ? "far" : "next" });
-  }
-
-  // 移除不再需要的卡片
-  const needed = new Set(cards.map((c) => c.t.toFixed(3)));
-  for (const [key, card] of moveCards) {
-    if (!needed.has(key)) { card.el.remove(); moveCards.delete(key); }
-  }
-
-  cards.forEach((c) => {
-    const key = c.t.toFixed(3);
-    let card = moveCards.get(key);
-    if (!card) {
-      const el = document.createElement("div");
-      el.className = "move-card";
-      el.style.height = cardH + "px";
-      const canvas = document.createElement("canvas");
-      canvas.className = "move-sil";
-      canvas.width = Math.round(trackW * dpr);
-      canvas.height = Math.round(cardH * dpr);
-      const label = document.createElement("span");
-      label.className = "move-time";
-      el.appendChild(canvas);
-      el.appendChild(label);
-      track.appendChild(el);
-      card = { el, canvas, label, born: now };
-      moveCards.set(key, card);
-      // 该动作的姿势固定,只画一次剪影
-      const frame = ch.scorer.frameAt(c.t);
-      if (frame) {
-        const joints = reconstructJoints(frame, dims, bones);
-        renderPoseSilhouette(card.canvas, joints, bones);
-      }
-    }
-
-    // 定位:当前钉在判定线;退出中的向上滑走;接下来的向上滚动逼近判定线
-    let y;
-    if (c.tier === "active") y = MOVE_NOW_LINE_Y;
-    else if (c.tier === "exit") y = MOVE_NOW_LINE_Y - c.exitElapsed * pxPerSec;
-    else y = MOVE_NOW_LINE_Y + (c.t - now) * pxPerSec;
-    card.el.style.transform = `translateY(${y.toFixed(1)}px)`;
-
-    // 透明度:退出淡出 / 最远降透明度 / 新卡淡入
-    let opacity = 1;
-    if (c.tier === "exit") opacity = Math.max(0, 1 - c.exitElapsed / MOVE_EXIT_SEC);
-    else if (c.tier === "far") opacity = 0.62;
-    const enter = Math.min(1, Math.max(0, (now - card.born) / MOVE_ENTER_SEC));
-    card.el.style.opacity = (opacity * enter).toFixed(2);
-
-    // 层级:当前 / 最远 / 普通后续
-    card.el.classList.toggle("active", c.tier === "active");
-    card.el.classList.toggle("far", c.tier === "far");
-
-    // 倒计时(仅未来动作)
-    card.label.textContent = (c.tier === "next" || c.tier === "far") ? (c.t - now).toFixed(1) + "s" : "";
-  });
 }
 
 function updateChallengeProgress(t, ch) {
   const dur = ch.seq.meta.durationSec || 1;
   dom.progressFill.style.width = Math.min(100, (t / dur) * 100) + "%";
-  // 动作预期:Just Dance 式右侧滚动列(当前 + 接下来 N 个动作剪影)
-  renderMoveColumn(ch, t);
   // 节拍指示(优先 timing/v1,回退旧 beatTimesSec)
   const timing = ch.session?.timing;
   let beatIdx = 0;
