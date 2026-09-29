@@ -1,5 +1,5 @@
 {
-  "schema": "chart/v1",
+  "schema": "chart/v2",
   "sequenceFile": "hiphop.json",
   "audio": "pop-demo.wav",
   "notes": [

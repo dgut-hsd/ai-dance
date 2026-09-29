@@ -1,5 +1,5 @@
 /**
- * export-chart-cli.js — 自动编谱起点:参考序列 → chart/v1 谱面文件。
+ * export-chart-cli.js — 自动编谱起点:参考序列 → chart/v2 谱面文件。
  *
  * 用法:
  *   npm run export-chart                                     # demo → <danceId>.chart.json(独立编辑器格式)
@@ -7,7 +7,7 @@
  *   npm run export-chart -- <ref.json> --inline              # 就地合并进阶序列文件顶层 chart(运行时权威位置)
  *   npm run export-chart -- <ref.json> --out x.json --step 8 # 自定义输出路径与采样帧距
  *
- * 产物兼容契约 §4.2:独立文件 = { schema:"chart/v1", sequenceFile, ... };内嵌 = seq.chart。
+ * 产物兼容契约 §4.2:独立文件 = { schema:"chart/v2", sequenceFile, ... };内嵌 = seq.chart。
  * 模块C 扩展字段(boneWeights/judgeWindow/note difficulty/window)为可选,见 chart-events-spec.md。
  */
 import { readFileSync, writeFileSync } from "node:fs";
@@ -72,7 +72,7 @@ async function main() {
     writeFileSync(outPath, JSON.stringify(stand, null, 2) + "\n", "utf8");
     const back = parseChart(ref, stand);
     console.log(
-      `exported ${events.length} events -> ${outPath} (danceId=${stand.danceId}, schema=chart/v1, sequenceFile=${stand.sequenceFile})`
+      `exported ${events.length} events -> ${outPath} (danceId=${stand.danceId}, schema=chart/v2, sequenceFile=${stand.sequenceFile})`
     );
     console.log(`roundtrip parseChart(独立文件) = ${back.length} 事件,自检通过.`);
   }

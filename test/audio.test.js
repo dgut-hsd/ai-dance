@@ -110,10 +110,10 @@ test("TimingMap: 非法版本抛错", () => {
 // NoteChart
 // ---------------------------------------------------------------------------
 test("NoteChart: 默认判定窗 + 时间窗查询", () => {
-  const chart = { version: "chart/v1", notes: [
+  const chart = { version: "chart/v2", notes: [
     { t: 1.0, type: "pose" },
-    { t: 2.0, type: "hold", endT: 3.0 },
-    { t: 4.0, type: "beat" },
+    { t: 2.0, type: "gesture" },
+    { t: 4.0, type: "pose" },
   ] };
   const nc = new NoteChart(chart, 10);
   assert.deepEqual(nc.windowsMs, { perfect: 50, great: 100, good: 150 });
@@ -124,14 +124,13 @@ test("NoteChart: 默认判定窗 + 时间窗查询", () => {
 });
 
 test("NoteChart: 自定义判定窗(秒→毫秒)", () => {
-  const nc = new NoteChart({ version: "chart/v1", timingWindows: { perfect: 0.04, great: 0.08, good: 0.12 }, notes: [] });
+  const nc = new NoteChart({ version: "chart/v2", timingWindows: { perfect: 0.04, great: 0.08, good: 0.12 }, notes: [] });
   assert.deepEqual(nc.windowsMs, { perfect: 40, great: 80, good: 120 });
 });
 
 test("NoteChart: 非法输入抛错", () => {
   assert.throws(() => new NoteChart({ version: "chart/v9", notes: [] }), /chart\/v1/);
-  assert.throws(() => new NoteChart({ version: "chart/v1", notes: [{ t: 2, type: "pose" }, { t: 1, type: "pose" }] }), /ascending/);
-  assert.throws(() => new NoteChart({ version: "chart/v1", notes: [{ t: 1, type: "hold", endT: 1 }] }), /endT/);
+  assert.throws(() => new NoteChart({ version: "chart/v2", notes: [{ t: 2, type: "pose" }, { t: 1, type: "pose" }] }), /ascending/);
 });
 
 // ---------------------------------------------------------------------------
@@ -318,7 +317,7 @@ const REF = { marker: "A", bones: [[1, 0, 0], [0, 1, 0]], conf: [1, 1] };
 const refAt = () => REF;
 const mkFrame = (marker, bones) => ({ marker, bones: bones ?? REF.bones, conf: [1, 1] });
 const markerSimilarity = (ref, player) => (ref && player && ref.marker === player.marker ? 1.0 : 0.0);
-const poseChart = (notes) => ({ version: "chart/v1", notes });
+const poseChart = (notes) => ({ version: "chart/v2", notes });
 
 test("NoteJudge: 命中窗口分级 PERFECT/GREAT/GOOD", () => {
   const mk = (delta) => {
@@ -381,37 +380,6 @@ test("NoteJudge: 连击与 finalize", () => {
   assert.equal(f.maxCombo, 2);
 });
 
-test("NoteJudge: hold 撑满 PERFECT / 中途跌破 GOOD / 起手失败 MISS", () => {
-  const holdChart = () => poseChart([{ id: "h", t: 1.0, type: "hold", endT: 2.0 }]);
-
-  // 撑满
-  let j = new NoteJudge(holdChart(), markerSimilarity, { refAt, durationSec: 10 });
-  j.feed(1.0, mkFrame("A"));
-  j.feed(1.4, mkFrame("A"));
-  j.feed(1.8, mkFrame("A"));
-  j.feed(2.0, mkFrame("A"));
-  const all = [];
-  all.push(...j.tick(1.15));
-  all.push(...j.tick(1.4));
-  all.push(...j.tick(1.8));
-  all.push(...j.tick(2.15));
-  assert.equal(all.filter((r) => !r.ongoing).at(-1).tier, "PERFECT");
-  assert.ok(all.some((r) => r.ongoing));
-
-  // 中途跌破
-  j = new NoteJudge(holdChart(), markerSimilarity, { refAt, durationSec: 10 });
-  j.feed(1.0, mkFrame("A"));
-  j.feed(1.5, mkFrame("B"));
-  j.tick(1.15);
-  j.tick(1.5);
-  assert.equal(j.tick(2.15).filter((r) => !r.ongoing).at(-1).tier, "GOOD");
-
-  // 起手失败
-  j = new NoteJudge(holdChart(), markerSimilarity, { refAt, durationSec: 10 });
-  j.feed(1.0, mkFrame("B"));
-  assert.equal(j.tick(1.15).filter((r) => !r.ongoing).at(-1).tier, "MISS");
-});
-
 // ---------------------------------------------------------------------------
 // SongSession(门面,静默时钟)
 // ---------------------------------------------------------------------------
@@ -436,7 +404,7 @@ test("SongSession: prepare/start/update 驱动音符判定(静默时钟)", async
     },
     bones: [{ name: "a", parent: "p", child: "c" }],
     frames,
-    chart: { version: "chart/v1", notes: [{ id: "n", t: 1.0, type: "pose" }] },
+    chart: { version: "chart/v2", notes: [{ id: "n", t: 1.0, type: "pose" }] },
   };
   const judged = [];
   const session = new SongSession({
@@ -474,14 +442,14 @@ test("AudioEngine: audioOffsetSec 跳过前导并缩短时长", async () => {
 
 test("NoteJudge: chart.judgeOffsetSec 平移判定时刻", () => {
   const withOffset = new NoteJudge(
-    { version: "chart/v1", judgeOffsetSec: 0.1, notes: [{ id: "n", t: 1.0, type: "pose" }] },
+    { version: "chart/v2", judgeOffsetSec: 0.1, notes: [{ id: "n", t: 1.0, type: "pose" }] },
     markerSimilarity, { refAt, durationSec: 10 }
   );
   withOffset.feed(1.1, mkFrame("A"));
   assert.equal(withOffset.tick(1.25)[0].tier, "PERFECT"); // judgeTime = 1.1
 
   const without = new NoteJudge(
-    { version: "chart/v1", notes: [{ id: "n", t: 1.0, type: "pose" }] },
+    { version: "chart/v2", notes: [{ id: "n", t: 1.0, type: "pose" }] },
     markerSimilarity, { refAt, durationSec: 10 }
   );
   without.feed(1.1, mkFrame("A"));

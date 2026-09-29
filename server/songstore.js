@@ -6,7 +6,7 @@
  *
  * 目标目录布局(与 export-songs-cli 一致):
  *   songs/<danceId>/<danceId>.json        内嵌谱面的 dance-sequence/v1
- *   songs/<danceId>/<danceId>.chart.json  chart/v1 独立谱面
+ *   songs/<danceId>/<danceId>.chart.json  chart/v2 独立谱面
  *   songs/<danceId>/<audioName>           音频(原文件名)
  *   songs/<danceId>/<fbxName>             FBX(原文件名,可选)
  *   songs/index.json                      歌曲索引(追加/替换对应条目)
@@ -106,7 +106,7 @@ export function createSongStore({ songsDir }) {
     } catch {
       index = { schema: "songs/index/v1", dances: [], songs: [] };
     }
-    index.dances = (index.dances ?? []).filter((d) => d.id !== danceId);
+    index.dances = (index.dances ?? []).filter((d) => d.id !== danceId && d.danceId !== danceId);
     index.songs = (index.songs ?? []).filter((s) => s.id !== danceId);
     index.dances.push({
       id: danceId,

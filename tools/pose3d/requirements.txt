@@ -1,0 +1,12 @@
+# pose3d 离线服务端 3D 动捕依赖(Python ≥ 3.10)
+# 安装: pip install -r tools/pose3d/requirements.txt
+#
+# 注:TensorFlow(MeTRAbs 依赖)对 Python 版本有要求;若当前 Python 3.13 无对应
+# wheel,建议用 conda 建独立环境:
+#   conda create -n pose3d python=3.11 -y && conda activate pose3d
+#   pip install -r tools/pose3d/requirements.txt
+
+numpy<2
+opencv-python
+tensorflow==2.12.0
+tensorflow-hub

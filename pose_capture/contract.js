@@ -172,6 +172,13 @@ function computeRootYaw(joints) {
   return Math.atan2(hip[2], hip[0]);
 }
 
+// 肩轴方向 = normalize(右肩 - 左肩)。与髋轴(rootYaw)相比:
+//  - 水平投影(x/z)反映「身体朝向」的偏航,肩点比髋点更稳、更少被遮挡;
+//  - y 分量反映躯干侧倾(roll),这是 rootYaw 一维丢失的信息。
+export function computeShoulderAxis(joints) {
+  return normalize(sub(joints.right_shoulder, joints.left_shoulder));
+}
+
 // ---------------------------------------------------------------------------
 // 手型特征:HandLandmarker world landmarks(手腕原点)归一化到尺度无关
 // 手腕 = 原点,以"手腕→中指掌指关节(索引9)"的长度为 1
@@ -221,7 +228,7 @@ export function buildFrame(t, joints, vis = {}, boneDefs = BONE_DEFS, hands = nu
     bones,      // 顺序见所选模式骨骼表
     rootYaw,
     rootYawConf: Math.min(vis.left_hip ?? 1, vis.right_hip ?? 1),
-    shoulderAxis: normalize(sub(joints.right_shoulder, joints.left_shoulder)),
+    shoulderAxis: computeShoulderAxis(joints),
     conf,
     _src: "live",
     _seq: seq++,
@@ -234,4 +241,105 @@ export function buildFrame(t, joints, vis = {}, boneDefs = BONE_DEFS, hands = nu
     if (typeof root.grounded === "boolean") frame.grounded = root.grounded;
   }
   return frame;
+}
+
+// ---------------------------------------------------------------------------
+// S3 深度约束:用 2D 夹角先验修正 3D 末端「假性过近」(根因2、3)
+// ---------------------------------------------------------------------------
+//
+// 单目 3D 的深度(z)歧义会让腕/踝相对肘/膝「假性过近」,表现为肘/膝 3D 折叠角
+// 明显小于(更折叠于)2D 图像里测得的投影夹角。2D 检测精度高、不受深度歧义影响,
+// 故用 2D 夹角作为更可靠的上限先验,把末端沿 3D 平面旋转到至少等于 2D 夹角,
+// 抑制过度弯曲。需在 One-Euro 平滑「之前」作用于原始 3D joints。
+
+// 3D 关节夹角(顶点 mid 处):∠(root→mid, end→mid)
+function _jointAngle3(root, mid, end) {
+  const u = sub(root, mid);
+  const v = sub(end, mid);
+  const lu = Math.hypot(u[0], u[1], u[2]);
+  const lv = Math.hypot(v[0], v[1], v[2]);
+  if (lu < 1e-9 || lv < 1e-9) return null;
+  return Math.acos(_clamp((u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (lu * lv), -1, 1));
+}
+
+function _clamp(x, a, b) { return x < a ? a : (x > b ? b : x); }
+
+// 2D 图像夹角(顶点 b 处):归一化图像坐标 x/y,夹角尺度无关
+function _jointAngle2D(a, b, c) {
+  if (!a || !b || !c) return null;
+  const ux = a.x - b.x, uy = a.y - b.y;
+  const vx = c.x - b.x, vy = c.y - b.y;
+  const lu = Math.hypot(ux, uy);
+  const lv = Math.hypot(vx, vy);
+  if (lu < 1e-9 || lv < 1e-9) return null;
+  return Math.acos(_clamp((ux * vx + uy * vy) / (lu * lv), -1, 1));
+}
+
+// 肢体四元组:root/mid/end 的 joint 名(对应 MEDIAPIPE_INDEX)
+const LIMB_TRIPLES = [
+  { root: "left_shoulder", mid: "left_elbow", end: "left_wrist" },
+  { root: "right_shoulder", mid: "right_elbow", end: "right_wrist" },
+  { root: "left_hip", mid: "left_knee", end: "left_ankle" },
+  { root: "right_hip", mid: "right_knee", end: "right_ankle" },
+];
+
+// 目标 γ 的生理 clamp(与 web_dance/retarget.js 一致的保守限位)
+const DEPTH_MIN_BEND = 0.55; // ≈31°,统一保守折叠下限
+const DEPTH_MAX_BEND = Math.PI;
+
+export function constrainLimbDepth(worldJoints, imgLandmarks) {
+  if (!worldJoints || !imgLandmarks) return worldJoints;
+  const out = { ...worldJoints };
+
+  for (const t of LIMB_TRIPLES) {
+    const J = out[t.root], M = out[t.mid];
+    if (!J || !M || !out[t.end]) continue;
+    const g3 = _jointAngle3(J, M, out[t.end]);
+    const g2 = _jointAngle2D(
+      imgLandmarks[MEDIAPIPE_INDEX[t.root]],
+      imgLandmarks[MEDIAPIPE_INDEX[t.mid]],
+      imgLandmarks[MEDIAPIPE_INDEX[t.end]]
+    );
+    if (g3 == null || g2 == null) continue;
+    // 触发:3D 比 2D 明显更折叠(深度假性过近),且 3D 已处于明显弯曲
+    if (!(g3 < g2 - 0.10 && g3 < 1.0)) continue;
+    const target = _clamp(g2, DEPTH_MIN_BEND, DEPTH_MAX_BEND);
+    if (!(target > g3 + 0.05)) continue;
+
+    // 在 u×v 平面内把末端方向旋转到目标夹角,保持前臂/小腿长度 |v| 不变
+    const u = sub(J, M); // mid → root
+    const v = sub(out[t.end], M); // mid → end
+    const lu = Math.hypot(u[0], u[1], u[2]);
+    const lv = Math.hypot(v[0], v[1], v[2]);
+    if (lu < 1e-9 || lv < 1e-9) continue;
+    const uhat = [u[0] / lu, u[1] / lu, u[2] / lu];
+
+    let n = [
+      u[1] * v[2] - u[2] * v[1],
+      u[2] * v[0] - u[0] * v[2],
+      u[0] * v[1] - u[1] * v[0],
+    ];
+    const ln = Math.hypot(n[0], n[1], n[2]);
+    if (ln < 1e-9) continue; // u∥v,方向退化,跳过
+    n = [n[0] / ln, n[1] / ln, n[2] / ln];
+
+    let w = [
+      n[1] * uhat[2] - n[2] * uhat[1],
+      n[2] * uhat[0] - n[0] * uhat[2],
+      n[0] * uhat[1] - n[1] * uhat[0],
+    ];
+    const lw = Math.hypot(w[0], w[1], w[2]);
+    if (lw < 1e-9) continue;
+    w = [w[0] / lw, w[1] / lw, w[2] / lw];
+    // 让 w 与 v 的侧向分量同向,保证 v' 落在 v 原侧
+    if (v[0] * w[0] + v[1] * w[1] + v[2] * w[2] < 0) w = [-w[0], -w[1], -w[2]];
+
+    const st = Math.sin(target), ct = Math.cos(target);
+    out[t.end] = [
+      M[0] + lv * (ct * uhat[0] + st * w[0]),
+      M[1] + lv * (ct * uhat[1] + st * w[1]),
+      M[2] + lv * (ct * uhat[2] + st * w[2]),
+    ];
+  }
+  return out;
 }

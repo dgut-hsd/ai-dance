@@ -9,8 +9,10 @@ import { createPoseEngine } from "./pose-engine.js";
 import {
   landmarksToJoints,
   addDerivedJoints,
+  constrainLimbDepth,
   visibilitiesFromLandmarks,
   poseFromJoints,
+  computeShoulderAxis,
   handsFromResult,
   resolveMode,
 } from "./contract.js";
@@ -26,7 +28,7 @@ export async function exportVideoToSequence({
   mode = "full-body",
   smoothing = { minCutoff: 1.5, beta: 0.5, dCutoff: 1.0 },
   timing = null, // [可选] timing/v1 对象(由 tools/detect_beats.py 产出),写入 meta.timing
-  chart = null,  // [可选] chart/v1 对象(含 audio),写入顶层 chart
+  chart = null,  // [可选] chart/v2 对象(含 audio),写入顶层 chart
 } = {}) {
   const m = resolveMode(mode);
 
@@ -67,6 +69,7 @@ export async function exportVideoToSequence({
 
     video.onended = () => {
       ended = true;
+      onProgress(1); // 视频播放结束强制进度到 100%,避免末帧 time 略小于 duration
       maybeResolve();
     };
     video.onerror = () => reject(new Error("视频播放失败"));
@@ -85,11 +88,14 @@ export async function exportVideoToSequence({
           const { world, img, hands } = await engine.detect(bitmap, metadata.mediaTime * 1000);
           bitmap.close();
 
+          // 进度按视频时间推进,与是否检测到人无关(避免 world=null 时进度卡死)
+          const tSec = metadata.mediaTime;
+          onProgress(Math.min(tSec / duration, 1));
           if (world) {
-            const tSec = metadata.mediaTime;
             const rawJoints = landmarksToJoints(world);
+            const depthFixed = constrainLimbDepth(rawJoints, img); // S3 深度约束(在平滑前)
             const vis = visibilitiesFromLandmarks(img);
-            const smoothed = smoother.smooth(rawJoints, vis, tSec);
+            const smoothed = smoother.smooth(depthFixed, vis, tSec);
             const joints = addDerivedJoints(smoothed);
             const { bones, rootYaw, conf } = poseFromJoints(joints, vis, m.bones);
             const rawHands = m.hands ? handsFromResult(hands) : null;
@@ -102,6 +108,7 @@ export async function exportVideoToSequence({
               t: tSec,
               bones,
               rootYaw,
+              shoulderAxis: computeShoulderAxis(joints),
               conf,
             };
             if (handsField) frame.hands = handsField;
@@ -114,8 +121,6 @@ export async function exportVideoToSequence({
               for (const k in dimsSum) dimsSum[k] += d[k];
             }
             dimsCount++;
-
-            onProgress(Math.min(tSec / duration, 1));
           }
         } catch (err) {
           // 偶发取帧失败,跳过

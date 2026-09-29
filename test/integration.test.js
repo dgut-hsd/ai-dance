@@ -34,10 +34,12 @@ function fakeAudioContext(clock = { t: 0 }) {
   return { ctx, started };
 }
 
-test("demo 序列 + SongSession 端到端:节拍栅格 + 12 个下拍音符全部命中", async () => {
+test("demo 序列 + SongSession 端到端:节拍栅格 + 全部音符命中", async () => {
   assert.equal(seq.schema, "dance-sequence/v1");
   assert.equal(seq.meta.timing.version, "timing/v1");
-  assert.equal(seq.chart.version, "chart/v1");
+  assert.equal(seq.chart.version, "chart/v2");
+
+  const N = seq.chart.notes.length;
 
   const clock = { t: 0 };
   const { ctx } = fakeAudioContext(clock);
@@ -53,7 +55,7 @@ test("demo 序列 + SongSession 端到端:节拍栅格 + 12 个下拍音符全�
   // 节拍栅格:24s @120bpm → 49 拍;每 2s 一个下拍 → 13 个下拍
   assert.equal(session.timing.beatTimesSec.length, 49);
   assert.equal(session.timing.downbeatsSec.length, 13);
-  assert.equal(session.chart.noteCount, 12);
+  assert.equal(session.chart.noteCount, N);
 
   await session.start(0);
 
@@ -68,6 +70,6 @@ test("demo 序列 + SongSession 端到端:节拍栅格 + 12 个下拍音符全�
   session.stop();
 
   const settled = judged.filter((r) => !r.ongoing);
-  assert.equal(settled.length, 12);
+  assert.equal(settled.length, N);
   assert.ok(settled.every((r) => r.tier === "PERFECT"));
 });

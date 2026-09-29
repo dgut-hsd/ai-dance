@@ -1,8 +1,10 @@
 /**
- * chartCodec.js — chart/v1 谱面文件 <-> 引擎判定事件 的双向编解码。
+ * chartCodec.js — chart/v2 谱面文件 <-> 引擎判定事件 的双向编解码。
  *
- * 谱面文件采用组长冻结的 contract §4.2 `chart/v1`(notes: beat|pose|hold),
+ * 谱面文件采用组长冻结的 contract §4.2 `chart/v2`(v1 兼容;notes 仅 pose|gesture,
+ * gesture 暂无手部模型故跳过),
  * 本模块把它解析成 ScoringEngine 可消费的事件流;并支持反向导出。
+ * v2 相比 v1:音符类型精简为 pose|gesture(删除 beat/hold/lanes)。
  *
  * 扩展字段(可选,均已校验):
  *   chart.judgeWindow   采样窗 { early, late },缺省 ±0.25
@@ -60,8 +62,8 @@ export function parseChart(sequence, chart) {
   const src = chart ?? sequence?.chart ?? null;
   if (!src) return [];
   const ver = String(src.version ?? src.schema ?? "");
-  if (!/^chart\/v\d+/.test(ver)) {
-    err("缺少 chart.version(内嵌) 或 chart.schema(独立文件),且不是 chart/v*");
+  if (!/^chart\/v[12]$/.test(ver)) {
+    err("缺少 chart.version(内嵌) 或 chart.schema(独立文件),且不是 chart/v1|v2");
   }
   if (!Array.isArray(src.notes)) err("chart.notes 须为数组");
   const frames = sequence?.frames;
@@ -104,7 +106,7 @@ export function parseChart(sequence, chart) {
   return events;
 }
 
-// chart/v1 timingWindows → 引擎 bands(档位序号须 perfect<great<good)
+// chart/v2 timingWindows → 引擎 bands(档位序号须 perfect<great<good)
 export function parseTimingWindows(chart) {
   const tw = chart?.timingWindows;
   if (!tw) return null;
@@ -148,7 +150,6 @@ export function serializeChart(events, opts = {}) {
       id: e.moveId,
       t: +e.t.toFixed(3),
       type: e.noteType ?? "pose",
-      lane: "body",
       refFrameIdx: e.refFrameIdx ?? (Number.isFinite(e.targetT) ? Math.round(e.targetT * fps) : undefined),
       difficulty: e.difficulty && Math.abs(e.difficulty - globalDifficulty) > 1e-9 ? e.difficulty : undefined,
       window: e.window ? { early: e.window.early, late: e.window.late } : undefined
@@ -157,7 +158,7 @@ export function serializeChart(events, opts = {}) {
     return note;
   });
   return clean({
-    version: "chart/v1",
+    version: "chart/v2",
     danceId: opts.danceId ?? seq?.danceId,
     audio: opts.audio,
     audioOffsetSec: opts.audioOffsetSec ?? 0.0,
@@ -181,7 +182,7 @@ export function toStandaloneChart(content, opts = {}) {
     ?? (seq?.danceId ? `${seq.danceId}.json` : undefined);
   const { version, meta, ...rest } = content ?? {};
   return clean({
-    schema: "chart/v1",
+    schema: "chart/v2",
     danceId: rest.danceId,
     sequenceFile,
     ...rest

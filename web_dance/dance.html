@@ -54,16 +54,9 @@
         </div>
       </div>
 
-      <!-- 右上:舞蹈动作(Just Dance 式滚动列:当前 + 接下来的动作剪影) -->
-      <div id="ref-panel" class="panel hidden">
-        <div class="panel-title">舞蹈动作</div>
-        <div id="move-scroll">
-          <div id="move-now-line"></div>
-          <div id="move-track"></div>
-        </div>
-        <div id="beats">
-          <span></span><span></span><span></span><span></span>
-        </div>
+      <!-- 右上:节拍点(4 拍指示,由 updateChallengeProgress 点亮) -->
+      <div id="beats">
+        <span></span><span></span><span></span><span></span>
       </div>
 
       <!-- 右下:计分(挑战) -->
@@ -129,6 +122,16 @@
       <div id="song-pick-title">来跳舞！</div>
       <div id="song-pick-hint">单击预览 · 双击准备开始</div>
       <div id="song-pick-strip"></div>
+    </div>
+
+    <!-- 右下:判定轨道(Just Dance 式:剪影从右往左流入判定平台,到达平台即消失) -->
+    <div id="pose-hint" class="hidden">
+      <div id="judge-lane">
+        <div id="judge-stage"><i id="judge-stage-ring"></i></div>
+        <div id="judge-track"></div>
+      </div>
+      <div id="pose-hint-bar"><i id="pose-hint-fill"></i></div>
+      <div id="pose-hint-name"></div>
     </div>
 
     <!-- 准备开始(选中卡片后弹出) -->
