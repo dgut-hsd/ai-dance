@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>动作学习实验台 · DANCE ARENA</title>
+    <style>
+      :root {
+        --bg: #0a1020;
+        --panel: rgba(16, 21, 34, 0.88);
+        --line: rgba(120, 240, 255, 0.16);
+        --cyan: #39ffcf;
+        --pink: #ff5fa2;
+        --violet: #8b5cff;
+        --text: #e8edff;
+        --muted: #8a94ad;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+      body {
+        font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+        color: var(--text);
+      }
+
+      #stage { position: fixed; inset: 0; display: block; }
+
+      /* ---- 左侧主面板 ---- */
+      #lab-panel {
+        position: fixed; top: 16px; left: 16px; width: 340px; z-index: 20;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+        padding: 18px; backdrop-filter: blur(8px);
+        display: flex; flex-direction: column; gap: 14px;
+      }
+      #lab-title { font-size: 20px; letter-spacing: 1px; margin: 0; }
+      #lab-title em { color: var(--cyan); font-style: normal; }
+      .steps { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 0; }
+      .steps b { color: var(--cyan); font-weight: 600; }
+
+      .row { display: flex; gap: 10px; align-items: center; }
+      .btn {
+        cursor: pointer; border: 1px solid var(--line); border-radius: 10px;
+        background: rgba(57, 255, 207, 0.08); color: var(--text); padding: 9px 14px;
+        font-size: 14px; transition: all .15s ease; white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) { border-color: var(--cyan); color: var(--cyan); }
+      .btn:disabled { opacity: .4; cursor: not-allowed; }
+      .btn.primary { background: rgba(57, 255, 207, 0.16); border-color: var(--cyan); color: var(--cyan); }
+      .btn.ghost { background: transparent; }
+
+      .file-btn {
+        flex: 1; cursor: pointer; border: 1px dashed var(--line); border-radius: 10px;
+        padding: 12px; text-align: center; color: var(--muted); font-size: 13px;
+      }
+      .file-btn:hover { border-color: var(--pink); color: var(--pink); }
+      .file-btn span { display: block; font-size: 11px; margin-top: 4px; color: var(--text); opacity: .85; }
+
+      /* 文件输入用透明覆盖而非 display:none,确保 label 点击在各浏览器都能稳定转发 */
+      .file-btn { position: relative; overflow: hidden; }
+      .file-btn input[type="file"] {
+        position: absolute; inset: 0; opacity: 0; cursor: pointer;
+      }
+      .file-btn input[type="file"]::-webkit-file-upload-button { cursor: pointer; }
+
+      select {
+        background: #101522; color: var(--text); border: 1px solid var(--line);
+        border-radius: 8px; padding: 7px 10px; font-size: 13px; flex: 1;
+      }
+
+      #status { font-size: 13px; color: var(--cyan); min-height: 1.2em; word-break: break-all; }
+      #status.err { color: var(--pink); }
+
+      .prog-wrap { background: rgba(255,255,255,.06); border-radius: 999px; height: 10px; overflow: hidden; }
+      #prog-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--violet)); transition: width .15s linear; }
+      #prog-label { font-size: 11px; color: var(--muted); text-align: right; }
+
+      /* ---- 指标卡 ---- */
+      #metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .metric {
+        background: rgba(255,255,255,.04); border: 1px solid var(--line); border-radius: 10px;
+        padding: 8px 10px;
+      }
+      .metric .k { font-size: 11px; color: var(--muted); }
+      .metric .v { font-size: 18px; font-weight: 700; color: var(--cyan); letter-spacing: .5px; }
+      #metrics.empty .v { color: var(--muted); font-weight: 400; }
+
+      /* ---- 右下对比区 ---- */
+      #compare {
+        position: fixed; right: 16px; bottom: 16px; z-index: 20; display: flex; gap: 12px;
+        align-items: flex-end;
+      }
+      .cmp-card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px;
+        backdrop-filter: blur(8px);
+      }
+      .cmp-cap { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: 1px; }
+      #src-video { display: block; width: 300px; border-radius: 8px; background: #000; }
+      #pose-canvas { display: block; width: 180px; height: 220px; border-radius: 8px; background: #0d1322; }
+
+      @media (max-width: 900px) {
+        #lab-panel { width: 280px; }
+        #src-video { width: 220px; }
+        #pose-canvas { width: 120px; height: 150px; }
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+
+    <!-- 左侧：操作与指标 -->
+    <aside id="lab-panel">
+      <h1 id="lab-title">动作学习<em>实验台</em></h1>
+      <p class="steps">
+        <b>1</b> 上传一段人物跳舞视频<br />
+        <b>2</b> 点击「开始学习」，逐帧动捕分析<br />
+        <b>3</b> 3D 模型同步复现，右侧与原视频对比
+      </p>
+
+      <div class="file-btn">
+        选择本地舞蹈视频
+        <input id="upload-file" type="file" accept="video/*" />
+        <span id="file-name">未选择文件（mp4 / webm / mov…）</span>
+      </div>
+
+      <div class="row">
+        <select id="dance-mode">
+          <option value="full-body">全身舞蹈</option>
+          <option value="gesture">手势舞（上半身）</option>
+        </select>
+        <label class="btn" title="左右镜像复现"><input id="opt-mirror" type="checkbox" /> 镜像</label>
+      </div>
+
+      <div class="row">
+        <label class="btn" title="用服务端 MeTRAbs 3D 回归替代浏览器 MediaPipe 单目深度，消除膝盖反向等问题（需先安装依赖并启动服务）"><input id="opt-server3d" type="checkbox" /> 服务端3D模型</label>
+      </div>
+
+      <div class="row">
+        <button id="btn-learn" class="btn primary" disabled>开始学习并复现</button>
+        <button id="btn-download" class="btn ghost" disabled>下载 JSON</button>
+      </div>
+
+      <div id="status">等待上传视频…</div>
+      <div class="prog-wrap"><div id="prog-fill"></div></div>
+      <div id="prog-label">0%</div>
+
+      <div id="metrics" class="empty">
+        <div class="metric"><div class="k">帧数</div><div class="v" id="m-frames">—</div></div>
+        <div class="metric"><div class="k">时长</div><div class="v" id="m-dur">—</div></div>
+        <div class="metric"><div class="k">采样 FPS</div><div class="v" id="m-fps">—</div></div>
+        <div class="metric"><div class="k">平均置信度</div><div class="v" id="m-conf">—</div></div>
+      </div>
+    </aside>
+
+    <!-- 右下：原视频 + 模型骨架 对比 -->
+    <div id="compare">
+      <div class="cmp-card">
+        <div class="cmp-cap">原始视频</div>
+        <video id="src-video" controls playsinline muted></video>
+      </div>
+      <div class="cmp-card">
+        <div class="cmp-cap">复现骨架</div>
+        <canvas id="pose-canvas" width="180" height="220"></canvas>
+      </div>
+    </div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./lab.js"></script>
+  </body>
+</html>

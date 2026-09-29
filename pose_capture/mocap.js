@@ -11,6 +11,7 @@
 import {
   landmarksToJoints,
   addDerivedJoints,
+  constrainLimbDepth,
   visibilitiesFromLandmarks,
   buildFrame,
   handsFromResult,
@@ -83,8 +84,9 @@ async function runLivePipeline({
       if (world) {
         const tSec = tsMs / 1000;
         const rawJoints = landmarksToJoints(world);
+        const depthFixed = constrainLimbDepth(rawJoints, img); // S3 深度约束(在平滑前)
         const vis = visibilitiesFromLandmarks(img);
-        const smoothed = smoother.smooth(rawJoints, vis, tSec);
+        const smoothed = smoother.smooth(depthFixed, vis, tSec);
         const joints = addDerivedJoints(smoothed);
         const rawHands = withHands ? handsFromResult(hands) : null;
         const handsField = handSmoother

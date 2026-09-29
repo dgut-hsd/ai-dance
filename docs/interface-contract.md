@@ -171,6 +171,30 @@ canonical 坐标系 y 向上),即"右臂垂在体侧"。
 - **手势舞(`danceType:"gesture"`)的帧额外带 `hands` 字段**:`[{handedness, landmarks}]`,
   `landmarks` 为每手 21 个点(手腕为原点、尺度归一化);全身舞蹈无此字段。
 
+### 3.1 v1 可选增强字段(向后兼容,按「字段是否存在」消费)
+
+> 由离线 FBX 直导(见 `docs/motion-beat-optimization.md` §10.9)补出的朝向字段,用于还原
+> 教练的「转弯/胸椎扭转/手臂轴向转向」。**均为可选,旧序列无这些字段,消费端回退原策略;**
+> `schema` 仍为 `dance-sequence/v1`。实时帧（`contract.js buildFrame`）已输出 `rootYaw` / `shoulderAxis`,
+> 其它字段目前仅离线参考序列提供。
+
+```jsonc
+{
+  "rootYaw": -0.077,           // number,髋轴偏航 atan2(hip.z, hip.x)
+  "rootYawConf": 1,            // number,偏航置信度(离线恒 1)
+  "shoulderAxis": [0.97, -0.08, -0.24], // [x,y,z],肩轴单位向量(右肩−左肩,canonical)
+  "torsoTwist": -0.162,        // number,胸椎扭转 = 肩轴偏航 − 髋轴偏航(rad)
+  "torsoRoll": 0.010,          // number,躯干侧倾(rad,绕 z 轴)
+  "torsoPitch": 0.068,         // number,躯干前倾(rad,绕 x 轴)
+  "armTwist": [0.28, -2.92, -1.95, 1.44] // [左上臂,右上臂,左前臂,右前臂] 轴向扭转(rad)
+}
+```
+
+- `rootYaw` / `shoulderAxis`:供 `retarget.js` 推导 `bodyYaw`(骨盆偏航)→ 修复教练「无法转弯」。
+- `torsoTwist`:胸椎相对骨盆的绕脊柱轴扭转,消费端沿脊柱曲线分布 + 头部随胸腔全量扭转。
+- `torsoRoll` / `torsoPitch`:躯干侧倾 / 前倾的显式标量(可由 `bones[0]` 脊柱方向反解,冗余但清晰)。
+- `armTwist`:手臂轴向扭转(10 骨单位向量丢失的自由度);当前消费端暂缓,字段先落盘。
+
 ---
 
 ## 4. 参考序列文件(离线,由「离线端」产出)
