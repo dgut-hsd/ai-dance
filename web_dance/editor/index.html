@@ -91,7 +91,7 @@
     <h2><span class="num">4</span>导出谱面</h2>
     <p class="help">得到 <code>chart.json</code>。把它和 <code>timing.json</code>、音频一起合并进舞蹈序列,挑战模式就会在你放的音符上判分。</p>
     <div class="row">
-      <button id="export" class="primary big">⬇ 导出 chart/v1</button>
+      <button id="export" class="primary big">⬇ 导出 chart/v2</button>
       <button id="copy">复制 JSON</button>
     </div>
   </div>
@@ -208,7 +208,7 @@ $("play-tap-hint").onclick = () => audio.play();
 // ---------- ③ 音符 ----------
 $("autofill").onclick = () => {
   if (!timing) { setHint("status", "先完成第②步(定节拍),才能铺音符"); return; }
-  notes = (timing.downbeatsSec || []).map((t) => ({ t: +t.toFixed(3), type: "pose", lane: "body" }));
+  notes = (timing.downbeatsSec || []).map((t) => ({ t: +t.toFixed(3), type: "pose" }));
   $("note-count").textContent = notes.length;
   setHint("status", `已在每个下拍铺好 ${notes.length} 个音符,可点时间轴微调`, true);
   draw();
@@ -228,7 +228,7 @@ function toggleNote(t) {
   if (!timing) { setHint("status", "先完成第②步(定节拍),再点这里放音符"); return; }
   const i = notes.findIndex((n) => Math.abs(n.t - t) < 0.001);
   if (i >= 0) notes.splice(i, 1);
-  else notes.push({ t: Math.round(t * 1000) / 1000, type: "pose", lane: "body" });
+  else notes.push({ t: Math.round(t * 1000) / 1000, type: "pose" });
   notes.sort((a, b) => a.t - b.t);
   $("note-count").textContent = notes.length;
   draw();
@@ -296,7 +296,7 @@ requestAnimationFrame(loop);
 
 // ---------- ④ 导出 ----------
 function buildChart() {
-  return { version: "chart/v1", audio: audioName || "audio.wav", notes };
+  return { version: "chart/v2", audio: audioName || "audio.wav", notes };
 }
 $("export").onclick = () => {
   const json = JSON.stringify(buildChart(), null, 2);

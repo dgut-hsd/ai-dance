@@ -8,21 +8,12 @@
  *
  * 任何写入 songs/ 的序列与谱面都由 export-songs-cli.js 从这里一次性落盘,
  * 运行时的唯一数据来源是 songs/ 目录文件。
+ * FBX→序列的转换逻辑在 ../src/fbxToSequence.js(node/browser 通用,THREE 注入)。
  */
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { BONE_DEFS } from "../../pose_capture/contract.js";
-
-const SAMPLING_FPS = 30;
-
-// 身体尺寸(仅用于 2D 火柴人回放;教练用自己的模型尺寸,评分只看单位向量)
-const DIMS = {
-  spineLen: 0.52, shoulderWidth: 0.38, hipWidth: 0.32,
-  upperArm: 0.28, forearm: 0.26, thigh: 0.44, shin: 0.42, headLen: 0.22,
-};
-
-// ---- 舞曲配对(export-songs 据此生成每曲歌曲包) -----------------------------------
-// fbx 源文件相对 songs/<danceId>/ 目录(随 songs/ 落盘);audio 文件名相对 songs/<danceId>/ 目录。
+import { DIMS, fbxClipToSequence as fbxClipToSequenceCore, makeSequence as makeSequenceCore } from "../src/fbxToSequence.js";
 
 export const FBX_DANCES = [
   { id: "hiphop", label: "Hip Hop Dancing", fbx: "Hip Hop Dancing.fbx" },
@@ -265,34 +256,6 @@ export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
   };
 }
 
-// 角度归一化到 (-π, π]
-function wrapAngle(a) {
-  return Math.atan2(Math.sin(a), Math.cos(a));
-}
-
-// 手臂轴向扭转(10 骨单位向量丢失的自由度):取骨骼世界四元数,向「骨骼自身长轴」
-// 投影出扭转角(肩内/外旋、前臂旋前/旋后)。返回 [左上臂, 右上臂, 左前臂, 右前臂](rad)。
-// 注:浏览器消费端(v2)可据此旋转肘平面,还原 Mixamo 手臂的轴向转向;当前消费端为保守
-// 起见未启用(见 retarget.js 中 `armTwist` 分支),字段已随序列落盘,供后续逐步增强。
-function computeArmTwist(jb) {
-  const twistOf = (bone, from, to) => {
-    if (!bone || !from || !to) return 0;
-    const axis = to.getWorldPosition(new THREE.Vector3())
-      .sub(from.getWorldPosition(new THREE.Vector3())).normalize();
-    if (axis.lengthSq() < 1e-8) return 0;
-    const q = bone.getWorldQuaternion(new THREE.Quaternion());
-    // 旋转向量 (x,y,z) 在长轴 axis 上的投影 ÷ w = 半角正切,反解出绕轴扭转角
-    const sinHalf = q.x * axis.x + q.y * axis.y + q.z * axis.z;
-    return 2 * Math.atan2(sinHalf, q.w);
-  };
-  return [
-    twistOf(jb.left_shoulder,  jb.left_shoulder,  jb.left_elbow),  // 左上臂(肩内/外旋)
-    twistOf(jb.right_shoulder, jb.right_shoulder, jb.right_elbow), // 右上臂
-    twistOf(jb.left_elbow,     jb.left_elbow,     jb.left_wrist),  // 左前臂(旋前/旋后)
-    twistOf(jb.right_elbow,    jb.right_elbow,    jb.right_wrist), // 右前臂
-  ];
-}
-
 /**
  * 把一段 FBX 动画片段转成 dance-sequence/v1 序列(短片段自动循环到 loopTo 秒)。
  * @param {THREE.AnimationClip} clip
@@ -341,32 +304,7 @@ export function fbxClipToSequence(clip, root, { bpm = 120, audio = "pop-demo.wav
     };
     const bones = BONE_DEFS.map((b) => norm(sub(joints[b.child], joints[b.parent])));
 
-    // ---- v2 可选字段(向后兼容 v1;浏览器端按「字段是否存在」选择性消费) ----
-    // 1) 髋轴偏航 rootYaw 与肩轴 shoulderAxis:retarget.js 的 bodyYaw 依赖二者 → 修复
-    //    教练「无法转弯」的根因(旧 fbx 路径只输出 10 骨单位向量,不落地这两个朝向)。
-    const hipVec = sub(J.right_hip, J.left_hip);
-    const rootYaw = Math.atan2(hipVec[2], hipVec[0]);
-    const shoulderAxis = norm(sub(J.right_shoulder, J.left_shoulder));
-    // 2) 胸椎扭转 torsoTwist = 肩轴偏航 − 髋轴偏航(躯干绕脊柱轴的反向旋转,salsa 关键)。
-    const shYaw = Math.atan2(shoulderAxis[2], shoulderAxis[0]);
-    const torsoTwist = wrapAngle(shYaw - rootYaw);
-    // 3) 躯干俯仰/侧倾(从脊柱方向 bones[0] 分解;显式标量,便于消费端独立钳位)。
-    const spineDir = bones[0];
-    const torsoPitch = Math.atan2(spineDir[2], spineDir[1]); // 前倾(绕 x 轴)
-    const torsoRoll = Math.atan2(spineDir[0], spineDir[1]);  // 侧倾(绕 z 轴)
-
-    frames.push({
-      t: +t.toFixed(3),
-      bones,
-      conf: new Array(BONE_DEFS.length).fill(1),
-      rootYaw: +rootYaw.toFixed(4),
-      rootYawConf: 1,
-      shoulderAxis: shoulderAxis.map((v) => +v.toFixed(4)),
-      torsoTwist: +torsoTwist.toFixed(4),
-      torsoRoll: +torsoRoll.toFixed(4),
-      torsoPitch: +torsoPitch.toFixed(4),
-      armTwist: computeArmTwist(jointBone).map((v) => +v.toFixed(4)),
-    });
+    frames.push({ t: +t.toFixed(3), bones, conf: new Array(BONE_DEFS.length).fill(1) });
   }
 
   return makeSequence(frames, { bpm, audio, danceId, durationSec: dur });

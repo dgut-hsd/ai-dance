@@ -28,7 +28,7 @@ export async function exportVideoToSequence({
   mode = "full-body",
   smoothing = { minCutoff: 1.5, beta: 0.5, dCutoff: 1.0 },
   timing = null, // [可选] timing/v1 对象(由 tools/detect_beats.py 产出),写入 meta.timing
-  chart = null,  // [可选] chart/v1 对象(含 audio),写入顶层 chart
+  chart = null,  // [可选] chart/v2 对象(含 audio),写入顶层 chart
 } = {}) {
   const m = resolveMode(mode);
 

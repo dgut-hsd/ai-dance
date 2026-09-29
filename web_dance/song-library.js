@@ -22,6 +22,12 @@ export function songIndex() {
   return index;
 }
 
+/** 保存谱面后强制重读歌单(默认缓存不失效)。 */
+export async function reloadSongIndex() {
+  index = await fetchJson(INDEX_URL);
+  return index;
+}
+
 export function dances() {
   return index?.dances ?? [];
 }

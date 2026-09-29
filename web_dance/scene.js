@@ -41,6 +41,21 @@ export function createScene(canvas) {
   controls.maxPolarAngle = Math.PI * 0.62;
   controls.update();
 
+  let splitLayout = false;
+
+  function updateCameraFraming() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    camera.aspect = width / height;
+    if (splitLayout) {
+      // Keep the dancer centered in the right-hand performance area.
+      camera.setViewOffset(width, height, -width * 0.215, 0, width, height);
+    } else {
+      camera.clearViewOffset();
+    }
+    camera.updateProjectionMatrix();
+  }
+
   // ---- 灯光 ----
   scene.add(new THREE.HemisphereLight(0x9db8ff, 0x14122a, 0.5));
 
@@ -75,7 +90,8 @@ export function createScene(canvas) {
   scene.add(rimViolet);
 
   // ---- 舞台 ----
-  scene.add(buildFloor());
+  const floor = buildFloor();
+  scene.add(floor);
   const movingLights = buildMovingLights();
   scene.add(movingLights);
 
@@ -83,8 +99,7 @@ export function createScene(canvas) {
   scene.add(particles);
 
   function resize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
+    updateCameraFraming();
     renderer.setSize(window.innerWidth, window.innerHeight);
   }
   window.addEventListener("resize", resize);
@@ -95,9 +110,17 @@ export function createScene(canvas) {
     camera,
     controls,
     particles,
+    setSplitLayout(enabled) {
+      splitLayout = enabled;
+      updateCameraFraming();
+      // Keep the physical stage and ambient detail behind the right-hand dancer.
+      const footprint = enabled ? 0.43 : 1;
+      floor.scale.set(footprint, 1, footprint);
+      particles.scale.set(enabled ? 0.55 : 1, 1, enabled ? 0.55 : 1);
+    },
     update(dt) {
       particles.rotation.y += dt * 0.04;
-      updateMovingLights(movingLights, dt);
+      updateMovingLights(movingLights, dt, splitLayout ? 0.5 : 1);
       controls.update();
     },
     render() {
@@ -187,7 +210,7 @@ function buildMovingLights() {
 
 const SWEEP_SPEED = 0.7; // 三盏灯同速,相位均分 → 协调的左右横扫
 
-function updateMovingLights(g, dt) {
+function updateMovingLights(g, dt, spread = 1) {
   const up = new THREE.Vector3(0, 1, 0);
   const dir = new THREE.Vector3();
   const tmp = new THREE.Color();
@@ -198,10 +221,10 @@ function updateMovingLights(g, dt) {
     l.t += dt;
     // 简单水平横扫(固定深度),三盏灯同步
     const a = l.t * SWEEP_SPEED + l.phase;
-    const tx = Math.sin(a) * l.range;
+    const tx = Math.sin(a) * l.range * spread;
     const tz = l.zBase;
 
-    S.set(l.sx, l.sy, l.sz);
+    S.set(l.sx * spread, l.sy, l.sz);
     T.set(tx, 0, tz);
     dir.subVectors(T, S);
     const h = dir.length();

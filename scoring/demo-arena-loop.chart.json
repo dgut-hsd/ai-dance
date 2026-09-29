@@ -1,5 +1,5 @@
 {
-  "version": "chart/v1",
+  "version": "chart/v2",
   "danceId": "demo-arena-loop",
   "audioOffsetSec": 0,
   "judgeOffsetSec": 0,
