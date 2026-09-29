@@ -281,7 +281,7 @@ export async function createApp(options = {}) {
   app.get('/v/:id', (req, res) => res.sendFile(path.join(root, 'web_dance', 'highlight.html')));
   app.get('/staff', (req, res) => res.sendFile(path.join(root, 'web_dance', 'staff.html')));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.
-  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx'])
+  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs'])
     app.use(`/${dir}`, express.static(path.join(root, dir), { dotfiles: 'deny' }));
   for (const file of ['chart.json', 'timing.json']) app.get(`/${file}`, (req, res) => res.sendFile(path.join(root, file)));
   app.get('/', (req, res) => res.redirect('/web_dance/'));
