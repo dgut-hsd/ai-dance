@@ -2,15 +2,6 @@
   "schema": "songs/index/v1",
   "dances": [
     {
-      "id": "demo",
-      "label": "合成示例舞",
-      "danceId": "demo-arena-loop",
-      "defaultSongId": "demo-beat",
-      "chartFile": "demo-arena-loop.chart.json",
-      "musicFile": "demo-beat.wav",
-      "fbxFile": null
-    },
-    {
       "id": "hiphop",
       "label": "Hip Hop Dancing",
       "danceId": "hiphop",
@@ -27,6 +18,15 @@
       "chartFile": "salsa.chart.json",
       "musicFile": "samba-demo.wav",
       "fbxFile": "salsa.fbx"
+    },
+    {
+      "id": "demo-arena-loop",
+      "label": "合成示例舞",
+      "danceId": "demo-arena-loop",
+      "defaultSongId": "demo-arena-loop",
+      "chartFile": "demo-arena-loop.chart.json",
+      "musicFile": "demo-beat.wav",
+      "fbxFile": null
     }
   ],
   "songs": [
@@ -47,6 +47,12 @@
       "label": "Samba Demo",
       "file": "samba-demo.wav",
       "bpm": 100
+    },
+    {
+      "id": "demo-arena-loop",
+      "label": "合成示例舞",
+      "file": "demo-beat.wav",
+      "bpm": 120
     }
   ]
 }

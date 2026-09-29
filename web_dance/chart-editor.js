@@ -4,19 +4,30 @@ import { reconstructJoints } from "../pose_capture/playback.js";
 import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { parseChart, serializeChart } from "../scoring/src/chartCodec.js";
 import { DEFAULT_BONE_WEIGHTS, BONE_DEFS } from "../scoring/src/schema.js";
+import { wavPeaks } from "./wav-peaks.js";
 
 const $ = (id) => document.getElementById(id);
 const DRAFT_KEY = "chart-editor.draft";
 const SCRUB_H = 18;
 const NOTE_H = 60;
 const NOTE_Y = SCRUB_H + (NOTE_H - 26) / 2;
-const PX_PER_SEC = 210;
+let PX_PER_SEC = 210;
+const GU = 64;
+const sx = (t) => GU + t * PX_PER_SEC;
+const tx = (x) => Math.max(0, Math.min(duration(), (x - GU) / PX_PER_SEC));
+const WAVE_VER = "v5";
+const BUILD = "9D";
+let waveDirty = true;
+function setWaveStatus(msg) {
+  try { console.log("[wave] " + msg); } catch { /* noop */ }
+}
 
 const state = {
   seq: null, baseNotes: [], notes: [], sel: -1,
   playhead: 0, bpm: 120, offset: 0,
   playing: false, drag: null, sourceKey: null, rafId: 0,
   folder: { fbx: null, audio: null }, danceId: null, label: "",
+  audio: null, audioUrl: null, audioBuf: null, audioPromise: null, peaks: null, decode: "waiting", decodeErr: "", autoFit: null,
 };
 
 function slugify(s) {
@@ -25,6 +36,22 @@ function slugify(s) {
       .replace(/^[^a-z0-9]+/, "").slice(0, 64) || "dance"
   );
 }
+
+function showErr(msg) {
+  const el = $("err");
+  if (!el) return alert(msg);
+  el.textContent = msg;
+  el.style.display = "inline";
+}
+function clearErr() {
+  const el = $("err");
+  if (el) el.style.display = "none";
+}
+window.addEventListener("error", (e) => { if (e.message) showErr("页面错误：" + e.message); });
+window.addEventListener("unhandledrejection", (e) => {
+  const r = e.reason;
+  showErr("异步错误：" + (r?.message || String(r)));
+});
 
 async function apiJson(url, method, body, token) {
   const headers = {};
@@ -85,8 +112,12 @@ function snapTime(t) {
 function copyNotes(notes) { return JSON.parse(JSON.stringify(notes || [])); }
 
 function setSeq(seq, key, notesOverride) {
+  clearErr();
+  clearAudio();
+  state.autoFit = "window";
   state.seq = seq;
   state.sourceKey = key;
+  document.body.classList.remove("no-seq");
   state.notes = notesOverride ?? copyNotes(seq.chart?.notes || []);
   state.baseNotes = copyNotes(state.notes);
   state.sel = -1;
@@ -100,11 +131,14 @@ function setSeq(seq, key, notesOverride) {
     state.notes = draft.notes;
     $("info").textContent = "已恢复草稿（点「放弃草稿」回到音符起点）";
   }
-  resizeCanvas();
+  fitWindow();
   redraw();
   renderNoteList();
   renderProps();
   drawPose();
+  drawWave();
+  setWaveStatus("读取音频…（前端 fetch 字节）");
+  ensureAudio().then(() => drawWave()).catch((e) => { showErr("音频：" + e.message); setWaveStatus("启动预载失败：" + e.message); });
 }
 
 function loadDraft() {
@@ -127,7 +161,8 @@ function drawPose() {
   if (frame) {
     renderPoseSilhouette(cvs, reconstructJoints(frame, dims, seq.bones), seq.bones);
   }
-  $("info").textContent = `${seq.danceId} · ${state.playhead.toFixed(2)}s / ${duration().toFixed(2)}s · ${(seq.frames || []).length}帧 · ${state.notes.length}个判定点`;
+  const wf = state.peaks ? "已显示" : (state.decode === "fail" ? "失败" + (state.decodeErr ? "(" + state.decodeErr + ")" : "") : (state.audioUrl ? "解码中" : "无音频"));
+  $("info").textContent = `${seq.danceId} · ${state.playhead.toFixed(2)}s / ${duration().toFixed(2)}s · ${(seq.frames || []).length}帧 · ${state.notes.length}个判定点 · 波形:${wf}`;
 }
 
 // ---- 时间轴渲染与交互 --------------------------------------------------------
@@ -135,16 +170,164 @@ function drawPose() {
 function resizeCanvas() {
   const cvs = $("timeline"), wrap = cvs.parentElement;
   const dpr = window.devicePixelRatio || 1;
-  const w = Math.max(320, Math.ceil(duration() * PX_PER_SEC) + 40);
+  const scroll = $("timelineScroll");
+  const vw = Math.max(40, (scroll && scroll.clientWidth) || window.innerWidth);
+  const w = Math.max(320, Math.ceil(duration() * PX_PER_SEC) + vw);
   cvs.style.width = w + "px";
+  cvs.style.height = (SCRUB_H + NOTE_H) + "px";
   cvs.width = Math.round(w * dpr);
   cvs.height = Math.round((SCRUB_H + NOTE_H) * dpr);
   cvs.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  const wv = $("waveform");
+  const HV = 90;
+  wv.style.width = w + "px";
+  wv.style.height = HV + "px";
+  wv.width = Math.round(w * dpr);
+  wv.height = Math.round(HV * dpr);
+  wv.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  const ph = $("playhead");
+  if (ph) ph.style.height = (SCRUB_H + NOTE_H + 6 + HV) + "px";
+  waveDirty = true;
+}
+
+function clearAudio() {
+  if (state.audioUrl) URL.revokeObjectURL(state.audioUrl);
+  state.audio = null;
+  state.audioUrl = null;
+  state.audioBuf = null;
+  state.audioPromise = null;
+  state.peaks = null;
+  state.decode = "waiting";
+  state.decodeErr = "";
+  waveDirty = true;
+}
+
+function fitTimeline() {
+  const wrap = $("timelineWrap");
+  const avail = Math.max(320, (wrap.clientWidth || window.innerWidth - 282) - 20);
+  PX_PER_SEC = Math.max(1, Math.round((avail - 40) / Math.max(1, duration())));
+  updateZoomUI();
+  resizeCanvas();
+}
+
+function fitWindow() {
+  const wrap = $("timelineWrap");
+  const avail = Math.max(320, (wrap.clientWidth || window.innerWidth - 282) - 20);
+  const windowSec = Math.min(Math.max(1, duration()), 30);
+  PX_PER_SEC = Math.max(1, Math.round((avail - 40) / windowSec));
+  updateZoomUI();
+  resizeCanvas();
+}
+
+function minZoomPxps() {
+  const wrap = $("timelineWrap");
+  const avail = Math.max(320, ((wrap && wrap.clientWidth) || window.innerWidth - 282) - 20);
+  return Math.max(1, Math.round((avail - 40) / Math.max(1, duration())));
+}
+
+function updateZoomUI() {
+  const z = $("zoom");
+  if (!z) return;
+  z.min = String(minZoomPxps());
+  z.max = "300";
+  z.value = PX_PER_SEC;
+}
+
+function buildPeaks(ch, sampleRate, durationSec) {
+  const targetBuckets = Math.max(2, Math.min(40000, Math.ceil(durationSec * 200)));
+  const per = Math.max(1, Math.floor(ch.length / targetBuckets));
+  const n = Math.max(2, Math.ceil(ch.length / per));
+  const mn = new Float32Array(n), mx = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const s = i * per, e = Math.min(ch.length, (i + 1) * per);
+    let lo = 1, hi = -1;
+    for (let j = s; j < e; j++) { const v = ch[j]; if (v < lo) lo = v; if (v > hi) hi = v; }
+    mn[i] = lo; mx[i] = hi;
+  }
+  state.peaks = { min: mn, max: mx, rate: n / Math.max(1, durationSec) };
+  waveDirty = true;
+}
+
+function waveSelfReport() {
+  const cvs = document.getElementById("waveform");
+  if (!cvs) return "找不到 #waveform canvas";
+  try {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = parseFloat(cvs.style.width) || 0;
+    const cssH = parseFloat(cvs.style.height) || 0;
+    const r = cvs.getBoundingClientRect();
+    const ctx = cvs.getContext("2d");
+    const hDev = Math.max(1, Math.round(cssH * dpr));
+    const cx = Math.max(0, Math.min(cvs.width - 1, Math.round((GU + 24) * dpr)));
+    const img = ctx.getImageData(cx, 0, 1, hDev);
+    let painted = 0, sample = "";
+    for (let y = 0; y < hDev; y++) {
+      const o = y * 4;
+      if (img.data[o + 3] > 20) {
+        painted++;
+        if (sample === "") sample = `rgba(${img.data[o]},${img.data[o + 1]},${img.data[o + 2]},${img.data[o + 3]})`;
+      }
+    }
+    return `styleW=${cssW}px rect=${Math.round(r.width)}x${Math.round(r.height)} 后端=${cvs.width}x${cvs.height} 采样x=${GU + 24} 非透明=${painted}/${hDev}行 首色=${sample}`;
+  } catch (e) {
+    return "自检异常:" + ((e && e.message) || e);
+  }
+}
+
+function drawWave() {
+  const cvs = $("waveform");
+  if (!cvs) return;
+  waveDirty = false;
+  const ctx = cvs.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, parseFloat(cvs.style.width) || (cvs.clientWidth || cvs.width / dpr) || 320);
+  const cssH = parseFloat(cvs.style.height) || cvs.clientHeight || 90;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, cssH);
+  const peaks = state.peaks;
+  if (!peaks || !peaks.min || !peaks.min.length) {
+    ctx.font = "12px system-ui";
+    if (state.decode === "fail") {
+      ctx.fillStyle = "rgba(255,107,107,.95)";
+      ctx.fillText("波形解码失败：" + (state.decodeErr || "未知") + "（右键波形图重试）", GU + 8, 16);
+    } else {
+      ctx.fillStyle = "rgba(255,255,255,.6)";
+      ctx.fillText("音频载入/解码中，波形待显示…", GU + 8, 16);
+    }
+    return;
+  }
+  const mid = cssH / 2, amp = mid * 1.7;
+  const rate = peaks.rate;
+  for (let x = GU; x < w; x++) {
+    const t0 = (x - GU) / PX_PER_SEC;
+    const t1 = t0 + 1 / PX_PER_SEC;
+    const b0 = Math.floor(t0 * rate), b1 = Math.min(peaks.min.length - 1, Math.ceil(t1 * rate));
+    let lo = 1, hi = -1;
+    if (b1 >= b0) {
+      for (let b = b0; b <= b1; b++) { if (peaks.min[b] < lo) lo = peaks.min[b]; if (peaks.max[b] > hi) hi = peaks.max[b]; }
+    }
+    ctx.fillStyle = "rgba(76,194,255,.8)";
+    ctx.fillRect(x, mid - Math.min(1, hi) * amp, 1, Math.max(1, (hi - lo) * amp));
+  }
+  try {
+    const rpt = "自检:" + waveSelfReport();
+    ctx.fillStyle = "rgba(255,255,255,.85)";
+    ctx.font = "11px system-ui";
+    ctx.fillText("引擎" + WAVE_VER + "/BUILD-" + BUILD + " " + rpt, 8, Math.max(12, cssH - 6));
+  } catch (e) {
+    try { ctx.fillStyle = "#ffb0c0"; ctx.fillText(String((e && e.message) || e), 8, Math.max(12, cssH - 6)); } catch { /* noop */ }
+  }
 }
 
 function noteWindow(n) { return n.window || { early: -0.25, late: 0.25 }; }
-function noteXCss(n) { return (n.t + noteWindow(n).early) * PX_PER_SEC; }
-function noteWCss(n) { const w = noteWindow(n); return Math.max(5, (w.late - w.early) * PX_PER_SEC); }
+function noteXCss(n) { return sx(n.t) - noteWCss(n) / 2; }
+function noteWCss(n) {
+  const w = noteWindow(n);
+  const c = $("timeline").getContext("2d");
+  c.font = "10px system-ui";
+  const lw = Math.ceil(c.measureText(n.t.toFixed(2)).width) + 8;
+  return Math.min(Math.max(5, (w.late - w.early) * PX_PER_SEC), lw);
+}
 function noteAtCss(x) {
   let hit = -1, best = Infinity;
   for (let i = 0; i < state.notes.length; i++) {
@@ -166,10 +349,18 @@ function redraw() {
   ctx.clearRect(0, 0, w, SCRUB_H + NOTE_H);
   ctx.font = "10px system-ui";
 
+  ctx.fillStyle = "rgba(255,255,255,.04)";
+  ctx.fillRect(0, 0, GU, SCRUB_H + NOTE_H);
+  ctx.strokeStyle = "rgba(111,227,161,.3)";
+  ctx.beginPath();
+  ctx.moveTo(GU + 0.5, 0);
+  ctx.lineTo(GU + 0.5, SCRUB_H + NOTE_H);
+  ctx.stroke();
+
   const beats = beatTimes();
   for (let i = 0; i < beats.length; i++) {
     const b = beats[i];
-    const x = b * PX_PER_SEC;
+    const x = sx(b);
     ctx.fillStyle = i % 4 === 0 ? "rgba(120,150,255,.45)" : "rgba(120,150,255,.18)";
     ctx.fillRect(x, SCRUB_H, 1, NOTE_H);
     if (i % 4 === 0) {
@@ -189,28 +380,22 @@ function redraw() {
     ctx.fillRect(x, NOTE_Y, cw, 24);
     ctx.globalAlpha = 1;
     ctx.fillStyle = "rgba(12,14,20,.9)";
-    ctx.fillText((n.t).toFixed(2), x + 3, NOTE_Y + 16);
+    const txt = (n.t).toFixed(2);
+    ctx.fillText(txt, x + (cw - ctx.measureText(txt).width) / 2, NOTE_Y + 16);
   }
 
-  const px = state.playhead * PX_PER_SEC;
-  ctx.strokeStyle = "#6fe3a1";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(px, 0);
-  ctx.lineTo(px, SCRUB_H + NOTE_H);
-  ctx.stroke();
-  ctx.lineWidth = 1;
+  if (waveDirty) { waveDirty = false; drawWave(); }
 }
 
 function tFromEvent(e) {
   const rect = $("timeline").getBoundingClientRect();
-  return Math.max(0, Math.min(duration(), (e.clientX - rect.left) / PX_PER_SEC));
+  return tx(e.clientX - rect.left);
 }
 
 function setPlayhead(t) {
   state.playhead = Math.max(0, Math.min(duration(), t));
-  const wrap = $("timeline").parentElement;
-  wrap.scrollLeft = Math.max(0, state.playhead * PX_PER_SEC - wrap.clientWidth * 0.5);
+  const scroll = $("timelineScroll");
+  scroll.scrollLeft = Math.max(0, Math.min(state.playhead * PX_PER_SEC, scroll.scrollWidth - scroll.clientWidth));
   redraw();
   drawPose();
 }
@@ -251,6 +436,42 @@ window.addEventListener("pointerup", () => {
     selectNote(state.drag.idx);
   }
   state.drag = null;
+});
+
+const SCROLL = $("timelineScroll");
+SCROLL.addEventListener("scroll", () => {
+  if (state.playing) return;
+  const t = SCROLL.scrollLeft / PX_PER_SEC;
+  const pt = Math.max(0, Math.min(duration(), t));
+  if (Math.abs(pt - state.playhead) > 0.01) {
+    state.playhead = pt;
+    redraw();
+    drawPose();
+  }
+});
+
+TIMELINE.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (!state.seq) return;
+  const rect = TIMELINE.getBoundingClientRect();
+  const hit = noteAtCss(e.clientX - rect.left);
+  const i = hit >= 0 ? hit : state.sel;
+  if (i >= 0 && i < state.notes.length) deleteNote(i);
+});
+
+const WAVEFORM = $("waveform");
+WAVEFORM.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (!state.seq || !state.audioBuf) return;
+  state.decode = "decoding";
+  state.decodeErr = "";
+  drawWave();
+  decodePeaks(state.audioBuf).catch((err) => {
+    state.decode = "fail";
+    state.decodeErr = err?.message || String(err);
+    drawWave();
+    showErr("音频解码失败：" + state.decodeErr);
+  });
 });
 
 // ---- 音符操作 ----------------------------------------------------------------
@@ -374,15 +595,112 @@ function renderProps() {
 
 // ---- 播放 -------------------------------------------------------------------
 
-function startPlay() {
+function ensureAudio() {
+  if (!state.audioPromise) {
+    state.audioPromise = loadAudio().catch((e) => { state.audioPromise = null; throw e; });
+  }
+  return state.audioPromise;
+}
+
+async function loadAudio() {
+  if (state.audioUrl) return state.audio;
+  const u = state.seq?.chart?.audio || state.seq?.meta?.audio || "";
+  let ab = null, src = null;
+  if (state.folder.audio) {
+    ab = await state.folder.audio.arrayBuffer();
+    src = URL.createObjectURL(new Blob([ab], { type: state.folder.audio.type || "audio/wav" }));
+  } else if (u) {
+    const r = await fetch(u);
+    if (!r.ok) throw new Error(`获取音频失败：${u} → ${r.status}`);
+    ab = await r.arrayBuffer();
+    src = URL.createObjectURL(new Blob([ab]));
+  }
+  if (!src) {
+    state.decode = "fail";
+    state.decodeErr = "未找到音频";
+    setWaveStatus("未找到音频（无 audio 字段 / 无文件夹音频）");
+    drawWave();
+    showErr("未找到音频，无法显示波形");
+    return null;
+  }
+  setWaveStatus(`已读到 ${(ab.byteLength / (1024 * 1024)).toFixed(1)}MB 音频字节，纯JS解析峰值（引擎${WAVE_VER}）…`);
+  const audio = new Audio(src);
+  audio.addEventListener("ended", () => { if (state.playing) stopPlay(); });
+  state.audio = audio;
+  state.audioUrl = src;
+  state.audioBuf = ab;
+  if (!state.peaks) {
+    try {
+      await decodePeaks(ab);
+    } catch (e) {
+      state.decode = "fail";
+      state.decodeErr = e?.message || String(e);
+      setWaveStatus("失败：" + state.decodeErr);
+      drawWave();
+      showErr("音频解码失败，波形图无法显示：" + state.decodeErr);
+    }
+  }
+  return audio;
+}
+
+async function decodePeaks(ab) {
+  const wav = wavPeaks(ab);
+  if (wav) {
+    state.decode = "ok";
+    state.peaks = wav;
+    waveDirty = true;
+    setWaveStatus(`波形已显示：${state.seq ? duration().toFixed(1) : "?"}s · ${wav.min.length}桶 · 引擎${WAVE_VER}/BUILD-${BUILD}`);
+    drawWave();
+    return;
+  }
+  setWaveStatus("未识别为 PCM WAV，改走浏览器 WebAudio 解码…");
+  const AC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!AC) {
+    state.decode = "fail";
+    state.decodeErr = "非 WAV 且浏览器不支持 OfflineAudioContext";
+    setWaveStatus("失败：非 WAV 且浏览器不支持 OfflineAudioContext");
+    throw new Error(state.decodeErr);
+  }
+  state.decode = "decoding";
+  const ac = new AC(1, 1, 44100);
+  const buf = await Promise.race([
+    ac.decodeAudioData(ab.slice(0)),
+    new Promise((_, rej) => setTimeout(() => rej(new Error("音频解码超时(10s)")), 10000)),
+  ]);
+  state.decode = "ok";
+  buildPeaks(buf.getChannelData(0), buf.sampleRate, buf.duration);
+  setWaveStatus(`波形已显示：${duration().toFixed(1)}s · WebAudio解码（引擎${WAVE_VER}）`);
+  drawWave();
+}
+
+async function startPlay() {
+  if (state.playhead >= duration()) setPlayhead(0);
+  setPlayhead(state.playhead);
   state.playing = true;
   $("btnPlay").textContent = "暂停 ⏸";
+  try {
+    const audio = await ensureAudio();
+    if (audio) {
+      if (!state.peaks && state.audioBuf) {
+        try { await decodePeaks(state.audioBuf); } catch (e) {
+          state.decode = "fail";
+          state.decodeErr = e?.message || String(e);
+          drawWave();
+          showErr("音频解码失败，波形图无法显示：" + state.decodeErr);
+        }
+      }
+      audio.currentTime = Math.max(0, Math.min(state.playhead, audio.duration || state.playhead));
+      audio.play().catch(() => {});
+    }
+  } catch (e) {
+    showErr("音频：" + e.message);
+  }
   let last = performance.now();
   const tick = (now) => {
     if (!state.playing) return;
     const dt = (now - last) / 1000; last = now;
     setPlayhead(state.playhead + dt);
-    if (state.playhead >= duration()) { stopPlay(); return; }
+    if (state.playhead >= duration()) { stopPlay(); drawWave(); return; }
     state.rafId = requestAnimationFrame(tick);
   };
   state.rafId = requestAnimationFrame(tick);
@@ -391,8 +709,45 @@ function stopPlay() {
   state.playing = false;
   cancelAnimationFrame(state.rafId);
   $("btnPlay").textContent = "播放 ▶";
+  if (state.audio) { try { state.audio.pause(); } catch { /* noop */ } }
 }
 $("btnPlay").onclick = () => { if (!state.seq) return; state.playing ? stopPlay() : startPlay(); };
+
+$("btnFit").onclick = () => {
+  state.autoFit = "full";
+  state.playhead = 0;
+  fitTimeline();
+  setPlayhead(0);
+  drawWave();
+};
+$("zoom").addEventListener("input", () => {
+  state.autoFit = null;
+  const minPx = minZoomPxps();
+  PX_PER_SEC = Math.max(minPx, +$("zoom").value || PX_PER_SEC);
+  $("zoom").value = String(PX_PER_SEC);
+  resizeCanvas();
+  redraw();
+  drawWave();
+});
+window.addEventListener("resize", () => {
+  if (state.autoFit === "window") {
+    fitWindow();
+  } else if (state.autoFit === "full") {
+    fitTimeline();
+  } else {
+    const z = $("zoom");
+    const minPx = minZoomPxps();
+    if (z) z.min = String(minPx);
+    if (PX_PER_SEC < minPx) {
+      PX_PER_SEC = minPx;
+      if (z) z.value = String(minPx);
+    }
+  }
+  if (state.autoFit === "window" || state.autoFit === "full") state.playhead = 0;
+  resizeCanvas();
+  redraw();
+  drawWave();
+});
 
 // ---- 导入 / 导出 --------------------------------------------------------------
 
@@ -475,6 +830,7 @@ $("btnSave").onclick = async () => {
     alert(`已保存到 songs/${danceId}/ 并更新歌单`);
   } catch (err) {
     alert("保存失败：" + err.message);
+    showErr("保存失败：" + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = "保存到歌单";
@@ -525,6 +881,7 @@ $("folderFile").addEventListener("change", async (e) => {
     $("info").textContent = `已载入文件夹「${folderName}」→ ${danceId}: ${seq.frames.length} 帧 / ${duration().toFixed(2)}s / 音频 ${audioFile.name}。编辑好点「保存到歌单」`;
   } catch (err) {
     alert("FBX 解析失败：" + err.message);
+    showErr("FBX 解析失败：" + err.message);
   }
 });
 
@@ -539,28 +896,36 @@ function populateDances(selectValue) {
     opt.textContent = `${d.label} (${d.danceId})`;
     sel.appendChild(opt);
   }
-  sel.value = selectValue ?? dances()[0]?.id ?? "";
+  sel.value = selectValue ?? "";
 }
 
 async function init() {
-  await loadSongIndex();
-  const sel = $("songSel");
-  populateDances();
-  sel.onchange = async () => {
-    const d = danceById(sel.value);
-    if (!d) return;
-    try {
-      const seq = await loadSequence(d.danceId);
-      state.folder = { fbx: null, audio: null };
-      state.danceId = d.danceId;
-      state.label = d.label;
-      $("danceId").value = d.danceId;
-      setSeq(seq, d.id);
-    } catch (err) {
-      alert("加载歌曲失败：" + err.message);
+  setWaveStatus(`波形引擎 ${WAVE_VER} 就绪（未载入音频）`);
+  try {
+    await loadSongIndex();
+    const sel = $("songSel");
+    populateDances();
+    sel.onchange = async () => {
+      const d = danceById(sel.value);
+      if (!d) return;
+      try {
+        const seq = await loadSequence(d.danceId);
+        state.folder = { fbx: null, audio: null };
+        state.danceId = d.danceId;
+        state.label = d.label;
+        $("danceId").value = d.danceId;
+        setSeq(seq, d.id);
+      } catch (err) {
+        alert("加载歌曲失败：" + err.message);
+        showErr("加载歌曲失败：" + err.message);
+      }
+    };
+    if ($("songSel").options.length <= 1) {
+      showErr("歌单为空：请确认 songs/index.json 存在（或用 npm run export-songs 生成）。需配合「npm start」的 Node 服务打开本页。");
     }
-  };
-  if (dances().length) await sel.onchange();
+  } catch (err) {
+    showErr("歌单加载失败：" + err.message + " —— 请用 http 方式打开（npm start → http://localhost:8000/web_dance/chart-editor.html），python -m http.server 只能看不能保存，双击 file:// 无法运行。");
+  }
 }
 
 init();

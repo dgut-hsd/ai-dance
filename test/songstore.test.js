@@ -65,6 +65,29 @@ test('songstore: create→upload→complete 落盘 songs/ 并更新 index.json(�
   }
 });
 
+test('songstore: 按 danceId 去重(旧条目 id 不同、danceId 相同也不会重复)', async () => {
+  const songsDir = await mkdtemp(path.join(os.tmpdir(), 'songstore-dedup-'));
+  const store = createSongStore({ songsDir });
+  try {
+    await writeFile(path.join(songsDir, 'index.json'), JSON.stringify({
+      schema: 'songs/index/v1',
+      dances: [{ id: 'demo', label: '合成示例舞', danceId: 'demo-arena-loop', defaultSongId: 'demo-beat', chartFile: 'demo-arena-loop.chart.json', musicFile: 'demo-beat.wav', fbxFile: null }],
+      songs: [{ id: 'demo-beat', label: '示例节拍', file: 'demo-beat.wav', bpm: 120 }],
+    }));
+
+    const create = await store.create({ danceId: 'demo-arena-loop', label: '合成示例舞', bpm: 120, audioName: 'demo-beat.wav', overwrite: true });
+    await store.putSequence('demo-arena-loop', create.ownerToken, JSON.stringify({ ...FIXTURE, danceId: 'demo-arena-loop', chart: { ...FIXTURE.chart, audio: 'demo-beat.wav' } }));
+    await store.complete('demo-arena-loop', create.ownerToken);
+
+    const index = JSON.parse(await readFile(path.join(songsDir, 'index.json'), 'utf8'));
+    assert.equal(index.dances.length, 1);
+    assert.equal(index.dances[0].id, 'demo-arena-loop');
+    assert.ok(!index.dances.some((d) => d.danceId === 'demo-arena-loop' && d.id !== 'demo-arena-loop'));
+  } finally {
+    await rm(songsDir, { recursive: true, force: true });
+  }
+});
+
 test('songstore: 非法 danceId / 文件名被拒绝', async () => {
   const songsDir = await mkdtemp(path.join(os.tmpdir(), 'songstore-bad-'));
   const store = createSongStore({ songsDir });

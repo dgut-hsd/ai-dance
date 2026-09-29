@@ -81,7 +81,8 @@
       "thigh": 0.44,
       "shin": 0.42,
       "headLen": 0.22
-    }
+    },
+    "audio": "demo-beat.wav"
   },
   "bones": [
     {
@@ -48379,80 +48380,63 @@
   ],
   "chart": {
     "version": "chart/v2",
+    "danceId": "demo-arena-loop",
     "audio": "demo-beat.wav",
+    "audioOffsetSec": 0,
+    "judgeOffsetSec": 0,
     "notes": [
       {
         "id": "downbeat-0",
         "t": 0,
         "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 0
       },
       {
         "id": "downbeat-2",
         "t": 2,
         "type": "pose",
-        "lane": "body"
-      },
-      {
-        "id": "downbeat-4",
-        "t": 4,
-        "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 60
       },
       {
         "id": "downbeat-6",
         "t": 6,
         "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 180
       },
       {
-        "id": "downbeat-8",
-        "t": 8,
-        "type": "pose",
-        "lane": "body"
-      },
-      {
-        "id": "downbeat-10",
+        "id": "m-1790603476764",
         "t": 10,
         "type": "pose",
-        "lane": "body"
-      },
-      {
-        "id": "downbeat-12",
-        "t": 12,
-        "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 300
       },
       {
         "id": "downbeat-14",
         "t": 14,
         "type": "pose",
-        "lane": "body"
-      },
-      {
-        "id": "downbeat-16",
-        "t": 16,
-        "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 420
       },
       {
         "id": "downbeat-18",
         "t": 18,
         "type": "pose",
-        "lane": "body"
-      },
-      {
-        "id": "downbeat-20",
-        "t": 20,
-        "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 540
       },
       {
         "id": "downbeat-22",
         "t": 22,
         "type": "pose",
-        "lane": "body"
+        "lane": "body",
+        "refFrameIdx": 660
       }
-    ]
+    ],
+    "meta": {
+      "source": "manual"
+    }
   }
 }

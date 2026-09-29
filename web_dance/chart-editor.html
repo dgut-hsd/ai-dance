@@ -12,7 +12,8 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-    font: 13px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; }
+    font: 13px/1.5 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
   header.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .toolbar label { display: inline-flex; align-items: center; gap: 4px; color: var(--dim); }
@@ -24,8 +25,9 @@
   button { cursor: pointer; }
   button:hover { border-color: var(--accent); }
   button.primary { background: #14506b; border-color: #1d75a0; }
-  main { display: grid; grid-template-columns: 240px 1fr; gap: 12px; padding: 12px; }
-  .left { display: flex; flex-direction: column; gap: 8px; }
+  main { display: grid; grid-template-columns: 240px 1fr; gap: 12px; padding: 12px;
+    flex: 1; min-height: 0; overflow: hidden; }
+  .left { display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
   .posebox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
   .posebox canvas { display: block; width: 100%; image-rendering: pixelated; }
   #pose, #notePose { background: #10141f26; }
@@ -43,35 +45,48 @@
   ul#noteList li b { color: var(--accent); min-width: 52px; font-weight: 600; }
   ul#noteList li .tag { font-size: 11px; color: var(--dim); }
   ul#noteList li .del { margin-left: auto; color: var(--sel); background: none; border: none; cursor: pointer; }
-  .right { display: flex; flex-direction: column; gap: 8px; }
-  #timelineWrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px; }
+  .right { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; }
+  #legend { display: flex; gap: 14px; color: var(--dim); font-size: 11px; flex: none; }
+  #timelineWrap { position: relative; overflow: hidden; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; height: auto; min-height: 0; }
+  #timelineScroll { overflow-x: auto; overflow-y: hidden; padding: 8px; }
+  #playhead { position: absolute; left: 72px; top: 8px; width: 2px;
+    background: #6fe3a1; box-shadow: 0 0 8px #6fe3a199; z-index: 3; pointer-events: none; }
+  #playheadKnob { position: absolute; left: -4px; top: 0; width: 0; height: 0;
+    border-left: 5px solid transparent; border-right: 5px solid transparent;
+    border-top: 7px solid #6fe3a1; }
   #timeline { display: block; }
-  #legend { display: flex; gap: 14px; color: var(--dim); font-size: 11px; }
+  #waveform { display: block; margin-top: 6px; background: #10141f26; border-radius: 6px; }
   .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   .status { color: var(--good); }
+  .err { color: #ff6b6b; font-weight: 600; }
+  body.no-seq .needs-seq { display: none; }
+  body.no-seq main { display: none; }
 </style>
 </head>
-<body>
+<body class="no-seq">
 <header class="toolbar">
   <label>舞曲文件夹 <input type="file" id="folderFile" webkitdirectory multiple></label>
   <label>曲子
     <select id="songSel"><option value="">— 选择已有歌曲 —</option></select>
   </label>
-  <label>目录名(ID) <input type="text" id="danceId" maxlength="64" spellcheck="false" placeholder="songs/ 下的目录名" style="width:150px"></label>
-  <span class="sp"></span>
-  <label>BPM <input type="number" id="bpm" step="1" min="20" max="300" style="width:64px"></label>
-  <label>偏移s <input type="number" id="offset" step="0.01" style="width:72px"></label>
-  <label><input type="checkbox" id="snap" checked> 吸附节拍</label>
-  <span class="sp"></span>
-  <button id="btnFill1">每拍</button>
-  <button id="btnFill2">每2拍</button>
-  <button id="btnFill4">每4拍</button>
-  <button id="btnClear">清空</button>
-  <button id="btnPlay" class="primary">播放 ▶</button>
-  <button id="btnReset">放弃草稿</button>
-  <span class="spacer"></span>
-  <button id="btnSave" class="primary">保存到歌单</button>
+  <span class="err" id="err" style="display:none"></span>
+  <label class="needs-seq">目录名(ID) <input type="text" id="danceId" maxlength="64" spellcheck="false" placeholder="songs/ 下的目录名" style="width:150px"></label>
+  <span class="sp needs-seq"></span>
+  <label class="needs-seq">BPM <input type="number" id="bpm" step="1" min="20" max="300" style="width:64px"></label>
+  <label class="needs-seq">偏移s <input type="number" id="offset" step="0.01" style="width:72px"></label>
+  <label class="needs-seq"><input type="checkbox" id="snap" checked> 吸附节拍</label>
+  <span class="sp needs-seq"></span>
+  <button class="needs-seq" id="btnFill1">每拍</button>
+  <button class="needs-seq" id="btnFill2">每2拍</button>
+  <button class="needs-seq" id="btnFill4">每4拍</button>
+  <button class="needs-seq" id="btnClear">清空</button>
+  <button class="needs-seq" id="btnPlay" class="primary">播放 ▶</button>
+  <button class="needs-seq" id="btnReset">放弃草稿</button>
+  <button class="needs-seq" id="btnFit">适应窗口</button>
+  <label class="needs-seq">缩放 <input type="range" id="zoom" min="2" max="300" step="1" value="210" style="width:110px"></label>
+  <span class="needs-seq spacer"></span>
+  <button class="needs-seq" id="btnSave" class="primary">保存到歌单</button>
 </header>
 <main>
   <section class="left">
@@ -91,7 +106,13 @@
       <span><i class="dot" style="background:#ff5c8a"></i>选中</span>
       <span>弱拍 / 强拍 / 播放头</span>
     </div>
-    <div id="timelineWrap"><canvas id="timeline"></canvas></div>
+    <div id="timelineWrap">
+      <div id="playhead"><div id="playheadKnob"></div></div>
+      <div id="timelineScroll">
+        <canvas id="timeline"></canvas>
+        <canvas id="waveform"></canvas>
+      </div>
+    </div>
   </section>
 </main>
 <script type="importmap">
@@ -100,6 +121,14 @@
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 }}
 </script>
-<script type="module" src="./chart-editor.js"></script>
+<script type="module" src="./chart-editor.js?v=20260929a"></script>
+<script>
+  window.addEventListener('error', (e) => {
+    const el = document.getElementById('err');
+    if (!el) return;
+    el.style.display = 'inline';
+    el.textContent = '页面错误: ' + (e.message || '脚本加载失败（请用 http 方式打开本页，如 npm start 后访问 http://localhost:8000/web_dance/chart-editor.html）');
+  });
+</script>
 </body>
 </html>

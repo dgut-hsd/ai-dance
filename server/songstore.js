@@ -106,7 +106,7 @@ export function createSongStore({ songsDir }) {
     } catch {
       index = { schema: "songs/index/v1", dances: [], songs: [] };
     }
-    index.dances = (index.dances ?? []).filter((d) => d.id !== danceId);
+    index.dances = (index.dances ?? []).filter((d) => d.id !== danceId && d.danceId !== danceId);
     index.songs = (index.songs ?? []).filter((s) => s.id !== danceId);
     index.dances.push({
       id: danceId,
