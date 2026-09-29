@@ -72,7 +72,7 @@ export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
   const beat = 60 / bpm;
   const notes = [];
   for (let t = 0; t <= durationSec; t += beat * 2) {
-    notes.push({ id: `${danceId}-${Math.round(t * 1000)}`, t: +t.toFixed(3), type: "pose", lane: "body" });
+    notes.push({ id: `${danceId}-${Math.round(t * 1000)}`, t: +t.toFixed(3), type: "pose" });
   }
   const beatTimesSec = [];
   for (let t = 0; t <= durationSec; t += beat) beatTimesSec.push(+t.toFixed(3));
@@ -94,7 +94,7 @@ export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
     },
     bones: BONE_DEFS.map(({ name, parent, child }) => ({ name, parent, child })),
     frames,
-    chart: { version: "chart/v1", audio, notes },
+    chart: { version: "chart/v2", audio, notes },
   };
 }
 export function fbxClipToSequence(THREE, clip, root, { bpm = 120, audio = "pop-demo.wav", danceId = "fbx-dance", loopTo = 24 } = {}) {

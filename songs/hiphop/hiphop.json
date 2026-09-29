@@ -48445,7 +48445,7 @@
     }
   ],
   "chart": {
-    "version": "chart/v1",
+    "version": "chart/v2",
     "audio": "pop-demo.wav",
     "notes": [
       {

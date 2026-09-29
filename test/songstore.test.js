@@ -39,7 +39,7 @@ test('songstore: create→upload→complete 落盘 songs/ 并更新 index.json(�
     assert.equal(seqFile.chart.audio, 'beat.wav');
     assert.equal(seqFile.chart.notes.length, FIXTURE.chart.notes.length);
     const standalone = JSON.parse(await readFile(path.join(songsDir, 'mydance', 'mydance.chart.json'), 'utf8'));
-    assert.equal(standalone.schema, 'chart/v1');
+    assert.equal(standalone.schema, 'chart/v2');
     assert.equal(standalone.sequenceFile, 'mydance.json');
     assert.equal(await readFile(path.join(songsDir, 'mydance', 'Salsa Dancing.fbx'), 'utf8'), 'FBXBIN');
     assert.equal(await readFile(path.join(songsDir, 'mydance', 'beat.wav'), 'utf8'), 'WAVBIN');

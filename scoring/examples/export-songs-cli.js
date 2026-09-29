@@ -2,8 +2,8 @@
  * export-songs-cli.js — 把离线舞曲构建源一次性落盘为 songs/ 免编程目录。
  *
  * 每曲一个自包含文件夹(平铺,不分子目录):
- *   songs/<danceId>/<danceId>.json        dance-sequence/v1 参考序列(内嵌 chart/v1 + timing/v1)
- *   songs/<danceId>/<danceId>.chart.json  chart/v1 独立谱面(编辑器交换格式, sequenceFile 指向同目录序列)
+ *   songs/<danceId>/<danceId>.json        dance-sequence/v1 参考序列(内嵌 chart/v2 + timing/v1)
+ *   songs/<danceId>/<danceId>.chart.json  chart/v2 独立谱面(编辑器交换格式, sequenceFile 指向同目录序列)
  *   songs/<danceId>/<audio>.wav           本曲音频(平铺)
  *   songs/<danceId>/<danceId>.fbx         [fbx 曲]原始 Mixamo 动作源(自包含)
  *   songs/index.json                      歌曲索引(启动时导入)
@@ -45,9 +45,9 @@ function findSongAsset(file) {
 function embedDemoChart(seq, song) {
   const notes = [];
   for (let t = 0; t <= seq.meta.durationSec - 2; t += 2) {
-    notes.push({ id: `downbeat-${t}`, t, type: "pose", lane: "body" });
+    notes.push({ id: `downbeat-${t}`, t, type: "pose" });
   }
-  seq.chart = { version: "chart/v1", audio: song.file, notes };
+  seq.chart = { version: "chart/v2", audio: song.file, notes };
   seq.meta.timing = { version: "timing/v1", bpm: song.bpm, offsetSec: 0, tempoMap: [{ t: 0, bpm: song.bpm }] };
   const beat = 60 / song.bpm;
   const beats = [];

@@ -1,6 +1,6 @@
 # audio.js — 音频引擎接口设计(方案冻结稿)
 
-> 版本:v1.0(与 `interface-contract.md` §4.1 `timing/v1`、§4.2 `chart/v1` 同时冻结)
+> 版本:v1.0(与 `interface-contract.md` §4.1 `timing/v1` 冻结);谱面 §4.2 已升 `chart/v2`(v1 兼容)
 > 状态:接口设计稿 —— 只定义类/方法签名与契约,**不含实现代码**(遵循「暂不改代码」)。
 > 目标文件:`web_dance/audio.js`(ES module,浏览器端)。
 > 选型:**`AudioBufferSourceNode`**(整曲解码)+ **`AudioContext.currentTime` 作唯一主时钟**。
@@ -26,7 +26,7 @@ SongSession (门面,main.js 唯一入口)
  ├─ Scheduler         lookahead 调度器(绝对时间事件队列)
  ├─ LatencyModel      output + input + user 三延迟 → totalOffsetSec
  ├─ TimingMap         timing/v1 → 拍栅格 / 下拍 / BPM 查询
- ├─ NoteChart         chart/v1  → notes 列表 + 时间窗查询
+ ├─ NoteChart         chart/v2  → notes 列表 + 时间窗查询
  ├─ PlayerPoseBuffer  环形帧缓冲(供延迟补偿采样)
  └─ NoteJudge         音符事件判定(复用 DanceScorer 相似度)
 ```
@@ -59,23 +59,20 @@ interface TimingV1 {
   downbeatsSec?: number[];
 }
 
-// chart/v1(interface-contract §4.2)
-interface ChartV1 {
-  version: "chart/v1";
+// chart/v2(interface-contract §4.2;v1 兼容)
+interface ChartV2 {
+  version: "chart/v1" | "chart/v2";
   danceId?: string;
   audio?: string;
   audioOffsetSec?: number;
   judgeOffsetSec?: number;
   timingWindows?: { perfect: number; great: number; good: number };
-  lanes?: { key: string; label?: string; side?: string }[];
-  notes: NoteV1[];
+  notes: NoteV2[];
 }
 
-type NoteV1 =
-  | { id?: string; t: number; type: "beat";    lane?: string; bones?: number[]; threshold?: number }
-  | { id?: string; t: number; type: "pose";    lane?: string; refFrameIdx?: number; bones?: number[]; threshold?: number }
-  | { id?: string; t: number; type: "hold";    lane?: string; endT: number; refFrameIdx?: number; bones?: number[]; threshold?: number; minHold?: number }
-  | { id?: string; t: number; type: "gesture"; lane?: string; hand: "left" | "right" | "both"; gestureId?: string; threshold?: number };
+type NoteV2 =
+  | { id?: string; t: number; type: "pose"; refFrameIdx?: number; bones?: number[]; threshold?: number }
+  | { id?: string; t: number; type: "gesture"; hand: "left" | "right" | "both"; gestureId?: string; threshold?: number };
 
 type JudgeTier = "PERFECT" | "GREAT" | "GOOD" | "MISS";
 
@@ -90,7 +87,7 @@ interface DanceSequenceV1 {
           danceType: string; timing?: TimingV1; [k: string]: unknown };
   bones: { name: string; parent: string; child: string }[];
   frames: ContractFrame[];
-  chart?: ChartV1;
+  chart?: ChartV2;
   [k: string]: unknown;
 }
 ```
@@ -240,17 +237,16 @@ class PlayerPoseBuffer {
 ```ts
 interface JudgeResult {
   noteId?: string;
-  noteType: NoteV1["type"];
+  noteType: NoteV2["type"];
   tier: JudgeTier;
-  acc: number;            // 0..1 相似度(hold 为区间均值)
+  acc: number;            // 0..1 相似度
   deltaSec: number;       // 命中相对 note.t 的偏移(正 = 偏晚)
   combo: number;          // 更新后连击
   score: number;          // 本次加分
-  ongoing?: boolean;      // hold 进行中(仅 hold 中途 tick 返回)
 }
 interface NoteJudgeOptions {
   latency?: LatencyModel;
-  refAt?: (t: number, note: NoteV1) => ContractFrame | null;  // 参考帧提供者(判定必需)
+  refAt?: (t: number, note: NoteV2) => ContractFrame | null;  // 参考帧提供者(判定必需)
   durationSec?: number;               // 越界 clamp 校验
   defaultThreshold?: number;          // 缺省 0.55
   windowsMs?: { perfect: number; great: number; good: number }; // 覆盖谱面判定窗
@@ -260,7 +256,7 @@ interface NoteJudgeOptions {
 }
 
 class NoteJudge {
-  constructor(chart: ChartV1, similarity: SimilarityFn, opts?: NoteJudgeOptions);
+  constructor(chart: ChartV2, similarity: SimilarityFn, opts?: NoteJudgeOptions);
   reset(): void;
   feed(songTime: number, frame: ContractFrame): void;  // 每帧喂入(内部 push 缓冲)
   tick(songTime: number): JudgeResult[];                // 由 Scheduler 到点调用,返回本 tick 新判定
@@ -274,9 +270,7 @@ class NoteJudge {
 
 - 到点 `t` 进入判定窗;`judgeTime = latency.judgeTimeAt(t)`;到缓冲 `sampleNearest(judgeTime)`。
 - `|deltaSec|` 落窗:≤perfect→PERFECT,≤great→GREAT,≤good→GOOD,否则 MISS(消费该 note)。
-- `beat / pose / gesture`:单次采样即结算。
-- `hold`:起手窗内达标 → 进入 HOLD;此后每 tick 在 `[t, endT]` 采样,跌破 `minHold` 提前结束(GOOD);
-  撑满 → 按区间均值落 tier。
+- `pose / gesture`:单次采样即结算。
 - 命中后该 note 标记 consumed,避免重复结算。
 
 ### 3.9 `SongSession`(门面,main.js 唯一入口)

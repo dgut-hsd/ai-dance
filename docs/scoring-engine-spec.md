@@ -2,8 +2,9 @@
 
 > 状态：**DRAFT v0.3** — 依据组长《关于评分引擎的建议.md》与 `scoring/` 现行实现汇总。
 > v0.3 更新：**10 骨升级已落地**（schema/权重/校验/序列校验/3.json 回放全部完成，54 用例通过）、
-> 仓库已接 GitHub `ai-dance`（组长 `docs/interface-contract.md` v1.0 冻结：10 骨、`chart/v1`、`timing/v1`、
-> 判定窗 ±0.050/0.100/0.150）、事件 `targetYaw` 机制已加、3.json hip-line 退化发现（见 §4/§9）。
+> 仓库已接 GitHub `ai-dance`（组长 `docs/interface-contract.md` v1.0 冻结：10 骨、`timing/v1`；
+> 谱面 §4.2 已升 `chart/v2`，音符类型精简为 pose/gesture，v1 兼容）、
+> 判定窗 ±0.050/0.100/0.150、事件 `targetYaw` 机制已加、3.json hip-line 退化发现（见 §4/§9）。
 > 标 `[待组长]` 的项在联调前由组长拍板并回填本文档。
 
 ---
@@ -104,7 +105,7 @@ scoring/
     eventScorer.js      # 事件扫描（scanEvent 窗口 argmax）+ 事件结算（scoreEvent）
     engine.js           # ScoringEngine：流式 ingest/close（§2.1）
     chartBuilder.js     # 参考序列 → 事件（uniform/extrema 两模式；§6 建议加 bars）
-    chartCodec.js       # chart/v1 谱面文件 ↔ 判定事件（parse/serialize + timingWindows→bands + boneWeights）
+    chartCodec.js       # chart/v2 谱面文件 ↔ 判定事件（parse/serialize + timingWindows→bands + boneWeights）
     metrics.js          # summarize → DanceResult（§1.6）
     replay.js           # 离线一键回放（§2.2）
     index.js            # 导出面（纯 JS，无编译步骤；浏览器可直接 import）
@@ -183,7 +184,7 @@ scoring/
 7. ✅ 文档：`chart-events-spec.md` 已回填（谱面文件闭环，见其更新），`interface-contract.md` 以组长 `docs/` 冻结版为准。
 8. ✅ **语言从 TS 整体改回纯 JS**（用户拍板，避免前端编译）：全部 `src/*.js` / `tests/*.test.js` / `examples/replay-cli.js` 均为剥离类型后的运行时即用 JS，删除 `tsconfig.json`，`npm run replay` 由 tsx 改 node；54 用例仍全绿。
 9. ✅ **接入 `web_dance/` 前端**：新建 `web_dance/scoring-adapter.js`（SimpleScorer 同款 5 接口 + `score/hits/totalAcc` 现场字段），main.js 改 import(:16) + 构造；判定窗按契约冻结 ±0.050/0.100/0.150，事件间隙用 `framePoseScore` 对最近未来事件做预览 acc（只显示不入分）；node 冒烟：demo 序列 48 事件，完美半场全 perfect/错拍半场全 miss。
-10. ✅ **谱面文件驱动引擎（闭环）**：新建 `scoring/src/chartCodec.js`——`parseChart(seq, chart)` 把组长 `chart/v1` notes 解析成判定事件（`refFrameIdx` 取参考帧快照，缺省 `round(t*fps)`；hold 视为起始姿态事件；gesture 无手部模型跳过并 warn）；`serializeChart(events)` 反向导回 chart/v1（子集权重自动表达为 `note.bones`）；`parseTimingWindows` 使谱面 `timingWindows` 覆盖引擎默认档位。扩展字段：顶层 `boneWeights` / `judgeWindow` / `difficulty`，note 级 `bones` / `weights` / `difficulty` / `window`。adapter 构造支持 `{ chart }`（有谱面用文件，无则退回 `buildChart` 自动编谱）；web_dance 新增「加载谱面 JSON」（main.js handler + `makeScorer` danceId 匹配校验）。vitest 新增 chartCodec 13 条，全套 67 绿；node 冒烟：谱面 → parse → adapter → 引擎 2 perfect / S / 连击加成正确。
+10. ✅ **谱面文件驱动引擎（闭环）**：新建 `scoring/src/chartCodec.js`——`parseChart(seq, chart)` 把组长 `chart/v1` notes 解析成判定事件（`refFrameIdx` 取参考帧快照，缺省 `round(t*fps)`；gesture 无手部模型跳过并 warn）；`serializeChart(events)` 反向导回 chart/v1（子集权重自动表达为 `note.bones`）；`parseTimingWindows` 使谱面 `timingWindows` 覆盖引擎默认档位。扩展字段：顶层 `boneWeights` / `judgeWindow` / `difficulty`，note 级 `bones` / `weights` / `difficulty` / `window`。adapter 构造支持 `{ chart }`（有谱面用文件，无则退回 `buildChart` 自动编谱）；web_dance 新增「加载谱面 JSON」（main.js handler + `makeScorer` danceId 匹配校验）。vitest 新增 chartCodec 13 条，全套 67 绿；node 冒烟：谱面 → parse → adapter → 引擎 2 perfect / S / 连击加成正确。**v2 升级**：音符类型精简为 `pose`/`gesture`（删 `beat`/`hold`/`lanes`），序列化输出 `chart/v2`，解析兼容 v1。
 11. ✅ **songs/ 持久化（免编程选歌闭环）**：与组长约定「每曲一文件夹」布局，仓库根 `songs/`——`songs/index.json`（`songs/index/v1`：dances + songs 索引，含 `chartFile`/`musicFile`/`fbxFile`）+ `songs/<danceId>/` 全部**平铺自包含**：`<danceId>.json`（dance-sequence/v1，内嵌 chart/v1 + timing/v1）、`<danceId>.chart.json`（chart/v1 独立谱面，编辑器交换格式，`sequenceFile` 指向同目录）、`<audio>.wav`（平铺，不分子目录）、`<danceId>.fbx`（仅 fbx 曲，原始动作源）。`scoring/examples/export-songs-cli.js`（`npm run export-songs`）离线跑通：demo 合成 + demo-beat(bpm120)、hiphop=`fbx/Hip Hop Dancing.fbx`+pop-demo(bpm120)、salsa=`fbx/Salsa Dancing.fbx`+samba-demo(bpm100)，产出经 `assertValidSequence`+`parseChart` 自检（demo 12 / hiphop 25 / salsa 21 notes；内嵌与独立谱面 events 一致）。运行时：`web_dance/song-library.js` 启动导入 `../songs/index.json`，选歌后按 danceId 读 `../songs/<danceId>/<danceId>.json` 并把相对 `audio` 重基到本曲目录；main.js 异步 init（歌单→下拉→launch 参数→`loadSequence`→`ScoringAdapter(seq)`），game.js 剪影同步改从 songs/demo-arena-loop 读。原 web_dance 的 challenge-library.js / demo-sequence.js（运行时硬编码生成参考与谱面）已删除，转换逻辑收于 `scoring/examples/song-sources.js`，原文件备份在 `scripts-legacy/`。
 
 ---
@@ -249,7 +250,8 @@ scoring/
 | 9 | 判定界面的参考侧相机投影数据（FBX 相机导出） | 组长 | [待拍板] |
 | 10 | 事件策略走 DC 式（每小节） | 双方 | [待拍板]（§6 推荐） |
 | 11 | 引擎接入组长 `web_dance/`（新建 `scoring-adapter.js` 替换 `simple-score.js`；`SongSession` 音符判定保留） | 我方 | ✅ 已接入（main.js 仅改 import 与 3 处构造） |
-| 12 | 谱面文件驱动（chart/v1 人工制谱 → `parseChart` → 引擎；`serializeChart` 导出供校谱；`boneWeights` 入文件） | 我方 | ✅ 已落地（§5 第 10 条） |
+| 12 | 谱面文件驱动（chart/v2 人工制谱 → `parseChart` → 引擎；`serializeChart` 导出供校谱；`boneWeights` 入文件） | 我方 | ✅ 已落地（§5 第 10 条） |
+| 13 | 谱面音符类型精简：删 `beat`/`hold`/`lanes`，仅留 `pose`/`gesture`；序化输出 `chart/v2`（解析兼容 v1） | 双方 | ✅ 已落地（§5 第 10 条） |
 
 ---
 
@@ -261,7 +263,7 @@ npm test            # vitest，67 用例（scoring/ 内）
 npm run replay      # 5 场景离线回放演示（合成）
 npm run replay -- ../3.json   # 读组长实测参考序列回放验收
 npm run export-chart            # demo → demo-arena-loop.chart.json（自动编谱起点）
-npm run export-chart -- <ref.json> [--out x.json] [--step 8]  # 任意参考导出 chart/v1
+npm run export-chart -- <ref.json> [--out x.json] [--step 8]  # 任意参考导出 chart/v2
 npm run export-chart -- <ref.json> --inline        # 把谱面合并进参考文件(seq.chart)
 
 # 仓库根也可直接跑(相对路径按仓库根解析): npm run export-chart -- ../3.json ↔ 直接 3.json
