@@ -11,6 +11,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeVideo, validPng } from './media.js';
 import { selectHighlight, validateMetadata } from './highlight.js';
+import { createSongStore } from './songstore.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const token = () => randomBytes(24).toString('base64url');
@@ -27,6 +28,8 @@ export async function createApp(options = {}) {
   const deviceToken = options.deviceToken ?? process.env.DEVICE_TOKEN ?? '';
   const mode = options.storage || process.env.STORAGE_MODE || 'local';
   if (!['local', 'oss'].includes(mode)) throw new Error('STORAGE_MODE must be local or oss');
+  const songsDir = path.resolve(options.songsDir || process.env.SONGS_DIR || path.join(root, 'songs'));
+  const songStore = createSongStore({ songsDir });
   const baseURL = new URL(publicBase);
   if (!['http:', 'https:'].includes(baseURL.protocol) || baseURL.pathname !== '/' || baseURL.search || baseURL.hash)
     throw new Error('PUBLIC_BASE_URL must be an HTTP(S) origin');
@@ -278,11 +281,42 @@ export async function createApp(options = {}) {
       res.sendFile(path.join(workDir(j), name), { dotfiles: 'allow' });
     });
   }
+  // 谱面编辑器:上传舞曲文件夹(fbx+音频)并保存谱面 → 落盘 songs/ + 更新 index.json
+  const ownerHeader = req => req.headers['x-owner-token'];
+  app.post('/api/songs', device, async (req, res) => {
+    const out = await songStore.create({
+      danceId: req.body?.danceId, label: req.body?.label, bpm: req.body?.bpm,
+      fbxName: req.body?.fbxName, audioName: req.body?.audioName, overwrite: req.body?.overwrite,
+    });
+    res.status(201).json(out);
+  });
+  for (const [route, kind] of [['fbx', 'fbx'], ['audio', 'audio']]) {
+    app.put(`/api/songs/:danceId/${route}`, async (req, res) => {
+      await songStore.putFile(req.params.danceId, kind, ownerHeader(req), req);
+      res.json({ ok: true });
+    });
+  }
+  app.put('/api/songs/:danceId/chart', async (req, res) => {
+    let text = '';
+    let size = 0;
+    for await (const chunk of req) {
+      size += chunk.length;
+      if (size > 32 * 1024 * 1024) throw fail(413, '谱面超过大小限制');
+      text += chunk;
+    }
+    await songStore.putSequence(req.params.danceId, ownerHeader(req), text);
+    res.json({ ok: true });
+  });
+  app.post('/api/songs/:danceId/complete', async (req, res) => {
+    res.json(await songStore.complete(req.params.danceId, ownerHeader(req)));
+  });
+
   app.get('/v/:id', (req, res) => res.sendFile(path.join(root, 'web_dance', 'highlight.html')));
   app.get('/staff', (req, res) => res.sendFile(path.join(root, 'web_dance', 'staff.html')));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.
   for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs'])
     app.use(`/${dir}`, express.static(path.join(root, dir), { dotfiles: 'deny' }));
+  app.use('/songs', express.static(songsDir, { dotfiles: 'deny' }));
   for (const file of ['chart.json', 'timing.json']) app.get(`/${file}`, (req, res) => res.sendFile(path.join(root, file)));
   app.get('/', (req, res) => res.redirect('/web_dance/'));
   app.use((err, req, res, next) => {
