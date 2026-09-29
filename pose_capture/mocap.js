@@ -22,6 +22,22 @@ import { PerfMonitor } from "./perf.js";
 import { createPoseEngine } from "./pose-engine.js";
 import { renderStickFigure } from "./stick-figure.js";
 
+// 把后台 /settings 页面保存的 USB 相机参数应用到 track 上。
+// 先设模式(*Mode),再设数值,保证 exposureTime 等在手动模式下生效。
+export async function applyCameraConstraints(track, params) {
+  if (!track || !params) return;
+  const keys = Object.keys(params).sort((a, b) => {
+    const am = a.endsWith("Mode") ? 0 : 1;
+    const bm = b.endsWith("Mode") ? 0 : 1;
+    return am - bm;
+  });
+  for (const key of keys) {
+    const v = params[key];
+    if (v === null || v === undefined || v === "") continue;
+    try { await track.applyConstraints({ [key]: v }); } catch { /* 设备不支持,跳过 */ }
+  }
+}
+
 async function runLivePipeline({
   video,
   canvas,
@@ -155,6 +171,8 @@ export async function startPoseStream({
   onPerf = null,
   mode = "full-body",
   smoothing = { minCutoff: 1.5, beta: 0.5, dCutoff: 1.0 },
+  deviceId = null,
+  cameraParams = null,
 } = {}) {
   if (!video) throw new Error("startPoseStream: 缺少 video 元素");
   if (typeof onFrame !== "function") {
@@ -176,12 +194,16 @@ export async function startPoseStream({
     boneDefs: m.bones,
     withHands: m.hands,
     onReady: async () => {
+      const videoConstraints = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+      if (deviceId) videoConstraints.deviceId = { exact: deviceId };
+      else videoConstraints.facingMode = "user";
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" },
+        video: videoConstraints,
         audio: false,
       });
       video.srcObject = stream;
       try { await video.play(); } catch (e) { stream.getTracks().forEach((t) => t.stop()); throw e; }
+      if (cameraParams) await applyCameraConstraints(stream.getVideoTracks()[0], cameraParams);
       onStatus("camera-on");
     },
   });

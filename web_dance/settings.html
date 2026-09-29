@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>游戏设置 · DANCE ARENA</title>
+  <link rel="stylesheet" href="/web_dance/staff.css">
+</head>
+<body>
+  <header>
+    <h1>DANCE ARENA 后台</h1>
+    <nav class="nav">
+      <a href="/settings" class="nav-link active">游戏设置</a>
+      <a href="/staff" class="nav-link">视频管理</a>
+      <a href="/editor" class="nav-link">谱面编辑</a>
+    </nav>
+    <a id="back" href="/web_dance/">返回游戏</a>
+  </header>
+
+  <section class="settings">
+    <label>设备密钥
+      <input id="device-token" type="password" autocomplete="off" placeholder="与 .env 的 DEVICE_TOKEN 一致；本机体验可留空">
+    </label>
+    <label>文案风格
+      <select id="copy-style">
+        <option value="challenge">挑战向（默认）</option>
+        <option value="attitude">态度向</option>
+        <option value="showoff">炫耀向</option>
+        <option value="meme">玩梗向</option>
+      </select>
+    </label>
+  </section>
+
+  <section class="model-panel">
+    <div class="camera-head">
+      <h2>舞者模型</h2>
+      <span id="model-status" class="camera-status"></span>
+    </div>
+    <div class="camera-controls">
+      <select id="model-select" title="选择游戏页使用的舞者模型"></select>
+      <button id="model-refresh" class="btn ghost">刷新列表</button>
+    </div>
+    <div class="camera-controls model-url-row">
+      <label for="model-url">自定义模型 URL</label>
+      <input id="model-url" type="text" placeholder="留空则用上方下拉；支持 .glb/.gltf/.fbx 或 http(s) 地址">
+    </div>
+    <div class="camera-controls model-brightness-row">
+      <label for="model-brightness">模型亮度</label>
+      <input id="model-brightness" type="range" min="0.5" max="2.5" step="0.05" value="1">
+      <span id="model-brightness-val" class="param-val">1.00</span>
+    </div>
+    <p class="camera-hint">选择后，游戏页加载/刷新时使用该模型；默认 dancer_girl.fbx。模型太暗可调「模型亮度」，改完需刷新游戏页生效。</p>
+  </section>
+
+  <section class="side-panel">
+    <div class="camera-head">
+      <h2>右侧画面</h2>
+      <span id="side-status" class="camera-status"></span>
+    </div>
+    <div class="camera-controls">
+      <select id="side-mode" title="游戏页右侧显示 3D 模型还是教学视频">
+        <option value="model">3D 模型（默认）</option>
+        <option value="video">视频（3:4 MP4）</option>
+      </select>
+    </div>
+    <div id="side-video-map" class="side-video-map hidden">
+      <div id="side-video-rows" class="side-video-rows"></div>
+      <div class="camera-controls side-map-actions">
+        <button id="side-map-save" class="btn">保存视频绑定</button>
+        <button id="side-map-refresh" class="btn ghost">刷新列表</button>
+      </div>
+    </div>
+    <p class="camera-hint">选择「视频」后，游戏页右侧将播放该舞曲绑定的 MP4（3:4 竖框、跟歌曲同步，保留左侧跟跳与评分）。未绑定视频的舞曲右侧显示为空白，请为需要视频的舞曲都绑定一个视频；选「不绑定」则该舞曲右侧无参考画面。</p>
+  </section>
+
+  <section class="camera-panel">
+    <div class="camera-head">
+      <h2>摄像头</h2>
+      <span id="camera-status" class="camera-status"></span>
+    </div>
+    <div class="camera-controls">
+      <button id="scan-cameras" class="btn">扫描摄像头</button>
+      <select id="camera-select" title="选择游戏页使用的摄像头"></select>
+      <button id="camera-preview-toggle" class="btn ghost">预览</button>
+    </div>
+    <div id="camera-preview-wrap" class="camera-preview-wrap hidden">
+      <video id="camera-preview" autoplay playsinline muted></video>
+    </div>
+    <div id="camera-params" class="camera-params hidden">
+      <div class="camera-params-head">
+        <h3>USB 相机参数</h3>
+        <button id="camera-params-reset" class="btn ghost">恢复默认</button>
+      </div>
+      <div id="camera-params-controls" class="camera-params-controls"></div>
+      <p id="camera-params-status" class="camera-hint"></p>
+    </div>
+    <p class="camera-hint">选择后，游戏页点击「开始」将使用该摄像头；选「默认」则用前置摄像头。点「预览」后可调节 USB 相机参数。</p>
+  </section>
+
+  <script type="module" src="/web_dance/settings.js"></script>
+</body>
+</html>

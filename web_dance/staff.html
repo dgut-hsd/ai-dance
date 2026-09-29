@@ -3,27 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>高光后台 · DANCE ARENA</title>
+  <title>视频管理 · DANCE ARENA</title>
   <link rel="stylesheet" href="/web_dance/staff.css">
 </head>
 <body>
   <header>
-    <h1>高光后台</h1>
+    <h1>DANCE ARENA 后台</h1>
+    <nav class="nav">
+      <a href="/settings" class="nav-link">游戏设置</a>
+      <a href="/staff" class="nav-link active">视频管理</a>
+      <a href="/editor" class="nav-link">谱面编辑</a>
+    </nav>
     <a id="back" href="/web_dance/">返回游戏</a>
   </header>
 
-  <section class="settings">
-    <label>设备密钥
-      <input id="device-token" type="password" autocomplete="off" placeholder="与 .env 的 DEVICE_TOKEN 一致；本机体验可留空">
-    </label>
-    <label>文案风格
-      <select id="copy-style">
-        <option value="challenge">挑战向（默认）</option>
-        <option value="attitude">态度向</option>
-        <option value="showoff">炫耀向</option>
-        <option value="meme">玩梗向</option>
-      </select>
-    </label>
+  <section class="toolbar">
     <button id="refresh" class="btn">刷新</button>
     <span id="status"></span>
   </section>

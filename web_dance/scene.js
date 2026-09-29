@@ -20,7 +20,7 @@ export function createScene(canvas) {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 0.9;
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x0a1020);
@@ -41,6 +41,9 @@ export function createScene(canvas) {
   controls.maxPolarAngle = Math.PI * 0.62;
   controls.update();
 
+  // pk 模式下,舞台画面会把舞者推到画面右侧 21.5% 处(给左侧摄像头让位)。
+  // 高光导出需要知道这个水平偏移量,在合成时把舞者重新居中。
+  const SPLIT_X_OFFSET = 0.215;
   let splitLayout = false;
 
   function updateCameraFraming() {
@@ -49,7 +52,7 @@ export function createScene(canvas) {
     camera.aspect = width / height;
     if (splitLayout) {
       // Keep the dancer centered in the right-hand performance area.
-      camera.setViewOffset(width, height, -width * 0.215, 0, width, height);
+      camera.setViewOffset(width, height, -width * SPLIT_X_OFFSET, 0, width, height);
     } else {
       camera.clearViewOffset();
     }
@@ -57,9 +60,9 @@ export function createScene(canvas) {
   }
 
   // ---- 灯光 ----
-  scene.add(new THREE.HemisphereLight(0x9db8ff, 0x14122a, 0.5));
+  scene.add(new THREE.HemisphereLight(0xc7d8ff, 0x252035, 0.75));
 
-  const key = new THREE.DirectionalLight(0xffffff, 2.2);
+  const key = new THREE.DirectionalLight(0xfff5e8, 1.7);
   key.position.set(2, 5, 4);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
@@ -72,26 +75,28 @@ export function createScene(canvas) {
   key.shadow.bias = -0.0004;
   scene.add(key);
 
-  // 正面补光(暖白、不投影):让舞者正面/脸看得清,与背后彩色轮廓光区分
-  const frontFill = new THREE.DirectionalLight(0xfff3e6, 4.0);
-  frontFill.position.set(0, 1.7, 4.5);
+  // 弱正面补光保留面部细节，同时让主光形成可见的明暗层次。
+  const frontFill = new THREE.DirectionalLight(0xffffff, 0.65);
+  frontFill.position.set(-2, 2.5, 4.5);
   scene.add(frontFill);
 
-  const rimPink = new THREE.DirectionalLight(0xff5fa2, 2.2);
+  const rimPink = new THREE.DirectionalLight(0xff5fa2, 0.7);
   rimPink.position.set(-3.5, 2.2, -4);
   scene.add(rimPink);
 
-  const rimCyan = new THREE.DirectionalLight(0x39ffcf, 1.7);
+  const rimCyan = new THREE.DirectionalLight(0x39ffcf, 0.55);
   rimCyan.position.set(3.5, 2.0, -3.5);
   scene.add(rimCyan);
 
-  const rimViolet = new THREE.DirectionalLight(0x8b5cff, 1.5);
+  const rimViolet = new THREE.DirectionalLight(0x8b5cff, 0.35);
   rimViolet.position.set(0, 3.2, -4.5);
   scene.add(rimViolet);
 
   // ---- 舞台 ----
   const floor = buildFloor();
   scene.add(floor);
+  const arches = buildStageArches();
+  scene.add(arches);
   const movingLights = buildMovingLights();
   scene.add(movingLights);
 
@@ -118,6 +123,10 @@ export function createScene(canvas) {
       floor.scale.set(footprint, 1, footprint);
       particles.scale.set(enabled ? 0.55 : 1, 1, enabled ? 0.55 : 1);
     },
+    // 高光导出用:返回舞台画面内容被水平推向右侧的比例(未分屏时为 0)。
+    getSplitXOffset() {
+      return splitLayout ? SPLIT_X_OFFSET : 0;
+    },
     update(dt) {
       particles.rotation.y += dt * 0.04;
       updateMovingLights(movingLights, dt, splitLayout ? 0.5 : 1);
@@ -132,6 +141,71 @@ export function createScene(canvas) {
       controls.update();
     },
   };
+}
+
+// 一体成型的切角主门架:宽肩、脉冲形冠部与暗色侧翼形成独立轮廓。
+function buildStageArches() {
+  const group = new THREE.Group();
+  const outer = [
+    [-3.2, -0.34], [-3.2, 2.5], [-2.86, 3.18], [-1.95, 4.08], [-0.84, 4.08],
+    [0, 4.4], [0.84, 4.08], [1.95, 4.08], [2.86, 3.18], [3.2, 2.5], [3.2, -0.34],
+  ];
+  const inner = [
+    [-2.78, -0.34], [-2.78, 2.4], [-2.51, 2.92], [-1.82, 3.72], [-0.74, 3.72],
+    [0, 4.01], [0.74, 3.72], [1.82, 3.72], [2.51, 2.92], [2.78, 2.4], [2.78, -0.34],
+  ];
+
+  const frame = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(archBandShape(outer, inner), {
+      depth: 0.2, bevelEnabled: true, bevelThickness: 0.035, bevelSize: 0.035, bevelSegments: 1,
+    }),
+    [
+      new THREE.MeshStandardMaterial({ color: 0x0f2035, metalness: 0.72, roughness: 0.42 }),
+      new THREE.MeshStandardMaterial({ color: 0x0b1728, metalness: 0.52, roughness: 0.52 }),
+    ]
+  );
+  frame.position.z = -2.75;
+  group.add(frame);
+
+  // 发光嵌条也是一个连续面，不靠独立长条在折角处对接。
+  const interpolate = (amount) => outer.map(([x, y], i) => [
+    THREE.MathUtils.lerp(x, inner[i][0], amount),
+    THREE.MathUtils.lerp(y, inner[i][1], amount),
+  ]);
+  const light = new THREE.Mesh(
+    new THREE.ShapeGeometry(archBandShape(interpolate(0.4), interpolate(0.55))),
+    new THREE.MeshBasicMaterial({ color: 0x55cbcf, transparent: true, opacity: 0.65, depthWrite: false, side: THREE.DoubleSide })
+  );
+  light.position.z = -2.49;
+  group.add(light);
+
+  const wingMaterial = new THREE.MeshBasicMaterial({
+    color: 0x263e64, transparent: true, opacity: 0.27, depthWrite: false, side: THREE.DoubleSide,
+  });
+  for (const sign of [-1, 1]) {
+    const wing = new THREE.Shape();
+    const corners = [
+      [3.55, -0.27], [4.05, -0.27], [4.05, 2.95],
+      [3.48, 3.75], [3.22, 3.5], [3.55, 2.7],
+    ];
+    wing.moveTo(sign * corners[0][0], corners[0][1]);
+    for (const [x, y] of corners.slice(1)) wing.lineTo(sign * x, y);
+    wing.closePath();
+    const mesh = new THREE.Mesh(new THREE.ShapeGeometry(wing), wingMaterial);
+    mesh.position.z = -3.55;
+    group.add(mesh);
+  }
+
+  return group;
+}
+
+function archBandShape(outer, inner) {
+  const shape = new THREE.Shape();
+  shape.moveTo(...outer[0]);
+  for (const point of outer.slice(1)) shape.lineTo(...point);
+  for (const point of [...inner].reverse()) shape.lineTo(...point);
+  shape.closePath();
+  return shape;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,15 +229,23 @@ function buildFloor() {
   deck.receiveShadow = true;
   g.add(deck);
 
+  // 收窄的暗色承托层让台面与底座之间出现一条真实的阴影缝。
+  const spacer = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.35, 5.45, 0.08, sides, 1, false, startAngle),
+    new THREE.MeshStandardMaterial({ color: 0x050910, roughness: 0.8, metalness: 0.2 })
+  );
+  spacer.position.y = -0.14;
+  g.add(spacer);
+
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(5.9, 6.15, 0.28, sides, 1, false, startAngle),
+    new THREE.CylinderGeometry(5.9, 6.15, 0.25, sides, 1, false, startAngle),
     [
       new THREE.MeshStandardMaterial({ color: 0x142138, roughness: 0.5, metalness: 0.65 }),
       new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.5, metalness: 0.5 }),
       new THREE.MeshStandardMaterial({ color: 0x070c15, roughness: 0.75, metalness: 0.25 }),
     ]
   );
-  base.position.y = -0.26;
+  base.position.y = -0.29;
   g.add(base);
 
   // 外圈八块深浅交错的饰板，中央留给舞者，避免纹理干扰动作。
@@ -193,6 +275,19 @@ function buildFloor() {
     addLightBar(g, edgePoint(5.45, a + gap, 0.022), edgePoint(5.45, b - gap, 0.022), 0.022, topLight);
     addLightBar(g, edgePoint(5.99, a + 0.13, -0.245), edgePoint(5.99, b - 0.13, -0.245), 0.035, sideLight);
   }
+
+  // 中央表演区以材质和极浅的倒角区分，不用高亮装饰干扰脚步。
+  const danceZone = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.88, 3.12, 0.035, sides, 1, false, startAngle),
+    [
+      new THREE.MeshStandardMaterial({ color: 0x26364d, roughness: 0.42, metalness: 0.6 }),
+      new THREE.MeshStandardMaterial({ color: 0x101829, roughness: 0.58, metalness: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.7, metalness: 0.25 }),
+    ]
+  );
+  danceZone.position.y = -0.008;
+  danceZone.receiveShadow = true;
+  g.add(danceZone);
 
   // 脚下光池:饱和青色,additive
   const pool = new THREE.Mesh(

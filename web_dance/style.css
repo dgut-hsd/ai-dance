@@ -402,6 +402,31 @@ html, body {
   box-shadow: none;
   backdrop-filter: none;
 }
+
+/* ---- 视频参考模式(右侧 3:4 MP4,替换 3D 教练/舞台) ---- */
+#ref-video {
+  position: fixed;
+  top: 50%;
+  left: 70%;
+  transform: translate(-50%, -50%);
+  height: min(68vh, 56vw);
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  background: #000;
+  border: 1px solid rgba(120, 160, 255, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.55), 0 0 0 4px rgba(77, 124, 255, 0.12);
+  z-index: 19;
+}
+.video-side #stage { display: none; }
+.video-side #stage-bridge { display: none; }
+.video-side #ref-panel { display: none; }
+.video-side #score-panel {
+  left: 50%;
+  right: auto;
+  bottom: 14px;
+  transform: translateX(-50%);
+}
 /* 招牌横幅(金箔描边) */
 .cam-banner {
   display: flex;

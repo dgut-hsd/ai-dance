@@ -30,6 +30,19 @@ export async function createApp(options = {}) {
   if (!['local', 'oss'].includes(mode)) throw new Error('STORAGE_MODE must be local or oss');
   const songsDir = path.resolve(options.songsDir || process.env.SONGS_DIR || path.join(root, 'songs'));
   const songStore = createSongStore({ songsDir });
+  const videosDir = path.resolve(options.videosDir || process.env.VIDEOS_DIR || path.join(root, 'videos'));
+  const videoMapFile = path.join(videosDir, 'index.json');
+  const readVideoMap = async () => {
+    try {
+      const parsed = JSON.parse(await readFile(videoMapFile, 'utf8'));
+      return parsed && typeof parsed.mapping === 'object' && !Array.isArray(parsed.mapping) ? parsed.mapping : {};
+    } catch { return {}; }
+  };
+  const writeVideoMap = async (mapping) => {
+    const tmp = `${videoMapFile}.tmp`;
+    await writeFile(tmp, JSON.stringify({ schema: 'videos/index/v1', mapping }, null, 2));
+    await rename(tmp, videoMapFile);
+  };
   const baseURL = new URL(publicBase);
   if (!['http:', 'https:'].includes(baseURL.protocol) || baseURL.pathname !== '/' || baseURL.search || baseURL.hash)
     throw new Error('PUBLIC_BASE_URL must be an HTTP(S) origin');
@@ -311,10 +324,59 @@ export async function createApp(options = {}) {
     res.json(await songStore.complete(req.params.danceId, ownerHeader(req)));
   });
 
+  // 可用舞者模型列表(供 /settings 的模型切换面板)。递归列出 models/ 下所有 .glb/.gltf/.fbx。
+  app.get('/api/models', async (req, res) => {
+    try {
+      const files = (await readdir(path.join(root, 'models'), { recursive: true }))
+        .filter((f) => /\.(glb|gltf|fbx)$/i.test(f))
+        .map((f) => {
+          const rel = f.split(/[\\/]/).join('/');
+          return { name: rel.split('/').pop(), url: `/models/${rel}` };
+        })
+        .sort((a, b) => a.url.localeCompare(b.url));
+      res.json(files);
+    } catch (e) {
+      res.json([]);
+    }
+  });
+
+  // 可用参考视频列表(videos/*.mp4,供 /settings 的「右侧画面」配置)。
+  app.get('/api/videos', async (req, res) => {
+    try {
+      const files = (await readdir(videosDir))
+        .filter((f) => /\.mp4$/i.test(f))
+        .sort((a, b) => a.localeCompare(b))
+        .map((f) => ({ name: f, url: `/videos/${encodeURIComponent(f)}` }));
+      res.json(files);
+    } catch (e) {
+      res.json([]);
+    }
+  });
+  // 每首舞曲 → 参考视频 的绑定映射(游戏页只读,后台 /settings 可写)。
+  app.get('/api/videos-map', async (req, res) => {
+    res.json({ mapping: await readVideoMap() });
+  });
+  app.put('/api/videos-map', device, async (req, res) => {
+    const mapping = req.body?.mapping;
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping))
+      throw fail(400, 'mapping 需为对象');
+    const clean = {};
+    for (const [k, v] of Object.entries(mapping)) {
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(k)) continue; // 舞曲 id 白名单
+      const base = typeof v === 'string' ? path.basename(v) : '';
+      clean[k] = /\.mp4$/i.test(base) ? base : '';
+    }
+    await writeVideoMap(clean);
+    res.json({ ok: true, mapping: clean });
+  });
+
   app.get('/v/:id', (req, res) => res.sendFile(path.join(root, 'web_dance', 'highlight.html')));
   app.get('/staff', (req, res) => res.sendFile(path.join(root, 'web_dance', 'staff.html')));
+  app.get('/settings', (req, res) => res.sendFile(path.join(root, 'web_dance', 'settings.html')));
+  // 谱面编辑器:跳转到 /web_dance/ 下,保证 ./chart-editor.js 等相对路径正确解析。
+  app.get('/editor', (req, res) => res.redirect('/web_dance/chart-editor.html'));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.
-  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs'])
+  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs', 'videos'])
     app.use(`/${dir}`, express.static(path.join(root, dir), { dotfiles: 'deny' }));
   app.use('/songs', express.static(songsDir, { dotfiles: 'deny' }));
   for (const file of ['chart.json', 'timing.json']) app.get(`/${file}`, (req, res) => res.sendFile(path.join(root, file)));

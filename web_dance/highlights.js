@@ -1,5 +1,5 @@
 // 高光录制与上传。玩家端只负责:录制 → 本地即时回放 → 静默后台上传。
-// 任务列表 / 二维码 / 下载 / 重试 / 删除等工作人员 UI 已移到 /staff 页面(经 /api/highlights 管理)。
+// 任务列表 / 二维码 / 下载 / 重试 / 删除等工作人员 UI 已移到 /staff 视频管理页(经 /api/highlights 管理)。
 import { copyFor, renderScoreLine, DEFAULT_COPY } from './highlight-copy.js';
 const MAX_BYTES = 512 * 1024 * 1024;
 // 9:16 竖屏短视频; 布局坐标按 720×1280 设计空间编写, 再等比放大到 1080×1920。
@@ -50,11 +50,12 @@ function put(url, blob, headers, progress) {
     xhr.send(blob);
   });
 }
-function drawContained(ctx, source, x, y, w, h, mirror = false) {
+function drawContained(ctx, source, x, y, w, h, mirror = false, hShift = 0) {
   const sw = source.videoWidth || source.width, sh = source.videoHeight || source.height;
   if (!sw || !sh) return;
   const scale = Math.min(w / sw, h / sh), dw = sw * scale, dh = sh * scale;
-  ctx.save(); ctx.translate(x + w / 2, y + h / 2); if (mirror) ctx.scale(-1, 1);
+  // hShift 按绘制宽度 dw 的比例水平平移(正右负左),用于回正分屏造成的舞者偏移。
+  ctx.save(); ctx.translate(x + w / 2 + hShift * dw, y + h / 2); if (mirror) ctx.scale(-1, 1);
   ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh); ctx.restore();
 }
 function cardBlob(result, copy) {
@@ -76,12 +77,14 @@ function cardBlob(result, copy) {
 }
 
 export class HighlightController {
-  constructor({ stage, camera, fx, getState }) {
+  constructor({ stage, camera, fx, getState, stageShift }) {
     Object.assign(this, { stage, camera, fx, getState });
+    // pk 分屏录制时舞台画面把舞者推到右侧;stageShift 返回需要回正的水平比例(0 表示无需回正)。
+    this.stageShift = stageShift || (() => 0);
     this.jobs = new Map(); this.active = null; this.pending = 0;
     // 是否录制由选曲页的「是否录制高光时刻」提示写入 sessionStorage,默认开启。
     this.recordEnabled = sessionStorage.getItem('dance-record-highlight') !== '0';
-    // 文案风格与设备密钥由工作人员在 /staff 页面配置,用 localStorage 跨标签页共享。
+    // 文案风格与设备密钥由工作人员在 /settings 页面配置,用 localStorage 跨标签页共享。
     this.copyId = localStorage.getItem('dance-highlight-copy') || DEFAULT_COPY;
     this.copy = copyFor(this.copyId);
     this.replayUrl = null; this.replayBlob = null; this.replayResult = null;
@@ -173,8 +176,8 @@ export class HighlightController {
       ctx.setTransform(REC_W / DESIGN_W, 0, 0, REC_H / DESIGN_H, 0, 0);
       // 背景
       ctx.fillStyle = '#090c1b'; ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
-      // 上半:3D 教练(contain 完整入框,不再 cover 裁剪出框)
-      drawContained(ctx, this.stage, 0, 84, DESIGN_W, 520);
+      // 上半:3D 教练(contain 完整入框;pk 分屏时回正,让舞者居中)
+      drawContained(ctx, this.stage, 0, 84, DESIGN_W, 520, false, -this.stageShift());
       // 下半:真人(contain 完整入框,镜像;不再铺满遮挡)
       drawContained(ctx, this.camera, 0, 620, DESIGN_W, 560, true);
       // 特效叠加

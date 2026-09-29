@@ -1,0 +1,8 @@
+{
+  "schema": "videos/index/v1",
+  "mapping": {
+    "demo": "舞蹈1.mp4",
+    "hiphop": "舞蹈1.mp4",
+    "salsa": "舞蹈1.mp4"
+  }
+}

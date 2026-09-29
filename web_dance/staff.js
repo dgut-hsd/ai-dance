@@ -1,12 +1,7 @@
-// 工作人员后台:管理所有录制任务,生成进度 / 二维码 / 下载 / 重试 / 删除。
-// 设备密钥与文案风格写入 localStorage,与游戏页(同源)共享。
+// 视频管理:管理所有录制任务,生成进度 / 二维码 / 下载 / 重试 / 删除。
+// 设备密钥在「游戏设置」页配置,存 localStorage(同源共享),这里直接读取。
 const $ = (id) => document.getElementById(id);
 const STATUS = { uploading: '待上传', queued: '待生成', processing: '生成中', ready: '可领取', failed: '生成失败', expired: '已过期', deleted: '已删除' };
-
-$("device-token").value = localStorage.getItem("dance-device-token") || "";
-$("copy-style").value = localStorage.getItem("dance-highlight-copy") || "challenge";
-$("device-token").addEventListener("change", () => localStorage.setItem("dance-device-token", $("device-token").value.trim()));
-$("copy-style").addEventListener("change", () => localStorage.setItem("dance-highlight-copy", $("copy-style").value));
 
 async function api(url, options = {}) {
   const res = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(15000) });
@@ -79,7 +74,7 @@ function render(jobs) {
 
 async function refresh() {
   try {
-    const jobs = await api("/api/highlights", { headers: { "X-Device-Token": $("device-token").value.trim() } });
+    const jobs = await api("/api/highlights", { headers: { "X-Device-Token": localStorage.getItem("dance-device-token") || "" } });
     $("status").textContent = `共 ${jobs.length} 条 · ${new Date().toLocaleTimeString("zh-CN")}`;
     render(jobs);
   } catch (e) {

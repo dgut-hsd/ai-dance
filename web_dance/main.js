@@ -51,6 +51,9 @@ const state = {
   latestConf: 0,
   phase: "idle",             // idle | select | playing
   select: { entries: [], selected: 0, player: null, clock: 0, revertTimer: null },
+  sideMode: "model",         // model | video:右侧显示 3D 模型还是教学视频
+  videoMap: {},              // danceId -> 视频文件名(来自 /api/videos-map)
+  refVideoUrl: null,         // 当前 <video id=ref-video> 的 src,避免重复加载
 };
 
 const $ = (id) => document.getElementById(id);
@@ -77,6 +80,7 @@ const dom = {
   camStick: $("cam-stick"),
   camWrap: $("cam-wrap"),
   refPanel: $("ref-panel"),
+  refVideo: $("ref-video"),
   moveTrack: $("move-track"),
   beats: $("beats"),
   scorePanel: $("score-panel"),
@@ -136,6 +140,11 @@ function applyDebugUI() {
   if (dom.staffPerf) dom.staffPerf.hidden = !debugMode;
 }
 
+// 右侧画面模式:model(3D 模型/舞台) | video(3:4 参考视频)。由后台 /settings 写入 localStorage。
+function isVideoSide() {
+  return state.sideMode === "video";
+}
+
 // ---------------------------------------------------------------------------
 // 场景与渲染循环
 // ---------------------------------------------------------------------------
@@ -149,6 +158,8 @@ let lastCaptureToRender = null;
 let lastPerf = null;
 const highlights = new HighlightController({
   stage: dom.stage, camera: dom.cam, fx: dom.fx,
+  // 高光合成时把 pk 分屏里被推到右侧的 3D 教练重新居中。
+  stageShift: () => scene.getSplitXOffset(),
   getState: () => ({
     score: state.challenge?.scorer.score || 0, combo: state.challenge?.scorer.combo || 0,
     tier: state.challenge?.scorer.lastTier || '', acc: state.challenge?.previewAcc || 0,
@@ -193,7 +204,11 @@ let lastBeatIdx = -1;
 
 // 把舞者胸口投影到屏幕坐标,作为命中特效的爆发点
 function avatarScreen() {
-  if (!state.avatar) return { x: window.innerWidth / 2, y: window.innerHeight * 0.38 };
+  if (!state.avatar) {
+    // 视频模式没有 3D 舞者:命中特效以左侧真人摄像头为中心爆发。
+    if (isVideoSide()) return { x: window.innerWidth * 0.22, y: window.innerHeight * 0.5 };
+    return { x: window.innerWidth / 2, y: window.innerHeight * 0.38 };
+  }
   const v = new THREE.Vector3();
   state.avatar.retargeter.hips.getWorldPosition(v);
   v.y += 0.35;
@@ -315,11 +330,13 @@ function renderLoop() {
     const dt = clock.getDelta();
     renderPerf.record("renderFrame", dt * 1000);
     renderPerf.fpsTick();
-    scene.update(dt);
-    // 改了骨骼后必须手动刷新 Skeleton,否则蒙皮不更新
-    state.skeletons?.forEach((s) => s.update());
-    // 表演模式:FBX/GLB 内嵌动画
-    if (state.mixer) state.mixer.update(dt);
+    if (!isVideoSide()) {
+      scene.update(dt);
+      // 改了骨骼后必须手动刷新 Skeleton,否则蒙皮不更新
+      state.skeletons?.forEach((s) => s.update());
+      // 表演模式:FBX/GLB 内嵌动画
+      if (state.mixer) state.mixer.update(dt);
+    }
     // 选曲态:教练循环试跳/吸引
     if (state.phase === "select" && state.select?.player) {
       state.select.clock += dt;
@@ -334,9 +351,11 @@ function renderLoop() {
       renderPerf.record("captureToRenderSubmit", performance.now() - lastCaptureToRender);
       lastCaptureToRender = null;
     }
-    // 兼容两种 scene 版本:合成器版走 scene.render(),老版直接渲染
-    if (scene.render) scene.render();
-    else scene.renderer.render(scene.scene, scene.camera);
+    if (!isVideoSide()) {
+      // 兼容两种 scene 版本:合成器版走 scene.render(),老版直接渲染
+      if (scene.render) scene.render();
+      else scene.renderer.render(scene.scene, scene.camera);
+    }
     highlights.draw(); // Copy WebGL immediately, before its drawing buffer can be cleared.
   } catch (e) {
     // 渲染异常绝不能再中断整页初始化(否则按钮都不会挂载)
@@ -352,7 +371,7 @@ async function loadModel(url, type) {
   setStatus("准备中…");
   dom.menuStatus.textContent = "";
   try {
-    const avatar = await loadAvatar(url, type);
+    const avatar = await loadAvatar(url, type, readModelBrightness());
     if (state.avatar) scene.scene.remove(state.avatar.object);
     // 换模型后旧教练作废(它是旧模型的实例)
     if (state.coach) {
@@ -379,6 +398,80 @@ async function loadModel(url, type) {
     console.error(e);
     dom.menuStatus.textContent = "加载失败: " + e.message;
     setStatus("模型加载失败");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 视频参考模式(右侧 3:4 MP4 替换 3D 教练/舞台)
+// ---------------------------------------------------------------------------
+function videoUrlFor(danceId) {
+  const name = state.videoMap[danceId];
+  return name ? `/videos/${encodeURIComponent(name)}` : null;
+}
+
+// 设置 ref-video 的 src;只在地址变化时重载,避免反复打断播放。
+function setRefVideo(url) {
+  if (!url) {
+    if (state.refVideoUrl) {
+      dom.refVideo.removeAttribute("src");
+      dom.refVideo.load();
+      state.refVideoUrl = null;
+    }
+    return;
+  }
+  const abs = new URL(url, location.href).href;
+  if (state.refVideoUrl !== abs) {
+    dom.refVideo.src = abs;
+    state.refVideoUrl = abs;
+  }
+}
+
+function playRefVideo({ restart = false } = {}) {
+  if (!state.refVideoUrl) return;
+  dom.refVideo.muted = true;
+  dom.refVideo.loop = true;
+  if (restart) dom.refVideo.currentTime = 0;
+  dom.refVideo.play().catch(() => {});
+}
+
+function stopRefVideo() {
+  dom.refVideo.pause();
+  if (state.refVideoUrl) dom.refVideo.currentTime = 0;
+}
+
+async function loadVideoMap() {
+  try {
+    const r = await fetch("/api/videos-map");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    state.videoMap = data.mapping || {};
+  } catch (e) {
+    state.videoMap = {};
+    console.warn("视频绑定加载失败:", e);
+  }
+}
+
+async function enterVideoMode() {
+  setStatus("准备视频参考…");
+  dom.menuStatus.textContent = "";
+  try {
+    await loadVideoMap();
+    document.body.classList.add("video-side");
+    dom.refVideo.classList.remove("hidden");
+    // 视频模式不渲染 3D 舞台;高光录制时把「3D 教练」换成参考视频。
+    highlights.stage = dom.refVideo;
+    highlights.stageShift = () => 0;
+    dom.menu.classList.add("hidden");
+    dom.hud.classList.remove("hidden");
+    dom.btnStart.disabled = false;
+    setStatus("视频参考已就绪");
+    if (state.mode === "pk" || state.mode === "challenge") {
+      enterSelect().catch((e) => setStatus("选曲加载失败:" + e.message));
+    }
+  } catch (e) {
+    console.error(e);
+    dom.menuStatus.textContent = "视频加载失败: " + e.message;
+    setStatus("视频加载失败");
   }
 }
 
@@ -499,7 +592,7 @@ async function ensureCoach() {
   if (!state.modelSource) return null;
   setStatus("正在加载教练…");
   try {
-    const coach = await loadAvatar(state.modelSource.url, state.modelSource.type);
+    const coach = await loadAvatar(state.modelSource.url, state.modelSource.type, readModelBrightness());
     coach.object.visible = false;
     scene.scene.add(coach.object);
     state.coach = coach;
@@ -633,11 +726,17 @@ async function enterSelect() {
   dom.animPicker.classList.add("hidden");
   dom.centerMsg.classList.add("hidden");
 
-  const coach = await ensureCoach();
-  if (!coach) { setStatus("教练加载失败"); return; }
-  coach.object.visible = true;
-  coach.retargeter.reset();
-  layoutForMode(); // pk 布局:隐藏玩家 3D,显示教练
+  if (isVideoSide()) {
+    // 视频模式:右侧不放 3D 教练/舞台,改为参考视频(选曲态即预览)。
+    document.body.classList.add("video-side");
+    dom.refVideo.classList.remove("hidden");
+  } else {
+    const coach = await ensureCoach();
+    if (!coach) { setStatus("教练加载失败"); return; }
+    coach.object.visible = true;
+    coach.retargeter.reset();
+    layoutForMode(); // pk 布局:隐藏玩家 3D,显示教练
+  }
 
   // 预载全部舞曲序列,试跳/开始都即时
   const entries = dances().map((dance) => {
@@ -711,20 +810,32 @@ document.addEventListener("keydown", (event) => {
 
 function preview(i) {
   const e = state.select.entries[i];
-  const coach = state.coach;
-  if (!e?.seq || !coach) return;
-  state.select.clock = 0;
-  state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
-  animateCardPose(i);
+  if (!e?.seq) return;
+  if (isVideoSide()) {
+    setRefVideo(videoUrlFor(e.dance.id));
+    playRefVideo();
+  } else {
+    const coach = state.coach;
+    if (!coach) return;
+    state.select.clock = 0;
+    state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
+    animateCardPose(i);
+  }
   clearTimeout(state.select.revertTimer);
   state.select.revertTimer = setTimeout(() => startAttract(state.select.selected), 5000);
 }
 
 function startAttract(i) {
   const e = state.select.entries[i];
-  const coach = state.coach;
   clearInterval(cardAnimTimer);
-  if (!e?.seq || !coach) return;
+  if (!e?.seq) return;
+  if (isVideoSide()) {
+    setRefVideo(videoUrlFor(e.dance.id));
+    playRefVideo();
+    return;
+  }
+  const coach = state.coach;
+  if (!coach) return;
   state.select.clock = 0;
   state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
   if (e._canvas) drawCardSilhouette(e._canvas, e.seq);
@@ -959,15 +1070,21 @@ async function startChallenge() {
   await session.prepare();
   if (generation !== startGeneration) return;
 
-  // 3D 教练(同模型第二实例)跳参考舞,玩家跟着跳
-  const coach = await ensureCoach();
-  if (generation !== startGeneration) return;
-  if (coach) {
-    coach.object.visible = true;
-    coach.retargeter.reset();
-    state.coachPlayer = makeCoachPlayer(ch.seq, coach.retargeter, resolveMode(state.danceType).bones);
+  if (isVideoSide()) {
+    // 视频模式:备好当前舞曲绑定的参考视频,GO 时同步开播(循环)。
+    setRefVideo(videoUrlFor(state.challengeDanceId));
+    if (state.refVideoUrl) dom.refVideo.pause();
+  } else {
+    // 3D 教练(同模型第二实例)跳参考舞,玩家跟着跳
+    const coach = await ensureCoach();
+    if (generation !== startGeneration) return;
+    if (coach) {
+      coach.object.visible = true;
+      coach.retargeter.reset();
+      state.coachPlayer = makeCoachPlayer(ch.seq, coach.retargeter, resolveMode(state.danceType).bones);
+    }
+    layoutForMode();
   }
-  layoutForMode();
   await startCamera();
   if (generation !== startGeneration) { stopAll(); return; }
   if (!state.running) return;
@@ -984,6 +1101,7 @@ async function startChallenge() {
   await session.start(goAt); // 预调度音频与时钟
   ch.scorer.latency.outputLatencySec = ctx.outputLatency || 0;
   if (!await countdownTo(goAt, generation)) return;
+  if (isVideoSide()) playRefVideo({ restart: true });
   highlights.start();
   ch.running = true;
   challengeTimer = setInterval(() => {
@@ -1000,6 +1118,15 @@ async function startChallenge() {
   }, 25);
 }
 
+function readCameraParams() {
+  try { return JSON.parse(localStorage.getItem("dance-camera-params") || "null"); } catch { return null; }
+}
+
+function readModelBrightness() {
+  const v = parseFloat(localStorage.getItem("dance-model-brightness"));
+  return Number.isFinite(v) ? Math.max(0.2, Math.min(3, v)) : 1;
+}
+
 function startCamera() {
   if (state.stream) { state.running = true; return Promise.resolve(); }
   const boneDefs = resolveMode(state.danceType).bones;
@@ -1008,6 +1135,10 @@ function startCamera() {
     video: dom.cam,
     canvas: dom.camStick,
     mode: state.danceType,
+    // 后台 /staff 选择的摄像头;为空则用默认前置
+    deviceId: localStorage.getItem("dance-camera-device-id") || null,
+    // /settings 保存的 USB 相机参数(exposure/白平衡/对焦等)
+    cameraParams: readCameraParams(),
     // 舞蹈优先跟手:beta 调大(默认 0.5 → 0.8),快动作不拖尾
     smoothing: { minCutoff: 1.5, beta: 0.8, dCutoff: 1.0 },
     onFrame: (frame) => onFrame(frame, boneDefs),
@@ -1071,6 +1202,7 @@ function onFrame(frame, boneDefs) {
 
 function stopAll({ keepCamera = false } = {}) {
   highlights.abort();
+  stopRefVideo();
   startGeneration++;
   clearInterval(challengeTimer);
   challengeTimer = null;
@@ -1088,14 +1220,14 @@ function stopAll({ keepCamera = false } = {}) {
   if (state.coach) state.coach.retargeter.reset();
   mixerSeq++; // 作废进行中的异步舞曲加载
   stopMixer(); // 停动画并复位主舞者
-  dom.btnStart.disabled = !state.avatar;
+  dom.btnStart.disabled = !(state.avatar || isVideoSide());
   dom.btnStop.disabled = true;
   dom.comboBadge.classList.add("hidden");
   setStatus("已停止");
 }
 
 dom.btnStart.addEventListener("click", async () => {
-  if (!state.avatar) return;
+  if (!state.avatar && !isVideoSide()) return;
   dom.btnStart.disabled = true;
   try {
     if (state.mode === "performance") {
@@ -1496,7 +1628,7 @@ window.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
     if (state.running) stopAll();
-    else if (state.avatar) dom.btnStart.click();
+    else if (state.avatar || isVideoSide()) dom.btnStart.click();
   } else if (e.key === "m" || e.key === "M") {
     dom.btnMirror.click();
   } else if (e.key === "d" || e.key === "D") {
@@ -1512,7 +1644,7 @@ setStatus("正在加载默认舞者…");
 // ---------------------------------------------------------------------------
 // 选歌主页跳转参数:?mode=challenge&dance=hiphop&song=pop-demo&autoload=1
 // ---------------------------------------------------------------------------
-function applyLaunchParams() {
+async function applyLaunchParams() {
   const q = new URLSearchParams(location.search);
   debugMode = q.get("debug") === "1";
   applyDebugUI();
@@ -1532,7 +1664,15 @@ function applyLaunchParams() {
   dom.songSelect.value = state.challengeSongId;
   const mode = q.get("mode");
   if (["free", "challenge", "pk", "performance"].includes(mode)) setMode(mode);
-  loadModel(DEFAULT_MODEL);
+  // 后台 /settings 选择的「右侧画面」模式;仅在跟跳(pk/challenge)下生效,free/performance 仍用 3D。
+  state.sideMode = localStorage.getItem("dance-side-mode") === "video" ? "video" : "model";
+  if (isVideoSide() && (state.mode === "pk" || state.mode === "challenge")) {
+    await enterVideoMode();
+  } else {
+    state.sideMode = "model";
+    // 后台 /settings 选择的模型;未选择则用默认 dancer_girl.fbx
+    loadModel(localStorage.getItem("dance-model") || DEFAULT_MODEL);
+  }
 }
 
 // 启动:先导入歌单(songs/index.json),再组下拉、应用跳转参数
@@ -1544,7 +1684,7 @@ async function init() {
     return;
   }
   setupChallengePickers();
-  applyLaunchParams();
+  await applyLaunchParams();
 }
 init();
 
