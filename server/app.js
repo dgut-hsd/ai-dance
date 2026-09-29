@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import OSS from 'ali-oss';
 import QRCode from 'qrcode';
+import { spawn } from 'node:child_process';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile, rename, rm, stat, readdir } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
@@ -229,6 +230,22 @@ export async function createApp(options = {}) {
     await exclusive(j.id, async () => { j.status = 'deleted'; await save(j); });
     res.json({ ok: true }); void cleanup();
   });
+  // 服务端 3D 动捕(MeTRAbs):收视频 → 调 tools/pose3d.py → 返回 dance-sequence/v1 序列。
+  // 供 lab.html 的「服务端 3D 模型」通路使用,替代浏览器端 MediaPipe 单目深度(膝盖反向根因)。
+  app.post('/api/pose3d', device, async (req, res) => {
+    const dir = path.join(root, '.pose3d-tmp');
+    await mkdir(dir, { recursive: true });
+    const input = path.join(dir, `${token()}.mp4`);
+    try {
+      await boundedWrite(req, input, MAX_BYTES);
+      await streamPose3d(input, res);
+    } catch (e) {
+      if (!res.headersSent) res.status(e.status || 502).json({ error: e.message || '3D 动捕失败' });
+      else res.end();
+    } finally {
+      await rm(input, { force: true });
+    }
+  });
   app.get('/api/highlights/:id', (req, res) => {
     const j = find(req);
     res.json({ status: j.status, expiresAt: j.expiresAt, error: j.error,
@@ -314,9 +331,8 @@ export async function createApp(options = {}) {
   app.get('/v/:id', (req, res) => res.sendFile(path.join(root, 'web_dance', 'highlight.html')));
   app.get('/staff', (req, res) => res.sendFile(path.join(root, 'web_dance', 'staff.html')));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.
-  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs'])
+  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx'])
     app.use(`/${dir}`, express.static(path.join(root, dir), { dotfiles: 'deny' }));
-  app.use('/songs', express.static(songsDir, { dotfiles: 'deny' }));
   for (const file of ['chart.json', 'timing.json']) app.get(`/${file}`, (req, res) => res.sendFile(path.join(root, file)));
   app.get('/', (req, res) => res.redirect('/web_dance/'));
   app.use((err, req, res, next) => {
@@ -341,4 +357,49 @@ async function boundedWrite(stream, destination, limit) {
     if (!size) throw fail(400, '文件为空');
     await rename(temp, destination);
   } catch (e) { await rm(temp, { force: true }); throw e; }
+}
+
+// 调用 tools/pose3d(MeTRAbs)把视频转成契约序列。Python 可执行文件可用 POSE3D_PYTHON 覆盖。
+// 流式版:CLI 以 NDJSON(stdout)逐行回传 {progress}/{result}/{error},这里逐行透传给前端,
+// 前端 fetch+ReadableStream 逐行解析,实时刷新进度条。舞蹈动捕 5fps 足够,避免默认 30fps 帧数爆炸。
+function streamPose3d(inputPath, res) {
+  return new Promise((resolve, reject) => {
+    const python = process.env.POSE3D_PYTHON || 'python';
+    const toolsDir = path.join(root, 'tools');
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    const child = spawn(python, ['-m', 'pose3d', '--input', inputPath, '--out', '-', '--fps', '5', '--progress'], { cwd: toolsDir });
+
+    let stderr = '';
+    let buffer = '';
+    child.stderr.on('data', (d) => (stderr += d));
+    child.stdout.on('data', (d) => {
+      buffer += d.toString('utf8');
+      let nl;
+      while ((nl = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, nl);
+        buffer = buffer.slice(nl + 1);
+        if (line.trim()) res.write(line + '\n');
+      }
+    });
+    // 首次加载 TF + 逐帧推理,给足超时;超时强杀避免孤儿进程占内存。
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10 * 60 * 1000);
+    child.on('error', (e) => {
+      clearTimeout(timer);
+      reject(fail(502, `无法启动 3D 动捕进程（请确认已安装 Python 与 MeTRAbs）：${e.message}`));
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (buffer.trim()) res.write(buffer.trim() + '\n'); // 冲刷未换行的残留行
+      if (code !== 0) {
+        // 已流式发过 progress 行,无法再改状态码;补一行 error 让前端能识别失败。
+        if (!res.writableEnded) {
+          const tail = (stderr || '').trim().split('\n').slice(-2).join(' ');
+          res.write(JSON.stringify({ error: `3D 动捕执行失败（退出码 ${code}）：${tail || '未知错误'}` }) + '\n');
+        }
+      }
+      res.end();
+      resolve();
+    });
+  });
 }

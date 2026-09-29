@@ -9,7 +9,7 @@ import * as THREE from "three";
 import { PerfMonitor } from "../pose_capture/perf.js";
 import { startPoseStream } from "../pose_capture/mocap.js";
 import { resolveMode } from "../pose_capture/contract.js";
-import { reconstructJoints } from "../pose_capture/playback.js";
+import { reconstructJoints, sampleFrame } from "../pose_capture/playback.js";
 import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { createScene } from "./scene.js";
 import { createJuice } from "./ui-lab/juice.js";
@@ -513,12 +513,11 @@ async function ensureCoach() {
 
 // 把参考序列按时间逐帧喂给教练的 Retargeter(IK/贴地/头全部复用)
 function makeCoachPlayer(seq, retargeter, boneDefs) {
-  const fps = seq.meta?.fps || 30;
   const frames = seq.frames || [];
   return {
     update(t) {
-      const i = Math.min(frames.length - 1, Math.max(0, Math.round(t * fps)));
-      const frame = frames[i];
+      // 插值采样(而非 round(t*fps) 硬切),消除低帧率接缝抖动
+      const frame = sampleFrame(frames, t);
       // 教练固定站位跟跳,不消费根运动(否则会跟着参考序列的位移满场跑)
       if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
     },
@@ -543,14 +542,12 @@ const SILHOUETTES = {
 
 // 循环播放序列(吸引态 / 试跳),教练原地跟跳不消费根运动
 function makeLoopCoachPlayer(seq, retargeter, boneDefs) {
-  const fps = seq.meta?.fps || 30;
   const frames = seq.frames || [];
   const dur = seq.meta?.durationSec || 1;
   return {
     update(t) {
       const tt = t % dur;
-      const i = Math.min(frames.length - 1, Math.max(0, Math.round(tt * fps)));
-      const frame = frames[i];
+      const frame = sampleFrame(frames, tt);
       if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
     },
   };
