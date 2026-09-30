@@ -19,6 +19,8 @@ import { createCoachGrounding } from "./coach-grounding.js";
 import { recenterSequenceTravel } from "./root-travel.js";
 import { ScoringAdapter } from "./scoring-adapter.js";
 import { SongSession, AudioEngine } from "./audio.js";
+import { Sfx } from "./sfx.js";
+import { SampleHitSound, HitSound } from "./hitsound.js";
 import { SelectionPreviewAudio } from "./selection-preview-audio.js";
 import { HighlightController } from "./highlights.js";
 import { HighlightReplayController } from "./highlight-replay.js";
@@ -67,6 +69,7 @@ const state = {
   select: { entries: [], selected: 0, player: null, clock: 0, revertTimer: null },
   sideMode: "model",         // model | video:右侧显示 3D 模型还是教学视频
   videoMap: {},              // danceId -> 视频文件名(来自 /api/videos-map)
+  videoMeta: {},             // 视频文件名 -> { width, height, ratio, ratioClass }(来自 /api/videos)
   refVideoUrl: null,         // 当前 <video id=ref-video> 的 src,避免重复加载
   refVideoWanted: false,     // 本局"右侧应该在放视频":看门狗据此判断该不该在播
 };
@@ -242,6 +245,149 @@ let lastTier = "";
 let lastMilestone = 0;
 let lastBeatIdx = -1;
 
+// ---------------------------------------------------------------------------
+// 连击热度曲线:一个 0→1 的标量,决定徽章字号/颜色/抖动/速度线。
+// 刻意的设计选择:
+//  · 热度"只追不跳"—— 目标值随连击阶跃上升,但显示值按时间常数逼近。
+//    直接跳变会让颜色在一帧内突变,看起来像 bug;追上去才有"烧起来"的过程感。
+//  · 断连时回落比上升慢(升 ~0.35s,降 ~1.1s),挫败感不会瞬间糊脸。
+//  · 单一来源:徽章、分数面板、相机边框、打击音高全读同一个 heatNow,
+//    避免出现"字变红了但音还是冷的"这种不一致。
+// ---------------------------------------------------------------------------
+const HEAT_RAMP = 50;        // 连击到 50 算满热(曲线在这个点上刚好取到 1.0)
+const HEAT_EXP = 0.8;        // 曲线形状:<1 让前段升得快些,但不至于十几连就烧满
+const HEAT_UP_TAU = 0.35;    // 上升时间常数(秒)
+const HEAT_DOWN_TAU = 1.1;   // 回落时间常数(秒)
+const HEAT_STOPS = [         // 冷 → 烫 的四段暖色,段间线性插值
+  [255, 213, 74],            // 金
+  [255, 152, 61],            // 橙
+  [255, 87, 96],             // 珊瑚红
+  [214, 61, 255],            // 紫(最烫)
+];
+const HEAT_STOPS2 = [        // 光晕色:比主色更"外扩"一档
+  [255, 61, 129],
+  [255, 61, 129],
+  [214, 61, 255],
+  [255, 61, 255],
+];
+
+let heatTarget = 0;
+let heatNow = 0;
+let heatTierNow = "";
+
+function comboHeatTarget(combo) {
+  if (combo <= 1) return 0;
+  // 幂曲线而不是分段线性:分段写容易"提前烧满"——第一版就是 20 连就顶到 1.0,
+  // 后面 30 连全是同一个紫色,热度失去意义。现在 50 连才刚好 1.0。
+  return Math.pow(Math.min(Math.max(combo - 1, 0) / (HEAT_RAMP - 1), 1), HEAT_EXP);
+}
+
+function lerpRgb(a, b, t) {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * t),
+    Math.round(a[1] + (b[1] - a[1]) * t),
+    Math.round(a[2] + (b[2] - a[2]) * t),
+  ];
+}
+
+/** 热度 → 颜色:在 HEAT_STOPS 之间插值(3 段 × 线性)。 */
+function heatColors(h) {
+  const x = Math.max(0, Math.min(1, h)) * (HEAT_STOPS.length - 1);
+  const i = Math.min(HEAT_STOPS.length - 2, Math.floor(x));
+  const t = x - i;
+  return { main: lerpRgb(HEAT_STOPS[i], HEAT_STOPS[i + 1], t), hot: lerpRgb(HEAT_STOPS2[i], HEAT_STOPS2[i + 1], t) };
+}
+
+function heatTierOf(h) {
+  if (h >= 0.88) return "blaze";
+  if (h >= 0.62) return "hot";
+  if (h >= 0.32) return "warm";
+  return "cool";
+}
+
+/** 每帧推进热度惯性并写回 CSS 变量;CSS 只负责把热度翻译成视觉。 */
+function heatTick(dt) {
+  const before = heatNow;
+  const tau = heatTarget > heatNow ? HEAT_UP_TAU : HEAT_DOWN_TAU;
+  const k = 1 - Math.exp(-Math.max(0, dt) / tau);
+  heatNow += (heatTarget - heatNow) * k;
+  if (Math.abs(heatTarget - heatNow) < 0.0015) heatNow = heatTarget;
+  const tier = heatTierOf(heatNow);
+  if (heatNow === before && tier === heatTierNow) return;
+
+  const { main, hot } = heatColors(heatNow);
+  const root = document.documentElement;
+  root.style.setProperty("--heat", heatNow.toFixed(3));
+  root.style.setProperty("--hot-rgb", main.join(", "));
+  root.style.setProperty("--hot2-rgb", hot.join(", "));
+  root.style.setProperty("--badge-size", (44 + 14 * heatNow).toFixed(1) + "px");
+  // 抖动幅度:热度过了 0.62 才开始,到 1 满幅 1.6px。用 CSS 变量喂给 keyframes,
+  // 这样"要不要抖、抖多大"都在热度曲线上,而不是靠再开一个 class。
+  root.style.setProperty("--badge-jitter", (heatNow > 0.62 ? (heatNow - 0.62) / 0.38 * 1.6 : 0).toFixed(2));
+  if (tier !== heatTierNow) {
+    heatTierNow = tier;
+    dom.comboBadge.dataset.heatTier = tier;
+    dom.combo?.classList.toggle("hot", heatNow >= 0.62);
+  }
+  // 调试口:?debug=1 时挂到 window 上,控制台/自动化都能读到热度状态
+  if (debugMode) globalThis.__heat = { value: heatNow, tier, target: heatTarget };
+}
+
+function resetHeat() {
+  heatTarget = 0;
+  heatNow = 0;
+}
+
+// ---------------------------------------------------------------------------
+// 打击音效:与音乐共用同一个 AudioContext(单一时钟),零音频资源全程序合成。
+// 关闭方式:URL 加 ?sound=0,或按 S 键切换(现场调试用)。
+// ---------------------------------------------------------------------------
+let sfx = null;
+// 现场可调:设置页写入 localStorage,游戏页读取;URL ?sound=0 或按 S 键临时静音。
+let sfxMuted = new URLSearchParams(location.search).get("sound") === "0"
+  || localStorage.getItem("dance-sfx-enabled") === "0";
+
+function readSfxVolume() {
+  const v = parseFloat(localStorage.getItem("dance-sfx-volume"));
+  // 默认 0.40。实测上限 0.46(tools/sfx-calibrate.mjs:用**真实歌曲文件 + 真实谱面间隔**
+  // 标定,最坏合成峰值 0.968),留一点余量给现场调。
+  return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 0.45;
+}
+
+/**
+ * 绑定到某一局的 AudioContext;换局/重建会话时重新调用。
+ *
+ * 声音来源是**两层**:
+ *   · 采样层(CC0 素材,web_dance/audio/sfx/)—— 音色真实,但需要 fetch + 解码,是异步的;
+ *   · 合成层(sfx.js)—— 零解码、零延迟,但音色是合成的。
+ * 两层同时创建、共用同一条总线(高通/限幅/混响/主音量都在合成层那一侧),
+ * 采样没就绪时走合成,就绪后自动吃采样。这样开局第一击永远不会是静音的。
+ */
+function ensureSfx(ctx) {
+  if (!ctx) return null;
+  if (sfx && sfx.ctx === ctx) return sfx;
+  try {
+    const synth = new Sfx(ctx, { volume: readSfxVolume() });
+    const samples = new SampleHitSound(ctx, {
+      baseUrl: "./audio/sfx/",
+      destination: null, // 实际连接在 HitSound 构造里完成(接到 synth.voiceNode)
+      masterGain: HitSound.MASTER_GAIN,
+    });
+    sfx = new HitSound(synth, samples);
+    sfx.enabled = !sfxMuted;
+  } catch (e) {
+    console.warn("打击音效初始化失败,已降级为静音:", e);
+    sfx = null;
+  }
+  return sfx;
+}
+
+function toggleSfx() {
+  sfxMuted = !sfxMuted;
+  if (sfx) sfx.enabled = !sfxMuted;
+  setStatus(sfxMuted ? "打击音效:关" : "打击音效:开");
+}
+
 // 把舞者胸口投影到屏幕坐标,作为命中特效的爆发点
 function avatarScreen() {
   if (!state.avatar) {
@@ -262,10 +408,28 @@ function avatarScreen() {
 // 判定层级配色:金 > 青 > 蓝 > 红,与结算评级 S/A/B/D 同族
 const TIER_COLORS = { PERFECT: "#ffd54a", GREAT: "#39ffcf", GOOD: "#4d7cff", MISS: "#ff5f6d" };
 
+// 判定文字改成"逐字弹出":每个字母一层,才能做 stagger 和逐字色散。
+// 只在档位变化时重建 DOM(见 judgeFeedback),避免每帧重建节点。
+function renderJudgeLetters(tier) {
+  const el = dom.judgeTier;
+  el.dataset.text = tier;
+  if (dom.judgeLettersShown === tier) return; // 同一档位连击:复用节点,不重建 DOM
+  dom.judgeLettersShown = tier;
+  el.textContent = "";
+  [...tier].forEach((ch, i) => {
+    const s = document.createElement("span");
+    s.className = "jt-ch";
+    s.textContent = ch;
+    // 逐字延迟:7 个字母的词总延迟压到 ~80ms 以内,否则整词会"散"
+    s.style.animationDelay = `${Math.round((i * 65) / Math.max(1, tier.length - 1))}ms`;
+    el.appendChild(s);
+  });
+}
+
 function showJudge(tier, subText) {
   dom.judge.dataset.tier = tier;
   dom.judge.style.setProperty("--jtier", TIER_COLORS[tier] || "#ffffff");
-  dom.judgeTier.textContent = tier;
+  renderJudgeLetters(tier);
   dom.judgeSub.textContent = subText || "";
   dom.judge.classList.remove("hidden");
   dom.judge.classList.remove("pop");
@@ -273,11 +437,24 @@ function showJudge(tier, subText) {
   dom.judge.classList.add("pop");
 }
 
-function judgeFeedback(tier, combo, scoreGain) {
+// 打击音落点窗口:判定用的 deltaSec 覆盖 ±300ms(采样窗),但音效不能照着这个范围排 ——
+// 玩家手比音符早 300ms 时,如果老实排到 300ms 之后,手感就是"手动了、声音没响"的迟钝。
+// 所以只夹上界:早命中最多提前 120ms 对齐到拍点;落在过去的由 Sfx.hit 内部用
+// ctx.currentTime 兜住(立刻播),那是"晚",不是"错"。
+// 这是音游里"跟随判定、但不牺牲即时感"的常规折中。
+const SFX_MAX_EARLY = 0.12;
+
+function judgeFeedback(tier, combo, scoreGain, timing = null) {
   const p = avatarScreen();
   const gain = scoreGain > 0 ? "+" + Math.round(scoreGain) : "";
+  // 打击音效:排到"音符本该在"的那一帧上,而不是排在这次判定轮的时刻上。
+  // timing.pressAtSec 已由调用方按 deltaSec 还原并夹好窗口。
+  const pressAt = timing ? timing.pressAtSec : null;
   if (tier !== lastTier) {
     lastTier = tier;
+    // 打击音也跟着热度走:连击越高,音色越亮(gain 兼作"亮度/力度"系数)。
+    // heatNow 是视觉用的同一个标量,所以不存在"字变紫了音还是冷的"。
+    sfx?.hit(tier, { when: pressAt, heat: 1 + heatNow * 0.15, seed: combo });
     flashCamFrame(tier);
     if (tier === "PERFECT") {
       showJudge("PERFECT", gain);
@@ -316,28 +493,37 @@ function judgeFeedback(tier, combo, scoreGain) {
 
 // 连击徽章:>=2 常驻显示,每次命中脉动并喷火星,每 10 连大爆发,高连击升温
 function updateComboBadge(combo, p) {
+  // 热度目标:即便 combo < 2(刚断连)也要把目标压回 0,否则徽章藏了、热度还在烧
+  heatTarget = comboHeatTarget(combo);
   if (combo >= 2) {
     dom.comboBadge.classList.remove("hidden");
     dom.comboBadgeN.textContent = combo;
-    dom.comboBadge.classList.toggle("hot", combo >= 20);
+    // data-text 供两层 ::before/::after(光晕层、里程碑白闪层)复用同一个数字,
+    // 不必为了字效往 DOM 里塞重复节点
+    dom.comboBadgeN.dataset.text = combo;
     dom.comboBadge.classList.remove("pulse", "milestone");
     void dom.comboBadge.offsetWidth;
     const b = dom.comboBadge.getBoundingClientRect();
     const bx = b.left + b.width / 2, by = b.top + b.height / 2;
-    if (combo % 10 === 0 && combo !== lastMilestone) {
+    const milestone = combo % 10 === 0 && combo !== lastMilestone;
+    // 徽章周围的粒子跟着热度换色:字烧成紫的、火星还是冷的金,会对不上
+    const { main, hot } = heatColors(heatNow);
+    const heatMain = main.join(","), heatHot = hot.join(",");
+    if (milestone) {
       lastMilestone = combo;
       dom.comboBadge.classList.add("milestone");
       setTimeout(() => dom.comboBadge.classList.remove("milestone"), 700);
+      sfx?.milestone(combo);
       juice.hitStop(40);
       juice.shake(9);
-      juice.flash("255,213,74", 0.22, 0.15);
-      juice.burst(bx, by, { count: 60, speed: 520, ttl: 1.0, colors: ["255,213,74", "255,61,129", "255,255,255"] });
-      juice.ring(bx, by, { size: 240, color: "255,213,74", width: 4, duration: 440 });
-      juice.ring(p.x, p.y, { size: 200, color: "255,61,129", width: 3, duration: 380 });
+      juice.flash(heatMain, 0.22, 0.15);
+      juice.burst(bx, by, { count: 60, speed: 520, ttl: 1.0, colors: [heatMain, heatHot, "255,255,255"] });
+      juice.ring(bx, by, { size: 240, color: heatMain, width: 4, duration: 440 });
+      juice.ring(p.x, p.y, { size: 200, color: heatHot, width: 3, duration: 380 });
     } else {
       dom.comboBadge.classList.add("pulse");
       // 每次命中从徽章喷一点火星,连击越久越烫
-      juice.sparks(bx, by, { count: 5, rays: 4, speed: 200, colors: ["255,213,74", "255,61,129"] });
+      juice.sparks(bx, by, { count: 5, rays: 4, speed: 200, colors: [heatMain, heatHot] });
     }
   } else {
     dom.comboBadge.classList.add("hidden");
@@ -370,6 +556,7 @@ function renderLoop() {
     const dt = clock.getDelta();
     renderPerf.record("renderFrame", dt * 1000);
     renderPerf.fpsTick();
+    heatTick(dt);
     if (!isVideoSide()) {
       scene.update(dt);
       // 改了骨骼后必须手动刷新 Skeleton,否则蒙皮不更新
@@ -470,6 +657,9 @@ const refVideoSource = new VideoSource(dom.refVideo, {
   log: (line) => console.debug(`[ref-video] ${line}`),
   warn: (line) => console.warn(`[ref-video] ${line}`),
 });
+// 元素自己的元数据到了就以它为准:只有 <video> 知道真实比例(videos/index.json 里的
+// 记录可能过期,比如 devtools 直接换了文件、或用了 OSS 上的远端视频)。
+dom.refVideo?.addEventListener("loadedmetadata", adoptRefVideoIntrinsicRatio);
 
 // 供现场一键取证:控制台执行 __danceVideo.export() 拿完整快照
 globalThis.__danceVideo = {
@@ -484,15 +674,6 @@ globalThis.__danceVideo = {
   log: () => refVideoSource.entries.slice(-60),
 };
 
-/** 切到某支舞绑定的参考视频(幂等:同地址不重新加载,免得打断正在播的画面) */
-function setRefVideo(url) {
-  if (!url) { state.refVideoUrl = null; refVideoSource.clear("没有可播地址"); return Promise.resolve(null); }
-  state.refVideoUrl = new URL(url, location.href).href;
-  // 立刻置 preload,让浏览器在"选曲预览"阶段就开始缓冲,正式开局不用等首帧
-  refVideoSource.setPreload("auto");
-  return refVideoSource.load(state.refVideoUrl);
-}
-
 /** 备好视频(等元数据),不播 —— 用于点「开始挑战」后、倒计时之前 */
 async function prepareRefVideo(danceId = state.challengeDanceId) {
   const url = videoUrlFor(danceId);
@@ -503,7 +684,11 @@ async function prepareRefVideo(danceId = state.challengeDanceId) {
     return false;
   }
   try {
-    await setRefVideo(url);
+    await setRefVideo(url, danceId);
+    // 倒计时期间画面必须**定住**:选曲页的吸引态/试看一直在播,不在这里停,
+    // 3-2-1 那三秒里视频会继续往前走,玩家数完拍子看到的已经是第 4 秒的画面。
+    // 停止也不清源(clear),下一句 play({restart:true}) 才能只 seek 一次就回到 0。
+    refVideoSource.pause();
     return true;
   } catch (e) {
     // 关键:把失败原因(错误码/超时)打到控制台,现场一眼能看出是哪一类
@@ -516,6 +701,16 @@ async function playRefVideo({ restart = false } = {}) {
   const result = await refVideoSource.play({ restart, loop: true });
   if (!result.ok) console.warn(`[ref-video] 播放未成功:${result.reason}`);
   return result;
+}
+
+/**
+ * 倒计时准备:把参考视频停在首帧、并且**关掉看门狗**(wanted=false)。
+ * 只 pause 不改 wanted 是没用的 —— 看门狗 1 秒后就会把它救回播放态,
+ * 表现正是「3-2-1 的时候视频还在动」。GO 之后 playRefVideo() 之前再置回 true。
+ */
+function holdRefVideoForCountdown() {
+  state.refVideoWanted = false;
+  refVideoSource.pause();
 }
 
 function stopRefVideo({ clear = false } = {}) {
@@ -553,6 +748,112 @@ async function loadVideoMap() {
     state.videoMap = {};
     console.warn("视频绑定加载失败:", e);
   }
+  // 比例表**不能** await:服务端要为没量过的视频现跑一次 ffprobe,实测一次能花 1.9 秒,
+  // 而它挡在「选曲抽屉」之前 —— 首屏直接慢 700ms~1.5s(实测 LCP 从 1560 涨到 4980)。
+  // 让它自己回来:CSS 有兜底比例(0.5625),回来之后再按真实比例摆一次。
+  void loadVideoMeta();
+}
+
+/**
+ * 拉取视频素材的比例表(videos/index.json 的 files 段,经 /api/videos 暴露)。
+ *
+ * 右侧画面的容器宽度由视频自己的比例算出来,不再固定 55vw —— 以前 9:16 的视频会被
+ * object-fit: cover 左右各裁掉约 41%。拿不到就保持空表,CSS 的 --ref-ratio 兜底仍不裁剪。
+ */
+async function loadVideoMeta() {
+  try {
+    const r = await fetch("/api/videos");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const list = await r.json();
+    state.videoMeta = {};
+    for (const v of Array.isArray(list) ? list : []) {
+      if (v?.name) state.videoMeta[v.name] = v;
+    }
+  } catch (e) {
+    state.videoMeta = {};
+    console.warn("视频比例加载失败(退回不裁剪的兜底显示):", e);
+    return;
+  }
+  // 比例是后到的:此刻右侧若已在放某支舞的视频,按新比例重摆一次。
+  // (元素自己的 loadedmetadata 也会校准,但那要等解码完成;这里能更早摆对。)
+  const danceId = state.challengeDanceId
+    || state.select?.entries?.[state.select?.selected]?.dance?.id;
+  const ratio = refVideoRatioOf(danceId);
+  if (ratio && state.refVideoUrl) applyRefVideoRatio(ratio);
+}
+
+/**
+ * 按视频比例给右侧画面定宽度。
+ *
+ * CSS 侧的规则是:width = min(62vw, 100vh × --ref-ratio),配 object-fit: contain。
+ * 竖屏视频因此贴着 100vh 满高显示、零裁剪;横屏视频(如 4:3 的「闪身步」)被 62vw 挡住,
+ * 于是上下留黑(用户确认要纯黑,不做模糊填充)。
+ *
+ * ratio 的来源有两个,现在是"先按元数据摆、再由元素校准":
+ *   · videos/index.json 里量好的比例 —— 首帧之前就能摆对位置,避免先铺满再收窄的跳动;
+ *   · <video> 自己的 videoWidth/videoHeight —— 只有元素知道真实比例(devtools 直接换文件、
+ *     或 OSS 远端视频时元数据可能过期),所以它在 loadedmetadata 时会覆盖前者的判断。
+ */
+function refVideoRatioOf(danceId) {
+  const name = state.videoMap[danceId];
+  if (!name) return null;
+  const meta = state.videoMeta[name];
+  const mw = Number(meta?.width);
+  const mh = Number(meta?.height);
+  if (Number.isFinite(mw) && Number.isFinite(mh) && mw > 0 && mh > 0) return mw / mh;
+  const stored = Number(meta?.ratio);
+  return Number.isFinite(stored) && stored > 0 ? stored : null;
+}
+
+/**
+ * 把比例写到 <video> 上(CSS 变量 + data 属性);null → 退回兜底。
+ *
+ * `data-ratio-class` 是给 CSS 用的:右缘留白按比例档给 —— 9:16 往左收一点(太窄,贴边显得飘),
+ * 3:4 / 横屏 贴边即可。分档规则与 server/videoMeta.js 的 ratioClassOf 保持一致(±2% 容差),
+ * 这里只算 CSS 要用的最小集合,不引服务端模块。
+ */
+function refVideoRatioClass(ratio) {
+  if (!Number.isFinite(ratio) || ratio <= 0) return "";
+  const near = (nominal) => Math.abs(ratio - nominal) / nominal <= 0.02;
+  if (near(9 / 16)) return "portrait-9x16";
+  if (near(3 / 4)) return "portrait-3x4";
+  return "landscape";
+}
+
+function applyRefVideoRatio(ratio) {
+  const el = dom.refVideo;
+  if (!el) return;
+  const ok = Number.isFinite(ratio) && ratio > 0;
+  if (ok) {
+    const value = String(Math.round(ratio * 1e4) / 1e4);
+    el.style.setProperty("--ref-ratio", value);
+    el.dataset.ratio = value;
+    el.dataset.ratioClass = refVideoRatioClass(ratio);
+  } else {
+    el.style.removeProperty("--ref-ratio");
+    delete el.dataset.ratio;
+    delete el.dataset.ratioClass;
+  }
+}
+
+/** 元素自己的元数据到了:它最权威,覆盖元素据的判断 */
+function adoptRefVideoIntrinsicRatio() {
+  const el = dom.refVideo;
+  const w = Number(el?.videoWidth);
+  const h = Number(el?.videoHeight);
+  if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) applyRefVideoRatio(w / h);
+}
+
+/** 切到某支舞绑定的参考视频(幂等:同地址不重新加载,免得打断正在播的画面) */
+function setRefVideo(url, danceId) {
+  if (!url) { state.refVideoUrl = null; refVideoSource.clear("没有可播地址"); return Promise.resolve(null); }
+  state.refVideoUrl = new URL(url, location.href).href;
+  // 立刻置 preload,让浏览器在"选曲预览"阶段就开始缓冲,正式开局不用等首帧
+  refVideoSource.setPreload("auto");
+  // 先按量好的元数据把容器摆对,免得首帧先铺满屏幕再收窄(会看到一次明显的跳动)
+  const ratio = refVideoRatioOf(danceId);
+  if (ratio) applyRefVideoRatio(ratio);
+  return refVideoSource.load(state.refVideoUrl);
 }
 
 async function enterVideoMode() {
@@ -1171,23 +1472,40 @@ function selectCard(i) {
   layoutCards();
 }
 
-function setSongPickerOpen(open) {
+/**
+ * 开关选曲抽屉。
+ *
+ * `dismiss` 表示"这是玩家主动关掉预览"。关掉抽屉**不等于**要停画面:
+ * 选曲态的常态是「吸引态」—— 刚进页面就是它(参考视频循环 + 试听音乐),
+ * 抽屉只是临时盖在上面的一层,收起后右侧本就该继续循环播当前选中的那支舞。
+ * 所以这里不是"退出预览",而是**回到吸引态**(与点卡片后 5 秒的回退定时器同一条路径):
+ * 同一个 `startAttract()` 同时管音乐、3D 试跳和视频循环,两条路径不会各走各的。
+ * 修复的现场表现:打开抽屉再关掉,右侧视频停在原地再也不动(以前只 pause + 清掉回退定时器,
+ * 没有任何东西会把它救回来;看门狗只管本局,选曲态它不看)。
+ *
+ * 但开局时也会关抽屉(startSong),那时右侧的视频已经是**本局的参考画面**了 ——
+ * 误停它会表现为"开局后视频停在 0.7s 再也不动"(以前正是这样,靠开局慢得多的时序侥幸躲过),
+ * 所以那条路径传 dismiss:false(见 startSong)。
+ */
+function setSongPickerOpen(open, { dismiss = true } = {}) {
   if (!dom.songPick) return;
   const shouldOpen = Boolean(open);
   const wasOpen = dom.songPick.classList.contains("picker-open");
   dom.songPick.classList.toggle("picker-open", shouldOpen);
   dom.songPickOpen?.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
-  if (wasOpen && !shouldOpen) stopSelectionPreview();
+  if (wasOpen && !shouldOpen && dismiss) returnToAttract();
 }
 
-/** 关闭抽屉就是退出预览:音乐、3D 试跳和视频试看同步停止。 */
-function stopSelectionPreview() {
-  stopPreviewMusic();
-  clearTimeout(state.select.revertTimer);
-  clearInterval(cardAnimTimer);
-  state.select.player = null;
-  if (state.coach) state.coach.retargeter.reset();
-  if (isVideoSide()) stopRefVideo();
+/**
+ * 玩家收起抽屉 → 回到吸引态(继续循环播当前选中的舞)。
+ * 视频侧必须走 startAttract 而不是直接 playRefVideo():
+ * 吸引态的视频是**可循环的预览**,和本局的"参考画面"由同一条 setRefVideo/playRefVideo 管,
+ * 用同一个入口才能保证换过卡片后播的确实是当前选中那张卡。
+ */
+function returnToAttract() {
+  // startAttract 自带 state.phase !== 'select' 的守卫:玩家要是已经点了开始
+  // (或抽屉是在本局中被收起),它直接返回,不会去动本局的参考视频。
+  startAttract(state.select.selected);
 }
 
 function stepSongPicker(delta) {
@@ -1268,6 +1586,15 @@ function startAttract(i) {
   const e = state.select.entries[i];
   clearInterval(cardAnimTimer);
   if (!e) return;
+  // 只有还在「选曲态」才能回到吸引态。
+  // 这个函数既会被卡片预览的 5 秒回退定时器调用,也会被序列晚到的回调调用 ——
+  // 两者都可能在玩家已经点了「开始挑战」之后才触发,那时再走吸引态就会把本局的
+  // 参考视频按停(现场表现:开局后视频停在 0.7s 不动)。
+  if (state.phase !== "select") return;
+  // 吸引态也要有声音:抽屉一打开就是吸引态(不是 preview()),只在 preview() 里放音乐
+  // 会导致「刚打开选曲页没有音频,点一下卡片才响」。放在这里让两条路径共用同一段试听逻辑
+  // (同曲不会重头放:SelectionPreviewAudio 命中 loadedUrl 时只 stop 再 play)。
+  playSelectionPreview(e);
   if (isVideoSide()) {
     // 吸引态:同地址不重新加载(继续播),换曲才切源,避免每 5 秒打断一次画面
     const url = videoUrlFor(e.dance.id);
@@ -1303,7 +1630,8 @@ function startSong(i) {
   clearTimeout(state.select.revertTimer);
   clearInterval(cardAnimTimer);
   dom.songPick.classList.add("hidden");
-  setSongPickerOpen(false);
+  // 开局关抽屉 != 玩家关预览:右侧视频马上就是本局的参考画面,不能在这里停掉
+  setSongPickerOpen(false, { dismiss: false });
   dom.controls.classList.toggle("hidden", !debugMode); // 只有工作人员模式才显示底部控制条
   state.challengeDanceId = e.dance.id;
   state.challengeSongId = e.song.id;
@@ -1603,11 +1931,14 @@ async function startChallenge() {
   lastTier = "";
   lastMilestone = 0;
   lastBeatIdx = -1;
+  resetHeat();
+  dom.comboBadge.dataset.heatTier = "cool";
 
   // 音乐会话:唯一时钟(音频对齐);首建在用户手势内创建 AudioContext
   const session = ensureSession(ch);
   await session.prepare();
   if (generation !== startGeneration) return;
+  ensureSfx(session.engine?.ctx); // 打击音效:与音乐同一个 AudioContext
 
   if (isVideoSide()) {
     // 视频模式:先把参考视频备到"能播"(等元数据完成),倒计时结束后再开播。
@@ -1615,6 +1946,9 @@ async function startChallenge() {
     // 那句 pause 会把加载/播放请求打断,是「倒计时结束画面不动」的主要成因。
     await prepareRefVideo(state.challengeDanceId);
     if (generation !== startGeneration) return;
+    // 倒计时期间画面定住:选曲页的吸引态一直在播,不在这里停住的话
+    // 3-2-1 那三秒视频会继续往前跑(现场反馈「321 准备开始时视频还在动」)。
+    holdRefVideoForCountdown();
   } else {
     // 3D 教练(同模型第二实例)跳参考舞,玩家跟着跳
     const coach = await ensureCoach();
@@ -1633,6 +1967,8 @@ async function startChallenge() {
   if (state.mode === 'pk') {
     await highlights.prepare(session.engine, () => generation !== startGeneration);
     if (generation !== startGeneration) { highlights.abort(); return; }
+    // 打击音效也接进高光录制分支(只影响录像,不改扬声器混音)
+    if (sfx) session.engine.attachToRecordingTaps?.(sfx.outputNode);
   }
 
   // 倒计时:GO 时刻 = songTime 0 = 音频起点(绝对 ctx 时间锚定,不用 setTimeout 猜)
@@ -1644,6 +1980,8 @@ async function startChallenge() {
   if (!await countdownTo(goAt, generation)) return;
   if (isVideoSide()) {
     // GO:视频从 0 开始播。await 结果会给出失败原因(而不是静默停住)。
+    // 先把 wanted 置回 true,看门狗才重新接管这一局的画面(倒计时期间它是关着的)。
+    state.refVideoWanted = true;
     await playRefVideo({ restart: true });
     if (generation !== startGeneration) return;
   }
@@ -1665,7 +2003,14 @@ async function startChallenge() {
           confidence: state.latestConf,
           noteId: result.noteId,
         });
-        lastTier = ""; judgeFeedback(result.tier, result.combo, result.score);
+        // 打击音落点:把判定的"音频时钟时刻"推算出来,交给音效层精确调度。
+        // 结果可能在调度轮里迟到几十毫秒,但 deltaSec 描述的是采样相对音符的偏差,
+        // 所以 now - deltaSec 还原出的正是"该响的那一帧"。
+        // 再夹一次上界:采样窗有 ±300ms,不夹的话"手早就动了、声音还在等"会很迟钝;
+        // 下界不用管 —— Math.min 之后若落到过去,Sfx.hit 内部会用 ctx.currentTime 兜住(立刻播)。
+        const rawPressAt = ctx.currentTime - (Number(result.deltaSec) || 0);
+        const pressAtSec = Math.min(rawPressAt, ctx.currentTime + SFX_MAX_EARLY);
+        lastTier = ""; judgeFeedback(result.tier, result.combo, result.score, { pressAtSec });
       }
     }
     updateScoreHUD({ acc: ch.previewAcc ?? 0 });
@@ -1692,6 +2037,25 @@ function stickFigureEnabled() {
 function applyStickFigureUI() {
   const on = stickFigureEnabled();
   if (dom.camStick) dom.camStick.hidden = !on;
+  return on;
+}
+
+// ---------------------------------------------------------------------------
+// 视频模式下要不要显示左侧摄像头预览(后台 /settings「摄像头」,key = dance-video-side-camera)
+//
+// 左侧 <video id=cam> 是识别管线的输入,永远在跑;这个开关只决定"显不显示"。
+// 它是第二路实时视频:一路解码 + 一个大合成层,和参考视频抢同一块显卡。
+// 实测(视频模式、录制开、交替 3 轮):隐藏它 帧率 45.3 → 68.8,慢帧占比 34.2% → 13.1%。
+// 未设置过 = 显示(保持既有现场观感)。
+// ---------------------------------------------------------------------------
+const VIDEO_PREVIEW_KEY = "dance-video-side-camera";
+function videoSidePreviewEnabled() {
+  return localStorage.getItem(VIDEO_PREVIEW_KEY) !== "0";
+}
+
+function applyVideoSidePreviewUI() {
+  const on = videoSidePreviewEnabled();
+  document.body.classList.toggle("hide-cam-panel", !on);
   return on;
 }
 
@@ -1799,6 +2163,8 @@ function stopAll({ keepCamera = false } = {}) {
   dom.btnStart.disabled = !(state.avatar || isVideoSide());
   dom.btnStop.disabled = true;
   dom.comboBadge.classList.add("hidden");
+  resetHeat(); // 热度也归零,否则下一局开场第一击的亮度/音高还是烫的
+  dom.comboBadge.dataset.heatTier = "cool";
   setStatus("已停止");
 }
 
@@ -1908,6 +2274,7 @@ function resetScoreHUD() {
   drawAccRing(0);
   dom.comboBadge.classList.add("hidden");
   dom.comboBadgeN.textContent = "0";
+  dom.comboBadgeN.dataset.text = "0";
 }
 
 function updateChallengeProgress(t, ch) {
@@ -2048,7 +2415,7 @@ function shutterCam() {
   f.classList.add("cam-shutter");
 }
 
-// 键盘:空格 开始/停止,M 镜像,D 工作人员调试开关
+// 键盘:空格 开始/停止,M 镜像,D 工作人员调试开关,S 打击音效开关
 window.addEventListener("keydown", (e) => {
   if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
   if (e.code === "Space") {
@@ -2061,6 +2428,8 @@ window.addEventListener("keydown", (e) => {
     debugMode = !debugMode;
     applyDebugUI();
     if (state.phase === "playing") dom.controls.classList.toggle("hidden", !debugMode);
+  } else if (e.key === "s" || e.key === "S") {
+    toggleSfx();
   }
 });
 
@@ -2116,10 +2485,13 @@ async function init() {
   await loadVideoMap();
   await applyLaunchParams();
 }
-// 火柴人骨架开关:进页面就应用一次;后台改了设置(另一个标签页)也立刻跟上,不用刷新游戏页。
+// 火柴人骨架开关 / 视频模式摄像头预览开关:进页面就应用一次;
+// 后台改了设置(另一个标签页)也立刻跟上,不用刷新游戏页。
 applyStickFigureUI();
+applyVideoSidePreviewUI();
 window.addEventListener("storage", (e) => {
   if (e.key === CAMERA_STICK_KEY) applyStickFigureUI();
+  if (e.key === VIDEO_PREVIEW_KEY) applyVideoSidePreviewUI();
 });
 init();
 
@@ -2140,3 +2512,6 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 window.addEventListener("pagehide", () => { stopAll(); refVideoSource.clear("页面卸载"); });
+
+
+

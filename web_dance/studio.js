@@ -27,6 +27,21 @@ let chartMount = null; // { draftId, element } 内嵌谱面编辑器实例(跨�
 let laneModelUrl = "";     // 判轨白影:记住用户选的模型(用 loadDraft 前都是它),避免重绘被弹回第一个
 let laneGenStamp = 0;      // 判轨白影:最近一次生成时间戳,拼进预览图 URL 破坏缓存(换模型后能看到新图)
 
+/**
+ * 视频下拉选项文案:带上比例与分辨率。
+ * 右侧画面按视频自己的比例摆(见 style.css 的 #ref-video),选之前就该看得出横竖 ——
+ * 只显示文件名的年代,选完才发现是横屏、画面缩成中间一条。
+ * 与 settings.js 里的同名函数保持一致(两页都是普通脚本,没有共享模块可挂)。
+ */
+function videoOptionLabel(v) {
+  const w = Number(v?.width), h = Number(v?.height);
+  const cls = v?.ratioClass;
+  const name = cls === "portrait-9x16" ? "9:16 竖屏" : cls === "portrait-3x4" ? "3:4 竖屏" : cls === "landscape" ? "横屏" : null;
+  if (!name) return v.name + " · 比例未知";
+  const size = Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? ` · ${Math.round(w)}×${Math.round(h)}` : "";
+  return `${v.name} · ${name}${size}`;
+}
+
 async function api(url, options = {}) {
   const res = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(30000) });
   const body = await res.json().catch(() => ({}));
@@ -289,11 +304,47 @@ function toggleBind(w, card) {
   songSel.value = w.songId || "";
   panel.appendChild(mkField("音乐", songSel));
 
+  // 歌曲名:改的是 songs[] 那条歌曲卡自己的名字,和「作品名」是两件事
+  // (例如作品「风萧萧雨萧萧」绑的歌曲叫「Copy Dance 1」)。
+  // 只有选中了一张已存在的歌曲卡才能改 —— 选「(不绑定)」时没有可改的对象。
+  const songNameInput = document.createElement("input");
+  songNameInput.type = "text";
+  songNameInput.placeholder = "先选一首音乐";
+  const songByName = (id) => songsCatalog.find((s) => s.id === id) || null;
+  const syncSongNameField = () => {
+    const s = songByName(songSel.value);
+    songNameInput.value = s ? s.label : "";
+    songNameInput.disabled = !s;
+  };
+  songSel.addEventListener("change", syncSongNameField);
+  syncSongNameField();
+  panel.appendChild(mkField("歌曲名", songNameInput));
+  // 失焦即存:改完歌曲名不必再点一次「保存绑定」(否则很容易以为已经生效了)
+  songNameInput.addEventListener("change", async () => {
+    const s = songByName(songSel.value);
+    const label = songNameInput.value.trim();
+    if (!s || !label || label === s.label) { syncSongNameField(); return; }
+    songNameInput.disabled = true;
+    try {
+      await api(`/api/songs/${encodeURIComponent(s.id)}`, {
+        method: "PUT",
+        headers: { ...deviceHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ label }),
+      });
+      s.label = label;
+      showToast(`歌曲已改名为「${label}」`);
+      await loadList();
+    } catch (err) {
+      showToast("改歌名失败：" + err.message);
+      syncSongNameField();
+    }
+  });
+
   let videoSel = null;
   if (w.mode === "video") {
     videoSel = document.createElement("select");
     videoSel.appendChild(new Option("（不绑定）", ""));
-    for (const v of videosCatalog) videoSel.appendChild(new Option(v.name, v.name));
+    for (const v of videosCatalog) videoSel.appendChild(new Option(videoOptionLabel(v), v.name));
     videoSel.value = w.videoName || "";
     panel.appendChild(mkField("视频", videoSel));
   }

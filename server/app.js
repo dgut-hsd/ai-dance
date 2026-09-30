@@ -14,6 +14,7 @@ import { makeVideo, makeFullVideo, validPng, runFFmpeg, ffmpegPath, thumbArgs } 
 import { buildHighlightStory, validateMetadata } from './highlight.js';
 import { createSongStore } from './songstore.js';
 import { createDraftStore } from './draftstore.js';
+import { videoFileMeta } from './videoMeta.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const token = () => randomBytes(24).toString('base64url');
@@ -135,6 +136,52 @@ export async function createApp(options = {}) {
     if (danceId in mapping) { mapping[danceId] = ''; await writeVideoMap(mapping); }
   };
 
+  /**
+   * 把已上架作品的改动同步回 songs/index.json。
+   *
+   * 工坊里有两条改名路径,以前只有「绑定音乐/视频」那条会同步,「打开编辑」里的标题框直接写草稿文件,
+   * 于是同一个作品在工坊显示新名字、在游戏里还是旧名字。两条路径现在都走这里。
+   *
+   * 两条硬规则(都是踩过的坑):
+   *   · songId 只认非空值 —— 面板的下拉在没有匹配项时值为 "",以前会照单写入,把
+   *     dance.defaultSongId 清成一个不存在的 id,绑定从此静默丢失。
+   *   · songs[] 里查不到那条歌曲时**按草稿补一条**,而不是只警告 —— 见下面「悬空引用」。
+   */
+  const syncDraftToIndex = async (draft) => {
+    if (draft.status !== 'published' || !draft.danceId) return false;
+    const idx = await readSongsIndex();
+    const dance = idx.dances.find((d) => d.danceId === draft.danceId || d.id === draft.danceId);
+    if (!dance) return false;
+    let changed = false;
+    if (draft.label && dance.label !== draft.label) { dance.label = draft.label; changed = true; }
+    // 悬空引用:defaultSongId 指向的歌曲条目不在 songs[] 里(歌单被重新导出刷掉过、或手工删过条目)。
+    // 后果是**静默没声音**:选曲试听走 performanceMusicUrl() = dance.defaultSongId → songById → song.file,
+    // 查不到就返回 null,于是「其他视频点卡片没音频,只有个别有」。以前这里只 warn 就跳过,
+    // 坏状态会一直留在歌单里。现在按草稿自己的音频文件补回一条(口径与 publish 里新建条目一致)。
+    if (!idx.songs.some((s) => s.id === dance.defaultSongId)) {
+      const audioFile = String(draft.files?.audio || dance.musicFile || '');
+      idx.songs.push({
+        id: dance.defaultSongId || draft.danceId,
+        label: draft.label || dance.label || draft.danceId,
+        file: audioFile,
+        bpm: draft.bpm || 120,
+      });
+      if (audioFile) dance.musicFile = audioFile;
+      changed = true;
+      console.warn(`[works] ${draft.danceId} 的歌曲条目(${dance.defaultSongId})不在歌单里,已按草稿补回:${audioFile}`);
+    }
+    if (draft.songId) {
+      const song = idx.songs.find((s) => s.id === draft.songId);
+      if (!song) console.warn(`[works] ${draft.danceId} 绑定的歌曲 ${draft.songId} 不在歌单里,跳过歌曲同步`);
+      else {
+        if (dance.defaultSongId !== song.id) { dance.defaultSongId = song.id; changed = true; }
+        if (dance.musicFile !== song.file) { dance.musicFile = song.file; changed = true; }
+      }
+    }
+    if (changed) await writeSongsIndex(idx);
+    return changed;
+  };
+
   /** 把 external(老)作品的文件拷回自己的作品目录,之后它就是普通草稿。 */
   const materializeWork = async (draft) => {
     if (!draft.external) return draft;
@@ -216,6 +263,52 @@ export async function createApp(options = {}) {
     videoMeta.set(name, meta);
     return meta;
   };
+  // ---- 视频素材的比例元数据(videos/index.json 的 files 段) --------------------
+  // 页面靠它决定右侧画面容器摆多宽,不再固定 55vw + object-fit: cover
+  // (后者会把 9:16 的视频左右各裁掉约 41%,舞者的手脚直接出画)。
+  // files 与 mapping 互不干扰:写这里绝不能动 mapping,否则玩家绑好的视频会全部失效。
+  const readVideoFiles = async () => {
+    try {
+      const parsed = JSON.parse(await readFile(videoMapFile, 'utf8'));
+      return parsed && typeof parsed.files === 'object' && !Array.isArray(parsed.files) ? parsed.files : {};
+    } catch { return {}; }
+  };
+  /** 合并写回:始终带上 mapping,免得只更新 files 时把绑定清空。 */
+  const applyVideoFiles = async (entries) => {
+    const [mapping, files] = await Promise.all([readVideoMap(), readVideoFiles()]);
+    const next = { ...files };
+    for (const [name, meta] of Object.entries(entries)) next[name] = meta;
+    const tmp = `${videoMapFile}.tmp`;
+    await writeFile(tmp, JSON.stringify({ schema: 'videos/index/v1', mapping, files: next }, null, 2));
+    await rename(tmp, videoMapFile);
+    for (const name of Object.keys(entries)) videoMeta.delete(name);
+    return next;
+  };
+  /** 比例表:已有元数据直接用,没有的现探一次(探测失败给全 null,不阻塞页面)。 */
+  const getVideoFiles = async (names) => {
+    const known = await readVideoFiles();
+    const out = {};
+    const fresh = {};
+    for (const name of names) {
+      if (known[name]) { out[name] = known[name]; continue; }
+      const meta = videoFileMeta(await getVideoMeta(name).catch(() => null));
+      out[name] = meta;
+      fresh[name] = meta;
+    }
+    if (Object.keys(fresh).length) await applyVideoFiles(fresh).catch(() => {});
+    return out;
+  };
+  // 启动时补齐:以前部署的 videos/index.json 没有 files 段,页面首次加载就得能用上比例。
+  // 放到空闲时段做,而且只补 videos/ 里真实存在的文件 —— 不阻塞 listen,也不给测试期
+  // 没装 ffmpeg 的环境添麻烦(探测失败会被 catch 成"比例未知",不是错误)。
+  void (async () => {
+    try {
+      const present = (await readdir(videosDir)).filter((f) => /\.mp4$/i.test(f));
+      const known = await readVideoFiles();
+      const missing = present.filter((f) => !known[f]);
+      if (missing.length) await getVideoFiles(missing);
+    } catch { /* 元数据是增强信息,补不上也不能影响启动 */ }
+  })();
   const baseURL = new URL(publicBase);
   if (!['http:', 'https:'].includes(baseURL.protocol) || baseURL.pathname !== '/' || baseURL.search || baseURL.hash)
     throw new Error('PUBLIC_BASE_URL must be an HTTP(S) origin');
@@ -620,6 +713,27 @@ export async function createApp(options = {}) {
   app.post('/api/songs/:danceId/complete', async (req, res) => {
     res.json(await songStore.complete(req.params.danceId, ownerHeader(req)));
   });
+  /**
+   * 改歌曲名(songs[] 的 label)。
+   *
+   * 歌曲条目以前只在「创建」时定名:上架作品用作品名、谱面编辑器用导入时的名字,之后没有任何入口能改。
+   * 于是工坊里能看到「Copy Dance 1」这种名字却改不掉。这里只动 label —— 不动 file / bpm / id,
+   * 所以不影响音频解析与已绑定的舞曲。
+   *
+   * 注意 id 允许带 `:danceId` 形式的路由不会冲突:/api/songs/:danceId/{fbx,audio,chart,complete}
+   * 都是更深的两段路径。
+   */
+  app.put('/api/songs/:id', device, async (req, res) => {
+    const id = String(req.params.id);
+    const label = String(req.body?.label ?? '').trim();
+    if (!label) throw fail(400, '歌曲名不能为空');
+    const index = await readSongsIndex();
+    const song = (index.songs || []).find((s) => s.id === id);
+    if (!song) throw fail(404, '歌曲不存在');
+    song.label = label.slice(0, 120);
+    await writeSongsIndex(index);
+    res.json({ ok: true, song });
+  });
 
   // 可用舞者模型列表(供 /settings 的模型切换面板)。递归列出 models/ 下所有 .glb/.gltf/.fbx。
   app.get('/api/models', async (req, res) => {
@@ -641,10 +755,16 @@ export async function createApp(options = {}) {
   app.get('/api/videos', async (req, res) => {
     try {
       const names = (await readdir(videosDir)).filter((f) => /\.mp4$/i.test(f)).sort((a, b) => a.localeCompare(b));
+      // 比例元数据(宽高/档位)由 files 段提供,页面据此摆容器;探测失败为 null,页面走兜底。
+      const files = await getVideoFiles(names);
       const out = [];
       for (const name of names) {
         const meta = await getVideoMeta(name);
-        out.push({ name, url: `/videos/${encodeURIComponent(name)}`, poster: `/api/videos/${encodeURIComponent(name)}/poster`, ...meta });
+        out.push({
+          name, url: `/videos/${encodeURIComponent(name)}`, poster: `/api/videos/${encodeURIComponent(name)}/poster`,
+          ...meta,
+          ...(files[name] || {}),
+        });
       }
       res.json(out);
     } catch (e) {
@@ -658,7 +778,10 @@ export async function createApp(options = {}) {
     await boundedWrite(req, path.join(videosDir, name), MAX_BYTES);
     videoMeta.delete(name);
     await rm(posterFile(name), { force: true });
-    res.json({ ok: true, name });
+    // 换过文件就必须重探比例:旧的比例如今是错的,页面会照它摆错容器。
+    const meta = videoFileMeta(await probeVideo(path.join(videosDir, name)));
+    await applyVideoFiles({ [name]: meta }).catch(() => {});
+    res.json({ ok: true, name, ...meta });
   });
   // 删除视频 + 封面,并清理绑定映射。
   app.delete('/api/videos/:name', device, async (req, res) => {
@@ -772,18 +895,7 @@ export async function createApp(options = {}) {
     }
     draft = await draftStore.updateMeta(req.params.id, { label, bpm, danceId, songId, videoName });
     if (draft.status === 'published' && draft.danceId) {
-      const idx = await readSongsIndex();
-      const dance = idx.dances.find((d) => d.danceId === draft.danceId);
-      if (dance) {
-        dance.label = draft.label;
-        if (songId !== undefined) {
-          const song = idx.songs.find((s) => s.id === songId);
-          if (!song) throw fail(400, '歌曲不存在');
-          dance.defaultSongId = song.id;
-          dance.musicFile = song.file;
-        }
-        await writeSongsIndex(idx);
-      }
+      await syncDraftToIndex(draft);
       const mapping = await readVideoMap();
       const next = String(videoName ?? draft.videoName ?? '');
       if ((mapping[draft.danceId] || '') !== next) { mapping[draft.danceId] = next; await writeVideoMap(mapping); }
@@ -871,7 +983,10 @@ export async function createApp(options = {}) {
     res.type('text/plain').send(text);
   });
   app.put('/api/drafts/:id/meta', device, async (req, res) => {
-    res.json(await draftStore.updateMeta(req.params.id, req.body || {}));
+    const draft = await draftStore.updateMeta(req.params.id, req.body || {});
+    // 已上架作品的改动要同步回歌单:工坊「打开编辑」里的标题框走的就是这条路径。
+    await syncDraftToIndex(draft);
+    res.json(draft);
   });
   // 从已上传的视频素材抽取音频(ffmpeg → wav)。
   app.post('/api/drafts/:id/extract-audio', device, async (req, res) => {
@@ -910,6 +1025,15 @@ export async function createApp(options = {}) {
     const danceId = draft.danceId || draft.id;
     const laneDir = path.join(draftStore.dirOf(req.params.id), 'lane');
     await mkdir(laneDir, { recursive: true });
+    // 重铺判定点后,旧 PNG 会留在目录里(文件名 = 时刻,新谱面覆盖不到的那些就成了孤儿)。
+    // 它们不进 manifest、也就不会被消费端引用,但会让「这作品到底有多少张白影」永远说不清。
+    // 只清当前清单之外的多余 PNG,manifest 等别的文件不动。
+    const keepFiles = new Set(notes.map((n) => `${String(n.key ?? Number(n.t).toFixed(3))}.png`));
+    try {
+      for (const f of await readdir(laneDir)) {
+        if (/\.png$/i.test(f) && !keepFiles.has(f)) await rm(path.join(laneDir, f), { force: true });
+      }
+    } catch { /* 清理失败不该挡住保存 */ }
     const manifestNotes = [];
     for (const n of notes) {
       const key = String(n.key ?? Number(n.t).toFixed(3));
@@ -1014,6 +1138,13 @@ export async function createApp(options = {}) {
         notes.push({ ...n, file: `${danceId}/${name}` });                    // 统一规范成 <danceId>/<key>.png
       }
       if (oldDance) manifest.dances = { [danceId]: { ...oldDance, danceId, notes } };
+      // 同上:这次上架产生的 PNG 是权威清单,目录里不在清单内的旧图直接清掉
+      const keepLane = new Set(notes.map((n) => path.basename(n.file)));
+      try {
+        for (const f of await readdir(laneDir)) {
+          if (/\.png$/i.test(f) && !keepLane.has(f)) await rm(path.join(laneDir, f), { force: true });
+        }
+      } catch { /* 清理失败不该挡住上架 */ }
       const laneIndexPath = path.join(root, 'web_dance', 'assets', 'lane', 'index.json');
       let prev = {};
       try { prev = JSON.parse(await readFile(laneIndexPath, 'utf8')); } catch { /* 首次生成 */ }
@@ -1030,10 +1161,16 @@ export async function createApp(options = {}) {
     // 4) 更新 songs/index.json
     //    反复上架不该把 songs[] 越滚越多,也不该改掉用户给歌曲起的名字:
     //    音频没变就继续复用这支舞原本绑定的那条歌曲记录(id/名字/条目统统不动)。
+    //    不变量:dance.defaultSongId 必须能在 songs[] 里查到 ——
+    //    运行时(选曲试听 / 游戏背景音乐)是 defaultSongId → songById → song.file 这条链,
+    //    悬空就等于**静默没声音**(现场表现:"别的视频点卡片有声音,这几支没有")。
     const index = await readSongsIndex();
     const prevDance = index.dances.find((d) => d.id === danceId || d.danceId === danceId);
     const prevSong = index.songs.find((s) => s.id === (prevDance?.defaultSongId ?? danceId));
-    const keepSong = prevSong && prevSong.file === f.audio ? prevSong : null;
+    // 兜底:defaultSongId 可能已经失效(歌曲条目被删过),这时按音频文件回认那张歌曲卡,
+    // 否则下面会删掉旧条目再按作品名重建 —— 用户改过的歌曲名就这样被冲掉了。
+    const sameAudioSong = index.songs.find((s) => s.id === danceId && s.file === f.audio) || null;
+    const keepSong = (prevSong && prevSong.file === f.audio ? prevSong : null) || sameAudioSong;
     const oldSongEntry = index.songs.find((s) => s.id === danceId);
 
     index.dances = index.dances.filter((d) => d.id !== danceId && d.danceId !== danceId);
@@ -1053,6 +1190,18 @@ export async function createApp(options = {}) {
         file: f.audio,
         bpm: draft.bpm || 120,
       });
+    }
+    // 上架完成后自检并修好悬空引用(keepSong 复用的那条也可能本身就是悬空的)
+    const published = index.dances.find((d) => d.danceId === danceId);
+    if (published && !index.songs.some((s) => s.id === published.defaultSongId)) {
+      index.songs.push({
+        id: published.defaultSongId || danceId,
+        label: oldSongEntry?.label || draft.label || danceId,
+        file: f.audio,
+        bpm: draft.bpm || 120,
+      });
+      published.musicFile = f.audio;
+      console.warn(`[publish] ${danceId} 的歌曲条目悬空,已补回:${f.audio}`);
     }
     await writeSongsIndex(index);
 
@@ -1090,8 +1239,12 @@ export async function createApp(options = {}) {
     dotfiles: 'deny',
     setHeaders(res) { res.setHeader('Cache-Control', 'no-cache'); },
   };
-  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs', 'videos'])
+  for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs'])
     app.use(`/${dir}`, express.static(path.join(root, dir), staticOpts));
+  // videos 必须挂 videosDir 解析出来的目录,不能拼 root/videos:
+  // 传了 videosDir 选项 / 设了 VIDEOS_DIR 时(测试、多素材库)拼 root 会让每个视频 404,
+  // 而 /api/videos 又是从 videosDir 列文件的 —— 表现为"列表里有、点开播不了"。
+  app.use('/videos', express.static(videosDir, staticOpts));
   for (const file of ['chart.json', 'timing.json']) app.get(`/${file}`, (req, res) => res.sendFile(path.join(root, file)));
   app.get('/', (req, res) => res.redirect('/web_dance/'));
   app.use((err, req, res, next) => {

@@ -10,6 +10,19 @@
   --accent2: #4d7cff;
   --accent3: #39ffcf;
   --gold: #ffd54a;
+  /* 连击热度:由 main.js 写入。判定徽章 / 分数面板共用同一套暖色,避免两处颜色对不上。
+     --heat 0→1,四段暖色在 JS 里插值成 --hot-rgb / --hot2-rgb。 */
+  --heat: 0;
+  --hot-rgb: 255, 213, 74;
+  --hot2-rgb: 255, 61, 129;
+  --badge-size: 44px;
+  --badge-jitter: 0;
+  /* 连击热度:由 main.js 写入,判定徽章 / 分数面板 / 相机边框共用同一套暖色 */
+  --heat: 0;
+  --hot-rgb: 255, 213, 74;
+  --hot2-rgb: 255, 61, 129;
+  --badge-size: 44px;
+  --badge-jitter: 0;
   --font-display: "Arial Black", "Impact", "Haettenschweiler", "Franklin Gothic Bold", "Segoe UI Black", sans-serif;
 }
 
@@ -66,7 +79,9 @@ html, body {
   z-index: 50;
 }
 
-/* 判定反馈:斜体大字 + 得分飘字,按 tier 用 --jtier 统一配色 */
+/* 判定反馈:多层字效(深描边 + 纵向渐变 + 倒角投影)+ 得分飘字,按 tier 用 --jtier 统一配色
+   设计依据:①外层深描边给字形"实体感",内层渐变给"材质感";②发光半径必须小(≤14px),
+   大半径会把字形边缘糊掉 —— 这是之前"不够精致"的主因;③MISS 在形态上区别于其它档位。 */
 #judge {
   position: fixed;
   left: 50%;
@@ -75,71 +90,152 @@ html, body {
   pointer-events: none;
   z-index: 45;
   text-align: center;
+  /* 每档的主色/暗部:渐变与描边都从这里取色,新增档位只需加一行 */
+  --jtier: #ffffff;        /* 档位主色 */
+  --jtier-deep: #333333;   /* 渐变暗部 */
+  --jtier-hi: #ffffff;     /* 渐变高光起点 */
+  --jtier-mid: 52%;        /* 主色在渐变中的位置 */
+  --jtier-edge: rgba(20, 22, 30, 0.9);  /* 深描边(带透明度,避免把字压暗) */
+  --judge-dur: 780ms;
 }
-/* 判定瞬间的文字背后爆一圈光 */
+#judge[data-tier="PERFECT"] { --jtier: #ffd54a; --jtier-deep: #a8690a; --jtier-hi: #fffdf2; --jtier-mid: 46%; --jtier-edge: rgba(96, 52, 0, 0.9); }
+#judge[data-tier="GREAT"]   { --jtier: #39ffcf; --jtier-deep: #047a63; --jtier-hi: #f2fffb; --jtier-mid: 48%; --jtier-edge: rgba(0, 52, 42, 0.9); }
+#judge[data-tier="GOOD"]    { --jtier: #4d7cff; --jtier-deep: #1c3a8f; --jtier-hi: #f4f7ff; --jtier-mid: 50%; --jtier-edge: rgba(8, 18, 58, 0.9); }
+#judge[data-tier="MISS"]    { --jtier: #ff5f6d; --jtier-deep: #8c1a26; --jtier-hi: #f6d9dc; --jtier-mid: 46%; --jtier-edge: rgba(58, 8, 14, 0.92); }
+
+/* 判定瞬间的文字背后爆一圈光(短半径、快衰减,只做"气压"不做"糊") */
 #judge::before {
   content: "";
   position: absolute;
   left: 50%; top: 50%;
-  width: 280px; height: 280px;
+  width: 300px; height: 300px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(circle, var(--jtier, #fff) 0%, transparent 62%);
+  background: radial-gradient(circle, var(--jtier) 0%, transparent 58%);
   opacity: 0;
   pointer-events: none;
 }
-#judge.pop::before { animation: judgeFlash 0.45s ease-out both; }
+#judge.pop::before { animation: judgeFlash 0.38s cubic-bezier(0.16, 0.84, 0.44, 1) both; }
 @keyframes judgeFlash {
-  0% { opacity: 0.85; transform: translate(-50%, -50%) scale(0.2); }
-  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.75); }
+  0% { opacity: 0.6; transform: translate(-50%, -50%) scale(0.18); }
+  60% { opacity: 0.22; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
 }
+
 #judge-tier {
+  position: relative;
   font-family: var(--font-display);
   font-size: 56px;
   font-weight: 900;
-  font-style: italic;
-  letter-spacing: 2px;
+  /* 不再用 font-style: italic 整体斜切:斜边会让描边与发光变粗不均,是"廉价感"的典型来源。
+     改用很小的 rotate,既保留动感又不破坏字形。 */
+  letter-spacing: 3px;
   line-height: 1;
-  color: var(--jtier, #fff);
-  -webkit-text-stroke: 1px rgba(255,255,255,0.28);
-  text-shadow:
-    0 0 6px #fff,
-    0 0 22px var(--jtier, #fff),
-    0 0 54px var(--jtier, #fff),
-    0 4px 0 rgba(0,0,0,0.45);
-  transform: skewX(-6deg);
+  white-space: nowrap;
+  text-align: center;
+  transform: rotate(-2deg);
+  color: transparent;
 }
+/* 逐字弹:每个字母一层,overshoot 落在 easeOutBack 上(≈ cubic-bezier(0.34,1.56,0.64,1)) */
+#judge-tier .jt-ch {
+  display: inline-block;
+  background-image: linear-gradient(180deg, var(--jtier-hi) 0%, var(--jtier) var(--jtier-mid), var(--jtier-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* 描边宽度必须远小于字号(≈字号的 3%),否则会整条盖住渐变,字变成一个实色疙瘩 */
+  -webkit-text-stroke: 2.4px var(--jtier-edge);
+  paint-order: stroke fill;
+  filter:
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.72))
+    drop-shadow(0 5px 7px rgba(0, 0, 0, 0.6))
+    drop-shadow(0 0 12px color-mix(in srgb, var(--jtier) 48%, transparent));
+}
+/* 光晕层:同字形的模糊副本,给字一个"背面打光"的体积感(比单纯 text-shadow 干净) */
+#judge-tier::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: transparent;
+  -webkit-text-stroke: 9px var(--jtier);
+  filter: blur(10px);
+  opacity: 0.4;
+}
+/* PERFECT 专属:色散做成**背景层**(和光晕同层),不碰字形本身。
+   在字形上用 text-shadow 会直接染进字面(实测会把金色压成脏红),这一条是踩过的坑。 */
+#judge[data-tier="PERFECT"] #judge-tier::before {
+  animation: judgeChroma 190ms steps(2, end) both;
+}
+@keyframes judgeChroma {
+  0% { text-shadow: 3px 0 0 rgba(255, 0, 90, 0.55), -3px 0 0 rgba(0, 200, 255, 0.55); }
+  100% { text-shadow: 0 0 0 rgba(0, 0, 0, 0); }
+}
+
 #judge[data-tier="PERFECT"] #judge-tier { font-size: 82px; }
 #judge[data-tier="GREAT"] #judge-tier { font-size: 68px; }
 #judge[data-tier="GOOD"] #judge-tier { font-size: 58px; }
 #judge[data-tier="MISS"] #judge-tier { font-size: 74px; }
+
 #judge-sub {
-  margin-top: 5px;
+  margin-top: 7px;
   font-family: var(--font-display);
   font-size: 21px;
   font-weight: 800;
-  letter-spacing: 1px;
-  color: var(--jtier, #fff);
-  text-shadow: 0 0 14px var(--jtier, #fff);
-}
-#judge.pop #judge-tier { animation: tierSlam 0.85s cubic-bezier(0.18, 0.89, 0.32, 1.28) both; }
-#judge.pop #judge-sub { animation: subFloat 0.85s ease both; }
-@keyframes tierSlam {
-  0% { opacity: 0; transform: skewX(-6deg) scale(0.15) rotate(-14deg); }
-  20% { opacity: 1; transform: skewX(-6deg) scale(1.3) rotate(4deg); }
-  38% { transform: skewX(-6deg) scale(0.94) rotate(-2deg); }
-  60% { opacity: 1; transform: skewX(-6deg) scale(1.06) rotate(0deg); }
-  82% { opacity: 1; transform: skewX(-6deg) scale(1) rotate(0deg); }
-  100% { opacity: 0; transform: skewX(-6deg) scale(0.95) translateY(-22px); }
-}
-@keyframes subFloat {
-  0% { opacity: 0; transform: translateY(8px) scale(0.7); }
-  22% { opacity: 1; transform: translateY(0) scale(1); }
-  72% { opacity: 1; transform: translateY(-6px) scale(1); }
-  100% { opacity: 0; transform: translateY(-20px) scale(0.9); }
+  letter-spacing: 2px;
+  color: var(--jtier);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.75), 0 0 12px color-mix(in srgb, var(--jtier) 70%, transparent);
 }
 
-/* 连击徽章:顶部常驻,命中脉动,每 10 连爆发 */
+#judge.pop #judge-tier .jt-ch { animation: tierSlam var(--judge-dur) cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+#judge.pop #judge-sub { animation: subFloat var(--judge-dur) cubic-bezier(0.22, 0.86, 0.36, 1) both; }
+@keyframes tierSlam {
+  0%   { opacity: 0; transform: scale(1.7) translateY(10px) rotate(-5deg); }
+  13%  { opacity: 1; transform: scale(1.13) translateY(-4px) rotate(1.2deg); }
+  30%  { transform: scale(0.975) translateY(1px) rotate(-0.4deg); }
+  44%  { transform: scale(1.02) translateY(0) rotate(0deg); }
+  72%  { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.96) translateY(-18px); }
+}
+@keyframes subFloat {
+  0% { opacity: 0; transform: translateY(10px) scale(0.72); }
+  18% { opacity: 1; transform: translateY(0) scale(1.06); }
+  32% { transform: translateY(0) scale(1); }
+  74% { opacity: 1; transform: translateY(-5px) scale(1); }
+  100% { opacity: 0; transform: translateY(-20px) scale(0.94); }
+}
+
+/* MISS 必须与其它档位"形态不同",而不只是换个颜色:降饱和 + 反向倾倒 + 60ms glitch + 无爆发 */
+#judge[data-tier="MISS"] #judge-tier { transform: rotate(3deg); }
+#judge[data-tier="MISS"] #judge-tier .jt-ch {
+  background-image: linear-gradient(180deg, #d9a1a6 0%, var(--jtier) 46%, var(--jtier-deep) 100%);
+  -webkit-text-stroke: 2.4px #4a0d14;
+  filter: saturate(0.6) brightness(0.94)
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.7))
+    drop-shadow(0 0 9px color-mix(in srgb, var(--jtier) 38%, transparent));
+}
+#judge[data-tier="MISS"] #judge-tier::before { opacity: 0.22; }
+#judge.pop[data-tier="MISS"] #judge-tier .jt-ch { animation: missGlitch var(--judge-dur) steps(2, end) both; }
+@keyframes missGlitch {
+  0%   { opacity: 0; transform: translateX(-7px) scale(1.05); }
+  8%   { opacity: 1; transform: translateX(5px) scale(1) skewX(-7deg); }
+  16%  { transform: translateX(-3px) skewX(5deg); }
+  26%  { transform: translateX(0) skewX(0deg); }
+  70%  { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateY(14px) scale(0.97); }
+}
+
+/* 连击徽章:顶部常驻,命中脉动,每 10 连爆发,连击越高越"烫"。
+   热度模型(和判定字同一套语言):
+     --heat 0→1 由 main.js 按连击写入(带惯性,只追不跳),CSS 只负责把热度翻译成视觉。
+     --hot-rgb 是"当前热度对应的颜色",由 main.js 在四段暖色之间插值,比写死 4 个 class 稳。 */
 #combo-badge {
   position: fixed;
   top: 84px;
@@ -148,50 +244,139 @@ html, body {
   z-index: 44;
   text-align: center;
   pointer-events: none;
-}
-#combo-badge-n {
+  /* --heat / --hot-rgb / --badge-size / --badge-jitter 继承自 :root,由 main.js 统一写。
+     这里重新声明只会覆盖全局值,所以绝对不要在这里再写一份默认值。 */
   font-family: var(--font-display);
-  font-size: 44px;
+}
+
+/* 数字:多层字效(与判定字同源)——深描边给实体感,纵向渐变给金属感 */
+#combo-badge-n {
+  position: relative;
+  font-size: var(--badge-size);
   font-weight: 900;
-  font-style: italic;
   line-height: 1;
-  background: linear-gradient(180deg, #ffffff 0%, #ffd54a 45%, #ff3d81 100%);
+  letter-spacing: 1px;
+  color: transparent;
+  background-image: linear-gradient(
+    180deg,
+    #ffffff 0%,
+    color-mix(in srgb, rgb(var(--hot-rgb)) 82%, #ffffff) 30%,
+    rgb(var(--hot-rgb)) 62%,
+    color-mix(in srgb, rgb(var(--hot2-rgb)) 70%, rgb(var(--hot-rgb))) 100%
+  );
   -webkit-background-clip: text;
   background-clip: text;
-  color: transparent;
-  filter: drop-shadow(0 0 10px rgba(255,61,129,0.55)) drop-shadow(0 2px 0 rgba(0,0,0,0.5));
+  -webkit-text-stroke: 2px rgba(30, 10, 24, 0.72);
+  paint-order: stroke fill;
+  filter:
+    drop-shadow(0 2px 0 rgba(0, 0, 0, 0.62))
+    drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5))
+    drop-shadow(0 0 calc(4px * (1 + var(--heat))) rgba(var(--hot2-rgb), calc(0.35 + 0.4 * var(--heat))));
+  transform: scale(calc(1 + var(--heat) * 0.16));
+  will-change: transform, filter;
 }
+/* 高热度时的轻微抖动:幅度由 --badge-jitter 控制。
+   只挂在 hot/blaze 档上 —— 基础态不挂动画,避免 45 连以下白跑一个每帧动画。 */
+#combo-badge[data-heat-tier="hot"] #combo-badge-n,
+#combo-badge[data-heat-tier="blaze"] #combo-badge-n,
+#combo-badge.pulse #combo-badge-n,
+#combo-badge.milestone #combo-badge-n {
+  animation-name: comboJitter;
+  animation-duration: 0.16s;
+  animation-timing-function: steps(2, end);
+  animation-iteration-count: infinite;
+}
+@keyframes comboJitter {
+  0% { translate: 0 0; }
+  100% { translate: calc(var(--badge-jitter) * 1px) calc(var(--badge-jitter) * -1px); }
+}
+/* 背面光晕层:同数字的模糊副本,给数字一个"热到发亮"的体积感 */
+#combo-badge-n::before {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: transparent;
+  /* 收着点:描边给到 13px、且满不透明,会把数字糊成一坨,读数反而变差 */
+  -webkit-text-stroke: calc(5px + 3px * var(--heat)) rgb(var(--hot2-rgb));
+  filter: blur(calc(6px + 5px * var(--heat)));
+  opacity: calc(0.16 + 0.26 * var(--heat));
+}
+/* 两侧速度线:热度到一定程度才浮现,给"冲起来"的方向感 */
+#combo-badge::before,
+#combo-badge::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--badge-size) * 0.42);
+  width: calc(26px + 46px * var(--heat));
+  height: 2px;
+  border-radius: 2px;
+  opacity: clamp(0, calc((var(--heat) - 0.18) * 2.2), 0.85);
+  background: linear-gradient(90deg, transparent, rgb(var(--hot2-rgb)));
+}
+#combo-badge::before { right: calc(100% + 6px); }
+#combo-badge::after { left: calc(100% + 6px); background: linear-gradient(270deg, transparent, rgb(var(--hot2-rgb))); }
+
 #combo-badge-label {
-  margin-top: 2px;
+  margin-top: 3px;
   font-size: 12px;
   font-weight: 800;
-  letter-spacing: 5px;
-  color: #ffd54a;
-  text-shadow: 0 0 10px rgba(255,213,74,0.6);
+  letter-spacing: calc(4px + 3px * var(--heat));
+  color: rgb(var(--hot-rgb));
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6), 0 0 calc(8px + 8px * var(--heat)) rgba(var(--hot-rgb), 0.7);
 }
-#combo-badge.pulse #combo-badge-n { animation: comboPulse 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
-#combo-badge.milestone #combo-badge-n { animation: comboMile 0.62s cubic-bezier(0.18, 0.89, 0.32, 1.28); }
+
+/* 命中脉动:数字自己弹,不动容器(容器的 transform 要留给 --heat 缩放) */
+#combo-badge.pulse #combo-badge-n { animation: comboJitter 0.16s steps(2, end) infinite, comboPulse calc(0.3s - 0.08s * var(--heat)) cubic-bezier(0.18, 0.89, 0.32, 1.28); }
+#combo-badge.milestone #combo-badge-n { animation: comboJitter 0.16s steps(2, end) infinite, comboMile 0.62s cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes comboPulse {
   0% { transform: scale(1); }
-  40% { transform: scale(1.26); }
+  40% { transform: scale(calc(1.18 + 0.16 * var(--heat))); }
   100% { transform: scale(1); }
 }
 @keyframes comboMile {
   0% { transform: scale(1) rotate(0deg); }
-  30% { transform: scale(1.6) rotate(-5deg); }
-  60% { transform: scale(0.94) rotate(2deg); }
+  28% { transform: scale(calc(1.42 + 0.2 * var(--heat))) rotate(-5deg); }
+  58% { transform: scale(0.95) rotate(2deg); }
   100% { transform: scale(1) rotate(0deg); }
 }
-/* 高连击升温:更大、更烫、持续微颤 */
-#combo-badge.hot #combo-badge-n {
-  font-size: 56px;
-  background: linear-gradient(180deg, #ffffff 0%, #ffd54a 28%, #ff3d81 68%, #b136ff 100%);
-  filter: drop-shadow(0 0 12px rgba(255,61,129,0.85)) drop-shadow(0 0 30px rgba(255,61,129,0.5)) drop-shadow(0 2px 0 rgba(0,0,0,0.5));
+/* 里程碑白闪:只在整十连爆发的那一刻亮一下 */
+#combo-badge.milestone #combo-badge-n::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: #ffffff;
+  -webkit-text-stroke: 0;
+  background: none;
+  animation: comboFlash 0.34s ease-out both;
+  pointer-events: none;
 }
-#combo-badge.hot { animation: comboFlicker 0.45s ease-in-out infinite alternate; }
-@keyframes comboFlicker {
+@keyframes comboFlash {
+  0% { opacity: 0.95; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+/* 高热度微颤:整块徽章轻轻呼吸,和数字抖动叠出"沸腾"感 */
+#combo-badge[data-heat-tier="hot"],
+#combo-badge[data-heat-tier="blaze"] {
+  animation: comboBreathe calc(0.5s - 0.16s * var(--heat)) ease-in-out infinite alternate;
+}
+@keyframes comboBreathe {
   from { transform: translateX(-50%) scale(1); }
-  to { transform: translateX(-50%) scale(1.06); }
+  to { transform: translateX(-50%) scale(calc(1 + 0.035 * var(--heat))); }
 }
 
 /* ---------- 顶栏 ---------- */
@@ -403,25 +588,60 @@ html, body {
 }
 
 /* ---- 视频参考模式:右侧沉浸式半屏,替换 3D 教练/舞台 ---- */
+/*
+ * 容器宽度由**视频自己的比例**决定,不再固定 55vw。
+ *
+ * 以前是 width:55vw × height:100vh + object-fit:cover:容器比例 = 0.55 × 屏幕比,与视频无关。
+ * 实测 1920×1080 下容器 1056×1080(≈0.98),而 videos/舞蹈1.mp4 是 832×1108(0.7509)
+ * → 视频被放大到 1440 宽,左右各裁掉 23.2%;(9:16 的 720×1280 更糟,约 41%)。
+ *
+ * 现在:
+ *   --ref-ratio 由 main.js 写入(videos/index.json 量好的比例,元素 loadedmetadata 后再校准);
+ *   width = min(62vw, 100vh × 比例) → 竖屏贴满 100vh,宽度自然收窄,零裁剪;
+ *   横屏(如 4:3 的「闪身步」)被 62vw 挡住 → object-fit:contain 上下留黑(纯黑,不做模糊填充)。
+ * 拿不到比例时用兜底值 0.5625(仓库里 9:16 占绝大多数),仍是"完整显示不裁剪"。
+ *
+ * 右缘位置按比例档分(main.js 写 data-ratio-class):
+ *   9:16  → 往左收一点(画面窄,贴边显得飘)。1920 下右缘落在 1780,即离窗口右缘 140px
+ *           → --ref-right: 7.3vw(140/1920 = 7.29vw),按 vw 等比缩放到别的屏;
+ *   3:4 / 横屏 → 贴边(right: 0),保持原来的满宽观感。
+ * 宽度上限 --ref-side 里也带上这个右缘留白,否则横屏会被 contain 多挤出两侧黑边。
+ */
 #ref-video {
   position: fixed;
   top: 0;
-  right: 0;
-  width: 55vw;
+  --ref-right: 0px;                    /* 默认贴边;只有 9:16 覆盖成 7.3vw */
+  right: var(--ref-right);
+  --ref-ratio: 0.5625;                 /* 兜底:9:16 */
+  --ref-max-w: 62vw;                   /* 横屏视频的上限,超出的部分由 contain 转成上下黑边 */
+  /* 从窗口左缘到视频区左缘的可用宽度:摄像头小窗(pk 模式宽 min(39vw, 72vh)、left 2.5vw,
+     实测 1920×1080 下右缘 797px)+ 右缘留白 + 一点透气。 */
+  --ref-side: calc(2.5vw + min(39vw, 72vh) + 12px + var(--ref-right));
+  /* 竖屏(9:16 / 3:4)贴满 100vh,宽度自然收窄;横屏被 --ref-max-w 与 --ref-side 挡住。 */
+  width: min(var(--ref-max-w), 100vh * var(--ref-ratio), calc(100vw - var(--ref-side)));
   height: 100vh;
-  object-fit: cover;
-  object-position: center center;
-  background: #000;
+  object-fit: contain;                 /* cover → contain:宁可留黑边,也不裁掉人 */
+  object-position: right center;       /* 画面右缘对齐元素的右缘 */
+  background: #000;                    /* 黑边就是纯黑 */
   border: 0;
   border-radius: 0;
   box-shadow: none;
   z-index: 9;
 }
+/* 9:16 往左收:画面窄(1920 下只有 608 宽),贴着窗口边会显得飘;3:4 与横屏维持贴边。 */
+#ref-video[data-ratio-class="portrait-9x16"] { --ref-right: 7.3vw; }
+/* 显式黑底:容器是纯视频区,任何留白都必须是黑的,
+   否则会看见页面背景从视频两侧透出来(比黑边难看)。 */
+.video-side #ref-video { background: #000; }
 .video-side #stage { display: none; }
 .video-side #stage-bridge { display: none; }
 /* 视频模式不渲染 3D 舞台,全屏特效画布也没有内容:留一个全屏 canvas 参与合成
    只会白白吃掉每帧的栅格化预算,和解码器抢资源(表现就是"视频突然卡住")。 */
 .video-side #fx { display: none; }
+/* 视频模式下隐藏左侧摄像头预览(后台「游戏设置 → 摄像头」可关)。
+   注意:#cam 仍然在解码并喂给识别管线,这里只是不显示 —— 它是第二路实时视频,
+   实测隐藏后帧率 45.3 → 68.8、慢帧 34.2% → 13.1%。 */
+body.hide-cam-panel.video-side #cam-panel { visibility: hidden; }
 .video-side #ref-panel { display: none; }
 .video-side::before {
   content: "";
@@ -555,7 +775,7 @@ html, body {
 }
 #score { font-size: 44px; font-weight: 900; line-height: 1; color: #fff; }
 #score-label { font-size: 11px; color: var(--muted); letter-spacing: 2px; }
-#combo { margin-top: 6px; font-size: 13px; color: var(--gold); letter-spacing: 1px; }
+#combo { margin-top: 6px; font-size: 13px; letter-spacing: 1px; color: rgb(var(--hot-rgb)); text-shadow: 0 0 calc(6px + 8px * var(--heat)) rgba(var(--hot-rgb), 0.55); }
 #combo b { font-size: 20px; }
 #combo.hot b { animation: pop 0.15s ease; }
 @keyframes pop { 50% { transform: scale(1.4); } }
@@ -1229,7 +1449,11 @@ html, body {
 }
 
 @media (max-width: 720px) {
-  #ref-video { width: 62vw; }
+  /* 这里原本有一条 `#ref-video { width: 62vw }`:在"视频一律拉伸铺满"的旧做法下,
+     窄屏把 55vw 放宽到 62vw 能少裁一点。现在宽度由视频比例算出来(见 #ref-video),
+     再放宽等于让竖屏视频在手机上占掉六成屏幕、还把左侧 UI 挤没,所以删掉。
+     窄屏按比例缩一缩 9:16 的右缘留白,免得画面被挤窄。 */
+  #ref-video[data-ratio-class="portrait-9x16"] { --ref-right: 5vw; }
   .video-side::before {
     background:
       linear-gradient(90deg, var(--bg) 0 29%, rgba(7,11,24,0.95) 36%, rgba(7,11,24,0.52) 47%, transparent 64%),
@@ -1268,8 +1492,12 @@ html, body {
   #result.reveal #result-stats,
   #result.reveal #result-actions { animation: none; }
   .rays, .beam, #result-eq i, #result-again { animation: none; }
-  #judge.pop #judge-tier, #judge.pop #judge-sub, #judge.pop::before,
-  #combo-badge.pulse #combo-badge-n, #combo-badge.milestone #combo-badge-n, #combo-badge.hot { animation: none; }
+  #judge.pop #judge-tier .jt-ch, #judge.pop #judge-sub, #judge.pop::before,
+  #judge[data-tier="PERFECT"] #judge-tier .jt-ch:nth-child(2n+1),
+  #combo-badge.pulse #combo-badge-n, #combo-badge.milestone #combo-badge-n,
+  #combo-badge-n, #combo-badge.milestone #combo-badge-n::after,
+  #combo-badge[data-heat-tier="hot"], #combo-badge[data-heat-tier="blaze"],
+  #combo.hot b { animation: none; }
   #song-pick-title, .song-card.selected { animation: none; }
 }
 
@@ -1445,3 +1673,6 @@ html, body {
   transform: translateY(-2px);
 }
 .replay-close:active { transform: translateY(1px) scale(.98); }
+
+
+

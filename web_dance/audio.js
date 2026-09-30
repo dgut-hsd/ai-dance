@@ -450,6 +450,23 @@ export class AudioEngine {
   get durationSec() { return this._durationSec; }
   setDurationSec(sec) { this._durationSec = sec; }
 
+  /**
+   * 把外部节点(如打击音效总线)也接到录音分支上,但**只**进录音、不影响扬声器。
+   * 用途:mapper 侧的音效在房间里听得到,录进高光片段也该听得到。
+   * @returns {() => void} 断开函数
+   */
+  attachToRecordingTaps(node) {
+    const taps = [...this._recordingTaps];
+    for (const tap of taps) {
+      try { node.connect(tap); } catch { /* 该 tap 已关闭 */ }
+    }
+    return () => {
+      for (const tap of taps) {
+        try { node.disconnect(tap); } catch { /* 已断开 */ }
+      }
+    };
+  }
+
   // 主时钟:ctx.currentTime - startAt + offsetSec,clamp 到 [0, durationSec]
   get songTime() {
     if (this._startAt == null) return this._pausedAt ?? 0;

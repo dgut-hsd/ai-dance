@@ -77,10 +77,11 @@ function drawCovered(ctx, source, x, y, w, h, mirror = false, hShift = 0, zoom =
   ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh); ctx.restore();
 }
 function cardBlob(result) {
-  const canvas = document.createElement('canvas'); canvas.width = REC_W; canvas.height = REC_H;
+  // 成绩卡按 1080×1920 绘制(服务端校验这个尺寸),再缩放进录制画布 = 超采样
+  const canvas = document.createElement('canvas'); canvas.width = CARD_W; canvas.height = CARD_H;
   const ctx = canvas.getContext('2d');
   const resultCopy = resultCopyFor(result.grade);
-  ctx.setTransform(REC_W / DESIGN_W, 0, 0, REC_H / DESIGN_H, 0, 0);
+  ctx.setTransform(CARD_W / DESIGN_W, 0, 0, CARD_H / DESIGN_H, 0, 0);
   const bg = ctx.createLinearGradient(0, 0, 0, DESIGN_H);
   bg.addColorStop(0, '#11100d'); bg.addColorStop(.55, '#070708'); bg.addColorStop(1, '#030407');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);

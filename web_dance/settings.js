@@ -1,4 +1,4 @@
-// 游戏设置:设备密钥、文案风格、摄像头切换,全部写入 localStorage,与游戏页/视频管理页(同源)共享。
+﻿// 游戏设置:设备密钥、文案风格、摄像头切换,全部写入 localStorage,与游戏页/视频管理页(同源)共享。
 const $ = (id) => document.getElementById(id);
 
 $("device-token").value = localStorage.getItem("dance-device-token") || "";
@@ -38,6 +38,26 @@ function stickVisible() { return localStorage.getItem(STICK_KEY) !== "0"; }
   });
   window.addEventListener("storage", (e) => {
     if (e.key === STICK_KEY) cb.checked = stickVisible();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 视频模式下的左侧摄像头预览开关。
+// 左侧 <video id=cam> 是识别管线的输入,永远要开着;这个键只控制"在视频模式下
+// 要不要把它显示在屏幕上"。它是第二路实时视频解码 + 一个 big 合成层,
+// 实测在视频模式下隐藏它:帧率 45.3 → 68.8,慢帧占比 34.2% → 13.1%。
+// 默认显示(保持既有现场观感)。
+// ---------------------------------------------------------------------------
+const VIDEO_PREVIEW_KEY = "dance-video-side-camera";
+{
+  const cb = $("video-side-preview");
+  cb.checked = localStorage.getItem(VIDEO_PREVIEW_KEY) !== "0";
+  cb.addEventListener("change", () => {
+    localStorage.setItem(VIDEO_PREVIEW_KEY, cb.checked ? "1" : "0");
+    cameraStatus(cb.checked ? "视频模式将显示摄像头预览" : "视频模式已隐藏摄像头预览（不影响识别与评分）");
+  });
+  window.addEventListener("storage", (e) => {
+    if (e.key === VIDEO_PREVIEW_KEY) cb.checked = localStorage.getItem(VIDEO_PREVIEW_KEY) !== "0";
   });
 }
 
@@ -360,7 +380,31 @@ $("model-brightness").addEventListener("input", () => {
 refreshModels();
 
 // ---------------------------------------------------------------------------
-// 右侧画面:3D 模型 / 视频(3:4 MP4)。模式写入 localStorage;每首舞曲绑定一个视频,存服务端 videos/index.json。
+// 打击音效:音量与开关写入 localStorage,游戏页 ensureSfx 读取后应用。
+// 默认 0.40,实测上限 0.46。标定工具:tools/sfx-calibrate.mjs(用真实歌曲文件 + 真实谱面间隔)。
+// ---------------------------------------------------------------------------
+const SFX_VOLUME_KEY = "dance-sfx-volume";
+const SFX_ENABLED_KEY = "dance-sfx-enabled";
+{
+  const sv = localStorage.getItem(SFX_VOLUME_KEY);
+  const vol = sv == null ? 0.45 : Math.max(0, Math.min(1, parseFloat(sv)));
+  $("sfx-volume").value = String(vol);
+  $("sfx-volume-val").textContent = vol.toFixed(2);
+  $("sfx-enabled").checked = localStorage.getItem(SFX_ENABLED_KEY) !== "0";
+}
+$("sfx-volume").addEventListener("input", () => {
+  const v = parseFloat($("sfx-volume").value);
+  $("sfx-volume-val").textContent = v.toFixed(2);
+  localStorage.setItem(SFX_VOLUME_KEY, String(v));
+});
+$("sfx-enabled").addEventListener("change", (e) => {
+  localStorage.setItem(SFX_ENABLED_KEY, e.target.checked ? "1" : "0");
+});
+
+// ---------------------------------------------------------------------------
+// 右侧画面:3D 模型 / 视频。模式写入 localStorage;每首舞曲绑定一个视频,存服务端 videos/index.json。
+// 视频的比例元数据(宽高/档位)也在同一个文件的 files 段里,由服务端探测写入 —— 游戏页据此
+// 摆右侧容器宽度,不再固定 55vw 把 9:16 的视频裁掉两侧。
 // ---------------------------------------------------------------------------
 const SIDE_KEY = "dance-side-mode";
 let sideVideos = [];   // { name, url }
@@ -383,6 +427,21 @@ $("side-mode").addEventListener("change", () => {
   applySideModeUI();
 });
 
+/**
+ * 下拉选项文案:带上比例与分辨率。
+ * 右侧画面是靠视频自己的比例摆的(见 style.css 的 #ref-video),选之前就该看得出横竖 ——
+ * 只显示文件名的年代,选完才会发现是横屏、画面被压成中间一条。
+ * 与 studio.js 里的同名函数保持一致(两页都是普通脚本,没有共享模块可挂)。
+ */
+function videoOptionLabel(v) {
+  const w = Number(v?.width), h = Number(v?.height);
+  const cls = v?.ratioClass;
+  const name = cls === "portrait-9x16" ? "9:16 竖屏" : cls === "portrait-3x4" ? "3:4 竖屏" : cls === "landscape" ? "横屏" : null;
+  if (!name) return v.name + " · 比例未知";
+  const size = Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0 ? ` · ${Math.round(w)}×${Math.round(h)}` : "";
+  return `${v.name} · ${name}${size}`;
+}
+
 function sideRow(dance) {
   const label = el("label", "side-video-row", dance.label);
   const sel = document.createElement("select");
@@ -391,7 +450,7 @@ function sideRow(dance) {
   none.value = "";
   sel.appendChild(none);
   for (const v of sideVideos) {
-    const o = el("option", "", v.name);
+    const o = el("option", "", videoOptionLabel(v));
     o.value = v.name;
     sel.appendChild(o);
   }
@@ -449,3 +508,5 @@ $("side-map-save").addEventListener("click", async () => {
 
 applySideModeUI();
 refreshSideMap();
+
+

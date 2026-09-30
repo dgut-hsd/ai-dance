@@ -82,3 +82,28 @@ test("T-IDX-6 编辑器改过的谱面(任意曲目)同样不覆盖", () => {
   assert.equal(chartLooksEdited({ ...generated, notes: [{ id: "m-1", t: 1, refFrameIdx: 30 }] }), true);
   assert.equal(chartLooksEdited(null), false);
 });
+
+// ---------------------------------------------------------------------------
+// 悬空歌曲引用:defaultSongId 必须能在 songs[] 里查到
+// ---------------------------------------------------------------------------
+/**
+ * 现场症状:选曲页点某些卡片没有试听音乐、游戏里那支舞也没背景音乐,但 wav 明明在
+ * `songs/<danceId>/` 里。根因是 songs/index.json 里 `dances[].defaultSongId` 指向的条目
+ * 不在 `songs[]` 里 —— 运行时那条链(defaultSongId → songById() → song.file)直接返回 null,
+ * 全链路静默。歌单被重新导出/外部同步刷过之后就容易留下这种半截状态。
+ *
+ * 这里直接拿仓库里真实的 songs/index.json 当断言对象:只要出现悬空引用就红。
+ * 修复入口:server/app.js 的 publish / syncDraftToIndex 会自动补回;
+ * 批量修历史遗留用 `node tmp/fix-dangling-songs.mjs`。
+ */
+test("T-IDX-7 歌单里不能有悬空的 defaultSongId(否则选曲试听静默没声音)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const url = new URL("../songs/index.json", import.meta.url);
+  const index = JSON.parse(await readFile(url, "utf8"));
+  const songIds = new Set((index.songs || []).map((s) => s.id));
+  const dangling = (index.dances || [])
+    .filter((d) => d.defaultSongId && !songIds.has(d.defaultSongId))
+    .map((d) => `${d.danceId}(→${d.defaultSongId})`);
+  assert.deepEqual(dangling, [],
+    `这些舞曲的 defaultSongId 在 songs[] 里查不到,选曲试听与游戏音乐都会静默失效:${dangling.join(", ")}`);
+});

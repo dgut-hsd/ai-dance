@@ -33,11 +33,101 @@
     },
     {
       "id": "dance1-video",
-      "label": "舞蹈1（视频动捕）",
+      "label": "简易舞蹈1",
       "danceId": "dance1-video",
       "defaultSongId": "dance1-video",
       "chartFile": "dance1-video.chart.json",
       "musicFile": "舞蹈1.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance7-video",
+      "label": "舞蹈7",
+      "danceId": "dance7-video",
+      "defaultSongId": "dance7-video",
+      "chartFile": "dance7-video.chart.json",
+      "musicFile": "舞蹈7.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance5-video",
+      "label": "舞蹈5",
+      "danceId": "dance5-video",
+      "defaultSongId": "dance5-video",
+      "chartFile": "dance5-video.chart.json",
+      "musicFile": "舞蹈5.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance3-video",
+      "label": "舞蹈3",
+      "danceId": "dance3-video",
+      "defaultSongId": "dance3-video",
+      "chartFile": "dance3-video.chart.json",
+      "musicFile": "舞蹈3.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance6-video",
+      "label": "舞蹈6",
+      "danceId": "dance6-video",
+      "defaultSongId": "dance6-video",
+      "chartFile": "dance6-video.chart.json",
+      "musicFile": "舞蹈6.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance4-video",
+      "label": "舞蹈4",
+      "danceId": "dance4-video",
+      "defaultSongId": "dance4-video",
+      "chartFile": "dance4-video.chart.json",
+      "musicFile": "舞蹈4.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance2-video",
+      "label": "舞蹈2",
+      "danceId": "dance2-video",
+      "defaultSongId": "dance2-video",
+      "chartFile": "dance2-video.chart.json",
+      "musicFile": "舞蹈2.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "shanshenbu-video",
+      "label": "闪身步",
+      "danceId": "shanshenbu-video",
+      "defaultSongId": "shanshenbu-video",
+      "chartFile": "shanshenbu-video.chart.json",
+      "musicFile": "闪身步.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance8-video",
+      "label": "舞蹈8",
+      "danceId": "dance8-video",
+      "defaultSongId": "dance8-video",
+      "chartFile": "dance8-video.chart.json",
+      "musicFile": "舞蹈8.wav",
+      "fbxFile": null,
+      "mode": "video"
+    },
+    {
+      "id": "dance9-video",
+      "label": "舞蹈9",
+      "danceId": "dance9-video",
+      "defaultSongId": "dance9-video",
+      "chartFile": "dance9-video.chart.json",
+      "musicFile": "舞蹈9.wav",
       "fbxFile": null,
       "mode": "video"
     }
@@ -57,7 +147,7 @@
     },
     {
       "id": "dance1-video",
-      "label": "舞蹈1（视频动捕）",
+      "label": "简易舞蹈1",
       "file": "舞蹈1.wav",
       "bpm": 120
     },
@@ -78,6 +168,60 @@
       "label": "Samba Demo",
       "file": "samba-demo.wav",
       "bpm": 100
+    },
+    {
+      "id": "dance8-video",
+      "label": "舞蹈8",
+      "file": "舞蹈8.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance9-video",
+      "label": "舞蹈9",
+      "file": "舞蹈9.wav",
+      "bpm": 120
+    },
+    {
+      "id": "shanshenbu-video",
+      "label": "闪身步",
+      "file": "闪身步.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance2-video",
+      "label": "舞蹈2",
+      "file": "舞蹈2.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance4-video",
+      "label": "舞蹈4",
+      "file": "舞蹈4.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance6-video",
+      "label": "舞蹈6",
+      "file": "舞蹈6.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance3-video",
+      "label": "舞蹈3",
+      "file": "舞蹈3.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance5-video",
+      "label": "舞蹈5",
+      "file": "舞蹈5.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance7-video",
+      "label": "舞蹈7",
+      "file": "舞蹈7.wav",
+      "bpm": 120
     }
   ]
 }

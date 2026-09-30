@@ -204,7 +204,26 @@ export async function startPoseStream({
         audio: false,
       });
       video.srcObject = stream;
-      try { await video.play(); } catch (e) { stream.getTracks().forEach((t) => t.stop()); throw e; }
+      // 摄像头预览只负责"看得见自己",失败不该把整条启动链打断 ——
+      // AbortError("play() request was interrupted by a new load request")在
+      // 上一次 srcObject 的 play() 还没落定时再赋一次就会抛,重试一次即可;
+      // 仍失败就当作没有预览画面继续(识别用的是 MediaPipe 的帧,不依赖这个元素在播)。
+      //
+      // 关键:play() 还可能**既不 resolve 也不 reject**(源的尺寸/帧率一直不满足播放条件),
+      // 光 await 会把整条启动链吊死 —— 而 state.running 要等这条链返回才置位,
+      // 于是「倒计时永远不来、本局开不了、视频停在原地」。所以每次都加超时兜底。
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          await Promise.race([
+            video.play(),
+            new Promise((r) => setTimeout(r, 2500)),
+          ]);
+          break;
+        } catch (e) {
+          if (attempt === 1) { onStatus("camera-preview-failed"); console.warn("摄像头预览未起播:", e?.name || e); }
+          else await new Promise((r) => setTimeout(r, 120));
+        }
+      }
       if (cameraParams) await applyCameraConstraints(stream.getVideoTracks()[0], cameraParams);
       onStatus("camera-on");
     },

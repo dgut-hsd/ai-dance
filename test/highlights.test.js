@@ -6,8 +6,20 @@ import path from 'node:path';
 import { once } from 'node:events';
 import { buildHighlightStory, selectHighlight, validateMetadata } from '../server/highlight.js';
 import { createApp } from '../server/app.js';
-import { runFFmpeg, thumbTimestamp } from '../server/media.js';
+import { runFFmpeg, thumbTimestamp, ffmpegPath, makeVideo } from '../server/media.js';
 import { AudioEngine } from '../web_dance/audio.js';
+
+/** 用 ffmpeg 读一个视频的编码尺寸:[宽, 高] */
+async function probeSize(file) {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const run = promisify(execFile);
+  // ffmpeg 没有 ffprobe 子命令,但 -i 的输出里有 "1080x1920";用 -f null 解码到 stderr 即可
+  const { stderr } = await run(ffmpegPath, ['-hide_banner', '-i', file, '-f', 'null', '-'], { maxBuffer: 8 << 20 })
+    .catch((e) => ({ stderr: e.stderr || '' }));
+  const m = /Video:.*?\s(\d{2,5})x(\d{2,5})[\s,]/.exec(stderr);
+  return m ? [Number(m[1]), Number(m[2])] : null;
+}
 
 test('highlight: prefers visible continuous quality over missing-person high scores', () => {
   const samples = Array.from({ length: 70 }, (_, t) => ({ t, conf: t < 30 ? 0 : 1,
@@ -65,6 +77,33 @@ test('music recording branches receive new sources and disconnect without muting
   await engine.play(0); assert.equal(sources[0].connections.length, 2);
   engine.stop(); await engine.play(0); assert.equal(sources[1].connections.length, 2);
   tap.disconnect(); assert.deepEqual(sources[1].connections, [destination]); assert.ok(track.stopped);
+});
+
+test('录制端 720×1280 的录像会被转码成 1080×1920 成片', { timeout: 120000 }, async () => {
+  // 录制画布已从 1080×1920 降到 720×1280(= 设计空间;摄像头 720p、参考视频 832×1108,
+  // 再大没有信息量,只是文件更大)。成片尺寸不能跟着变小 —— 由这里的 ffmpeg 放大。
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'dance-720p-'));
+  try {
+    const source = path.join(temp, 'rec.webm');
+    const card = path.join(temp, 'card.png');
+    const intro = path.join(temp, 'intro.mp4');
+    const out = path.join(temp, 'short.mp4');
+    // 720×1280 的真实录像(带音轨,和浏览器录出来的形状一致)
+    await runFFmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=720x1280:rate=30',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
+      '-t', '4', '-c:v', 'libvpx', '-deadline', 'realtime', '-c:a', 'libopus', source]);
+    await runFFmpeg(['-f', 'lavfi', '-i', 'color=c=navy:s=1080x1920', '-frames:v', '1', card]);
+    await runFFmpeg(['-f', 'lavfi', '-i', 'color=c=black:s=1080x1920:rate=60',
+      '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo', '-t', '1',
+      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', intro]);
+    await makeVideo(source, out, path.join(temp, 'poster.jpg'), card,
+      { segments: [{ start: .5, end: 2.5 }] }, intro, path.join(temp, 'thumb.jpg'));
+    assert.deepEqual(await probeSize(out), [1080, 1920], '成片必须放大回 1080×1920');
+    // 能完整解码(音视频都对)才算过
+    await runFFmpeg(['-i', out, '-f', 'null', '-']);
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
 });
 
 test('API and real video: upload, transcode, QR, ranges, restart, expiry and isolation', { timeout: 120000 }, async () => {
@@ -127,6 +166,9 @@ test('API and real video: upload, transcode, QR, ranges, restart, expiry and iso
     assert.equal((await request(`/api/highlights/${other.id}`)).status, 200);
     const output = await readFile(path.join(temp, '.jobs', job.id, 'short.mp4'));
     assert.ok(output.indexOf(Buffer.from('moov')) < output.indexOf(Buffer.from('mdat')), 'faststart metadata precedes video');
+    // 成片必须始终是 1080×1920 —— 录制端已降到 720×1280(与设计空间一致),
+    // 靠这里的 ffmpeg scale=1080:1920 放大;下面的 720p 专项用例盯住这一点。
+    assert.deepEqual(await probeSize(path.join(temp, '.jobs', job.id, 'short.mp4')), [1080, 1920], 'short.mp4 必须是 1080×1920');
     // 缩略图由转码本身产出(不是靠按需补图),取片台靠它认人。
     const thumbFile = await readFile(path.join(temp, '.jobs', job.id, 'thumb.jpg'));
     assert.ok(thumbFile.byteLength > 1000, 'transcode emits a thumbnail');

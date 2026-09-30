@@ -1,10 +1,91 @@
 {
   "schema": "videos/index/v1",
   "mapping": {
-    "copydance1": "舞蹈1.mp4",
+    "copydance1": "",
     "hiphop": "",
     "salsa": "",
     "demo-arena-loop": "",
-    "dance1-video": "舞蹈1.mp4"
+    "dance1-video": "舞蹈1.mp4",
+    "dance7-video": "舞蹈7.mp4",
+    "dance5-video": "舞蹈5.mp4",
+    "dance3-video": "舞蹈3.mp4",
+    "dance6-video": "舞蹈6.mp4",
+    "dance4-video": "舞蹈4.mp4",
+    "dance2-video": "舞蹈2.mp4",
+    "shanshenbu-video": "闪身步.mp4",
+    "dance8-video": "舞蹈8.mp4",
+    "dance9-video": "舞蹈9.mp4"
+  },
+  "files": {
+    "闪身步.mp4": {
+      "width": 768,
+      "height": 576,
+      "ratio": 1.3333,
+      "ratioClass": "landscape",
+      "duration": 58
+    },
+    "舞蹈1.mp4": {
+      "width": 832,
+      "height": 1108,
+      "ratio": 0.7509,
+      "ratioClass": "portrait-3x4",
+      "duration": 30
+    },
+    "舞蹈2.mp4": {
+      "width": 720,
+      "height": 1280,
+      "ratio": 0.5625,
+      "ratioClass": "portrait-9x16",
+      "duration": 41
+    },
+    "舞蹈3.mp4": {
+      "width": 720,
+      "height": 1280,
+      "ratio": 0.5625,
+      "ratioClass": "portrait-9x16",
+      "duration": 25
+    },
+    "舞蹈4.mp4": {
+      "width": 720,
+      "height": 1280,
+      "ratio": 0.5625,
+      "ratioClass": "portrait-9x16",
+      "duration": 27
+    },
+    "舞蹈5.mp4": {
+      "width": 720,
+      "height": 1280,
+      "ratio": 0.5625,
+      "ratioClass": "portrait-9x16",
+      "duration": 24
+    },
+    "舞蹈6.mp4": {
+      "width": 720,
+      "height": 1280,
+      "ratio": 0.5625,
+      "ratioClass": "portrait-9x16",
+      "duration": 25
+    },
+    "舞蹈7.mp4": {
+      "width": 720,
+      "height": 1280,
+      "ratio": 0.5625,
+      "ratioClass": "portrait-9x16",
+      "duration": 15
+    },
+    "舞蹈8.mp4": {
+      "width": 1080,
+      "height": 1440,
+      "ratio": 0.75,
+      "ratioClass": "portrait-3x4",
+      "duration": 29
+    },
+    "舞蹈9.mp4": {
+      "width": 1080,
+      "height": 1440,
+      "ratio": 0.75,
+      "ratioClass": "portrait-3x4",
+      "duration": 35
+    }
   }
 }

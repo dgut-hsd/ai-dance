@@ -1,0 +1,256 @@
+{
+  "generatedAt": "2026-09-30T18:28:35.746Z",
+  "rate": 48000,
+  "channels": 1,
+  "tiers": {
+    "PERFECT": {
+      "files": [
+        {
+          "file": "hit-perfect-1.wav",
+          "source": "impact__impactPlate_heavy_001",
+          "leadTrimMs": 0,
+          "lengthMs": 349,
+          "sourcePeak": 0.904,
+          "sourceRms": 0.19777,
+          "variantGain": 5.0563
+        },
+        {
+          "file": "hit-perfect-2.wav",
+          "source": "impact__impactPlate_heavy_003",
+          "leadTrimMs": 0,
+          "lengthMs": 344,
+          "sourcePeak": 0.8716,
+          "sourceRms": 0.19243,
+          "variantGain": 5.1968
+        },
+        {
+          "file": "hit-perfect-3.wav",
+          "source": "impact__impactPlate_heavy_000",
+          "leadTrimMs": 0,
+          "lengthMs": 420,
+          "sourcePeak": 0.8092,
+          "sourceRms": 0.12351,
+          "variantGain": 8.0966
+        },
+        {
+          "file": "hit-perfect-4.wav",
+          "source": "impact__impactPlate_heavy_004",
+          "leadTrimMs": 0,
+          "lengthMs": 420,
+          "sourcePeak": 0.8891,
+          "sourceRms": 0.15186,
+          "variantGain": 6.585
+        },
+        {
+          "file": "hit-perfect-5.wav",
+          "source": "impact__impactPlate_heavy_002",
+          "leadTrimMs": 0,
+          "lengthMs": 420,
+          "sourcePeak": 0.8426,
+          "sourceRms": 0.1405,
+          "variantGain": 7.1176
+        }
+      ],
+      "gain": 6.203,
+      "avgSourceRms": 0.16121,
+      "target": 1
+    },
+    "GREAT": {
+      "files": [
+        {
+          "file": "hit-great-1.wav",
+          "source": "impact__impactWood_light_004",
+          "leadTrimMs": 0,
+          "lengthMs": 180,
+          "sourcePeak": 0.5091,
+          "sourceRms": 0.05271,
+          "variantGain": 11.3841
+        },
+        {
+          "file": "hit-great-2.wav",
+          "source": "impact__impactWood_light_001",
+          "leadTrimMs": 0,
+          "lengthMs": 180,
+          "sourcePeak": 0.4985,
+          "sourceRms": 0.05563,
+          "variantGain": 10.7859
+        },
+        {
+          "file": "hit-great-3.wav",
+          "source": "impact__impactWood_light_003",
+          "leadTrimMs": 0,
+          "lengthMs": 180,
+          "sourcePeak": 0.4481,
+          "sourceRms": 0.05783,
+          "variantGain": 10.3757
+        },
+        {
+          "file": "hit-great-4.wav",
+          "source": "impact__impactWood_light_002",
+          "leadTrimMs": 0,
+          "lengthMs": 180,
+          "sourcePeak": 0.8205,
+          "sourceRms": 0.08543,
+          "variantGain": 7.0237
+        },
+        {
+          "file": "hit-great-5.wav",
+          "source": "impact__impactWood_light_000",
+          "leadTrimMs": 0,
+          "lengthMs": 180,
+          "sourcePeak": 0.765,
+          "sourceRms": 0.08212,
+          "variantGain": 7.3067
+        }
+      ],
+      "gain": 8.99,
+      "avgSourceRms": 0.06674,
+      "target": 0.6
+    },
+    "GOOD": {
+      "files": [
+        {
+          "file": "hit-good-1.wav",
+          "source": "impact__impactGeneric_light_001",
+          "leadTrimMs": 0,
+          "lengthMs": 115,
+          "sourcePeak": 0.572,
+          "sourceRms": 0.06535,
+          "variantGain": 5.9683
+        },
+        {
+          "file": "hit-good-2.wav",
+          "source": "impact__impactGeneric_light_004",
+          "leadTrimMs": 0,
+          "lengthMs": 137,
+          "sourcePeak": 0.5782,
+          "sourceRms": 0.06391,
+          "variantGain": 6.1022
+        },
+        {
+          "file": "hit-good-3.wav",
+          "source": "impact__impactGeneric_light_003",
+          "leadTrimMs": 0,
+          "lengthMs": 135,
+          "sourcePeak": 0.5476,
+          "sourceRms": 0.06144,
+          "variantGain": 6.3474
+        },
+        {
+          "file": "hit-good-4.wav",
+          "source": "impact__impactGeneric_light_002",
+          "leadTrimMs": 0,
+          "lengthMs": 160,
+          "sourcePeak": 0.5118,
+          "sourceRms": 0.06517,
+          "variantGain": 5.984
+        },
+        {
+          "file": "hit-good-5.wav",
+          "source": "impact__impactGeneric_light_000",
+          "leadTrimMs": 0,
+          "lengthMs": 160,
+          "sourcePeak": 0.568,
+          "sourceRms": 0.06957,
+          "variantGain": 5.6058
+        }
+      ],
+      "gain": 5.9918,
+      "avgSourceRms": 0.06509,
+      "target": 0.39
+    },
+    "MISS": {
+      "files": [
+        {
+          "file": "hit-miss-1.wav",
+          "source": "impact__impactSoft_medium_000",
+          "leadTrimMs": 0,
+          "lengthMs": 115,
+          "sourcePeak": 0.8953,
+          "sourceRms": 0.18794,
+          "variantGain": 2.3412
+        },
+        {
+          "file": "hit-miss-2.wav",
+          "source": "impact__impactSoft_medium_001",
+          "leadTrimMs": 0,
+          "lengthMs": 180,
+          "sourcePeak": 0.8988,
+          "sourceRms": 0.19405,
+          "variantGain": 2.2674
+        },
+        {
+          "file": "hit-miss-3.wav",
+          "source": "impact__impactSoft_medium_003",
+          "leadTrimMs": 0,
+          "lengthMs": 137,
+          "sourcePeak": 0.8969,
+          "sourceRms": 0.18917,
+          "variantGain": 2.326
+        },
+        {
+          "file": "hit-miss-4.wav",
+          "source": "impact__impactSoft_medium_004",
+          "leadTrimMs": 0,
+          "lengthMs": 144,
+          "sourcePeak": 0.895,
+          "sourceRms": 0.18481,
+          "variantGain": 2.3808
+        },
+        {
+          "file": "hit-miss-5.wav",
+          "source": "impact__impactSoft_medium_002",
+          "leadTrimMs": 0,
+          "lengthMs": 132,
+          "sourcePeak": 0.8919,
+          "sourceRms": 0.19198,
+          "variantGain": 2.2919
+        }
+      ],
+      "gain": 2.3208,
+      "avgSourceRms": 0.18959,
+      "target": 0.44
+    }
+  },
+  "accents": {
+    "gain": 7.3571,
+    "avgSourceRms": 0.13592,
+    "files": [
+      {
+        "file": "accent-1.wav",
+        "source": "interface__select_002",
+        "lengthMs": 40,
+        "sourceRms": 0.1342,
+        "variantGain": 7.4518
+      },
+      {
+        "file": "accent-2.wav",
+        "source": "interface__pluck_002",
+        "lengthMs": 162,
+        "sourceRms": 0.07141,
+        "variantGain": 14.0028
+      },
+      {
+        "file": "accent-3.wav",
+        "source": "interface__glass_002",
+        "lengthMs": 122,
+        "sourceRms": 0.09233,
+        "variantGain": 10.831
+      },
+      {
+        "file": "accent-4.wav",
+        "source": "interface__glass_004",
+        "lengthMs": 420,
+        "sourceRms": 0.24902,
+        "variantGain": 4.0158
+      },
+      {
+        "file": "accent-low.wav",
+        "source": "interface__bong_001",
+        "lengthMs": 120,
+        "sourceRms": 0.13266,
+        "variantGain": 7.5379
+      }
+    ]
+  }
+}

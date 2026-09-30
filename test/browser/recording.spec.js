@@ -7,7 +7,8 @@
  *
  * 这里不依赖任何音频素材,只关心"编码器到底有没有收到画面":
  *   1) 录制 3 秒后 blob 必须达到合理体积(空录像只有几百字节的容器头);
- *   2) blob 必须真的能解码播放,且分辨率是 1080×1920。
+ *   2) blob 必须真的能解码播放,分辨率是录制画布尺寸(720×1280),
+ *      而成绩卡仍是服务端校验的 1080×1920。
  */
 import { test, expect } from '@playwright/test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -89,15 +90,27 @@ test('录制画布真的产出可播放画面(不依赖音频素材)', async ({ 
     const bytesDuring = active.bytes;
     const firstChunkDelayMs = active.firstChunkAt ? Math.round(active.firstChunkAt - t0) : null;
 
-    // 收尾:停录制拿 blob(不走 finish,避免触发上传)
-    const chunks = await new Promise((resolve) => {
-      active.recorder.onstop = () => resolve(active.chunks);
-      active.recorder.stop();
-    });
-    controller.release(active);
-    const blob = new Blob(chunks, { type: active.recorder.mimeType });
+    // 用真实的 finish() 收尾:它负责停录制、拼 blob、生成成绩卡。
+    // 上传换成空实现,只验证产物;成绩卡尺寸在 toBlob 那一刻拦下来。
+    let cardSize = null;
+    const origToBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (cb, ...rest) {
+      if (this.width > 720) cardSize = { w: this.width, h: this.height };
+      return origToBlob.call(this, cb, ...rest);
+    };
+    let finishError = null;
+    try {
+      controller.upload = async () => {};   // 不真的上传
+      await controller.finish({ grade: 'A', score: 1234, maxCombo: 12, tallies: { perfect: 3 } });
+    } catch (e) {
+      finishError = String((e && e.message) || e);
+    } finally {
+      HTMLCanvasElement.prototype.toBlob = origToBlob;
+    }
+    const blob = controller.replayBlob;
+    if (!blob) return { error: 'finish 未生成录像 blob', finishError, cardSize, bytesDuring, firstChunkDelayMs };
 
-    // 验证能解码播放
+    // 验证录像能解码播放,并核对分辨率
     const url = URL.createObjectURL(blob);
     const probe = document.createElement('video');
     probe.muted = true; probe.src = url;
@@ -114,17 +127,22 @@ test('录制画布真的产出可播放画面(不依赖音频素材)', async ({ 
       stillDetached: active.detached,
       mime: active.recorder.mimeType,
       playback,
+      cardSize, finishError,
     };
   });
 
   console.log('[录制产出]', JSON.stringify(result, null, 2));
   expect(result.error, result.error || '').toBeUndefined();
-  // 3 秒 1080×1920 的画面不可能只有几百字节(空录像 = 容器头 + 无帧)
+  // 3 秒真实画面不可能只有几百字节(空录像 = 容器头 + 无帧)
   expect(result.bytes, 'blob 必须有真实画面数据').toBeGreaterThan(20000);
   // 只做"病态"下限:实测首发分片在 ~1.8–2.2 秒之间波动,不能当成健康判据
   expect(result.firstChunkDelayMs, '第一片数据必须真的到达').toBeLessThan(4000);
   expect(result.playback.ok, `录像必须能解码播放(错误码 ${result.playback.code}）`).toBe(true);
-  expect([result.playback.w, result.playback.h]).toEqual([1080, 1920]);
+  // 录制画布 720×1280(与设计空间一致),最终成片由服务端 ffmpeg 放大到 1080×1920
+  expect([result.playback.w, result.playback.h]).toEqual([720, 1280]);
+  // 成绩卡仍是 1080×1920:server/media.js 的 validPng 会校验这个尺寸
+  expect(result.finishError, result.finishError || '').toBeFalsy();
+  expect(result.cardSize).toEqual({ w: 1080, h: 1920 });
 });
 
 test('看门狗只在"推帧确实失败"时才把画布挂回文档', async ({ page }) => {

@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -55,6 +55,28 @@
 
   <section class="side-panel">
     <div class="camera-head">
+      <h2>打击音效</h2>
+    </div>
+    <div class="camera-controls model-brightness-row">
+      <label for="sfx-volume">音效音量</label>
+      <input id="sfx-volume" type="range" min="0" max="1" step="0.05" value="0.45">
+      <span id="sfx-volume-val" class="param-val">0.45</span>
+    </div>
+    <div class="camera-controls">
+      <label for="sfx-enabled">开关</label>
+      <input id="sfx-enabled" type="checkbox" checked>
+      <span class="param-val">取消勾选即静音（游戏内按 S 也能临时切）</span>
+    </div>
+    <p class="camera-hint">
+      判定音效为实时合成，不占用任何音频素材，与背景音乐并行叠加、互不打断。<br>
+      默认 0.45：实测这一档下打击音比音乐低约 9dB（在 -4~-10dB 的可听区间内），
+      合成峰值约 0.94~1.11（偶发几个采样超过满量程，属音游常态、听不出失真）。
+      现场觉得吵就往下调；觉得判定听不清就往上调 —— 往上到 0.6 时打击音约比音乐低 5dB，但削波采样会明显增多。
+    </p>
+  </section>
+
+  <section class="side-panel">
+    <div class="camera-head">
       <h2>右侧画面</h2>
       <span id="side-status" class="camera-status"></span>
     </div>
@@ -88,6 +110,10 @@
       <input id="camera-stick" type="checkbox" checked>
       <span>显示火柴人骨架（游戏页摄像头画面上的白色骨架）</span>
     </label>
+    <label class="camera-controls stick-toggle">
+      <input id="video-side-preview" type="checkbox" checked>
+      <span>视频模式下仍显示左侧摄像头预览</span>
+    </label>
     <div id="camera-preview-wrap" class="camera-preview-wrap hidden">
       <video id="camera-preview" autoplay playsinline muted></video>
     </div>
@@ -99,9 +125,11 @@
       <div id="camera-params-controls" class="camera-params-controls"></div>
       <p id="camera-params-status" class="camera-hint"></p>
     </div>
-    <p class="camera-hint">选择后，游戏页点击「开始」将使用该摄像头；选「默认」则用前置摄像头。点「预览」后可调节 USB 相机参数。火柴人骨架只影响画面显示，关掉不影响跟跳识别与评分；对正在进行的那一局，从下一局开始生效。</p>
+    <p class="camera-hint">选择后，游戏页点击「开始」将使用该摄像头；选「默认」则用前置摄像头。点「预览」后可调节 USB 相机参数。火柴人骨架只影响画面显示，关掉不影响跟跳识别与评分；对正在进行的那一局，从下一局开始生效。视频模式下左侧摄像头预览是第二路实时视频，关掉可显著省显卡（实测帧率约 +50%），识别与评分不受影响。</p>
   </section>
 
   <script type="module" src="/web_dance/settings.js"></script>
 </body>
 </html>
+
+

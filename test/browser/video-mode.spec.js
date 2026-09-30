@@ -180,6 +180,94 @@ test('开局后视频确实在播;被按停时看门狗自动救回并给出原�
   expect(parsed.log.some((l) => l.text.startsWith('pause'))).toBe(true);
 });
 
+test('收起选曲抽屉后,参考视频继续循环播(回到吸引态)', async ({ page }) => {
+  await useVideoMode(page);
+  await stubCamera(page);
+  await openSelect(page);
+
+  // ① 首屏(吸引态)本来就在循环播
+  await expect.poll(() => page.evaluate(() => {
+    const el = document.getElementById('ref-video');
+    return { src: el.currentSrc || el.src, paused: el.paused, t: el.currentTime };
+  }), { timeout: 30000, message: '进选曲页后参考视频应在吸引态播放' })
+    .toMatchObject({ paused: false });
+
+  // ② 打开抽屉 → 预览(从头播)
+  await page.locator('#song-pick-open').click();
+  await expect(page.locator('#song-pick-drawer')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.getElementById('ref-video').paused), {
+    timeout: 20000, message: '打开抽屉应触发参考视频试看',
+  }).toBe(false);
+  const srcWhileOpen = await page.evaluate(() => document.getElementById('ref-video').currentSrc);
+
+  // ③ 关掉抽屉 → 必须继续循环播,而不是停住
+  //    这是现场问题:关抽屉走的是"停预览"这条路(只 pause + 清掉回退定时器),
+  //    而看门狗只管本局、不管选曲态,于是画面停在原地再也不动。
+  await page.locator('#song-pick-close').click();
+  await expect(page.locator('#song-pick')).not.toHaveClass(/picker-open/);
+
+  const resumedFrom = await page.evaluate(() => document.getElementById('ref-video').currentTime);
+  await expect.poll(() => page.evaluate(() => {
+    const el = document.getElementById('ref-video');
+    return { paused: el.paused, readyState: el.readyState };
+  }), { timeout: 10000, message: '收起抽屉后参考视频应仍在播放' })
+    .toMatchObject({ paused: false });
+
+  // 「继续播」而不是「重新播」:关抽屉不该把画面拽回 0(那和点卡片预览是两回事)
+  const after = await page.evaluate(() => {
+    const el = document.getElementById('ref-video');
+    return { src: el.currentSrc, t: el.currentTime, loop: el.loop };
+  });
+  expect(after.src).toBe(srcWhileOpen);
+  expect(after.loop, '吸引态的参考视频必须循环').toBe(true);
+  expect(after.t, '关抽屉应续播,不能跳回片头').toBeGreaterThan(resumedFrom - 0.5);
+
+  // ④ 再等过 5 秒回退定时器那一刻,仍然稳在播(回退定时器跳的就是同一条吸引态路径)
+  await page.waitForTimeout(5200);
+  expect(await page.evaluate(() => document.getElementById('ref-video').paused)).toBe(false);
+});
+
+test('抽屉里换过卡片再收起:右侧切到刚选的那支舞并继续播', async ({ page }) => {
+  await useVideoMode(page);
+  await stubCamera(page);
+  await openSelect(page);
+
+  const videoName = () => page.evaluate(() => {
+    const el = document.getElementById('ref-video');
+    const src = el.currentSrc || el.src || '';
+    return src ? decodeURIComponent(src).split('/').pop() : '';
+  });
+  await expect.poll(videoName, { timeout: 30000, message: '首屏应已载入某支舞的参考视频' }).not.toBe('');
+  const first = await videoName();
+
+  await page.locator('#song-pick-open').click();
+  await expect(page.locator('#song-pick-drawer')).toBeVisible();
+  // 点下一支舞的卡片(不用箭头:箭头在抽屉动画期间会点不动)
+  const cardCount = await page.evaluate(() => {
+    const cards = [...document.querySelectorAll('#song-pick-strip .song-card')];
+    cards[1]?.click();
+    return cards.length;
+  });
+  test.skip(cardCount < 2, '歌单里只有一支绑了视频的舞曲,测不了换卡');
+  const selectedLabel = await page.evaluate(() => document.getElementById('song-pick-current')?.textContent?.trim() || '');
+  await expect.poll(videoName, { timeout: 20000, message: '点卡片应把右侧切到那张卡的视频' }).not.toBe(first);
+
+  await page.locator('#song-pick-close').click();
+  await expect(page.locator('#song-pick')).not.toHaveClass(/picker-open/);
+
+  // 收起抽屉后:右侧是「刚选中那张卡」的视频(不是跳回第一支),而且要继续播
+  await expect.poll(() => page.evaluate(() => document.getElementById('ref-video').paused), {
+    timeout: 10000, message: '换卡后收起抽屉,视频仍应继续播',
+  }).toBe(false);
+  const after = await page.evaluate(() => {
+    const el = document.getElementById('ref-video');
+    return { name: decodeURIComponent(el.currentSrc || '').split('/').pop(), paused: el.paused, t: el.currentTime };
+  });
+  console.log('[收起抽屉后]', JSON.stringify({ first, selectedLabel, after }));
+  expect(after.name).not.toBe(first);
+  expect(after.paused).toBe(false);
+});
+
 test('未绑定视频的舞曲给出可读提示,而不是静默黑屏', async ({ page }) => {
   // 只留一支没绑视频的舞:选曲列表会为空,应该给出明确提示
   await page.route('**/api/videos-map', (route) => route.fulfill({
@@ -193,6 +281,44 @@ test('未绑定视频的舞曲给出可读提示,而不是静默黑屏', async (
   await expect(page.locator('#status')).toContainText('后台');
   // 空列表时开始按钮必须禁用,避免工作人员点了没反应又找不到原因
   await expect(page.locator('#song-pick-start')).toBeDisabled();
+});
+
+test('视频模式摄像头预览开关:隐藏的是显示层,识别输入照常', async ({ page }) => {
+  await useVideoMode(page);
+  await stubCamera(page);
+
+  // 默认显示
+  await page.goto(base + '/web_dance/dance.html');
+  await expect(page.locator('#song-pick')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('#cam-panel')).toBeVisible();
+  expect(await page.evaluate(() => document.body.classList.contains('hide-cam-panel'))).toBe(false);
+
+  // 后台设置页关掉
+  await page.goto(base + '/settings');
+  await expect(page.locator('#video-side-preview')).toBeChecked();
+  await page.locator('#video-side-preview').uncheck();
+  expect(await page.evaluate(() => localStorage.getItem('dance-video-side-camera'))).toBe('0');
+
+  // 回到游戏页:面板不显示,但摄像头仍在解码(识别管线不能受影响)
+  await page.goto(base + '/web_dance/dance.html');
+  await expect(page.locator('#song-pick')).toBeVisible({ timeout: 30000 });
+  await expect(page.locator('#cam-panel')).toBeHidden();
+  const state = await page.evaluate(() => ({
+    visibility: getComputedStyle(document.getElementById('cam-panel')).visibility,
+    // visibility:hidden 只是不绘制;元素仍在布局里,摄像头仍在跑
+    camHasStream: !!document.getElementById('cam').srcObject,
+  }));
+  expect(state.visibility).toBe('hidden');
+  await expect.poll(() => page.evaluate(() => !!document.getElementById('cam').srcObject), {
+    timeout: 40000, message: '隐藏预览不能影响摄像头启动(识别输入)',
+  }).toBe(true);
+
+  // 设置页再打开:游戏页不刷新也应立刻跟上
+  await page.evaluate(() => {
+    localStorage.setItem('dance-video-side-camera', '1');
+    window.dispatchEvent(new StorageEvent('storage', { key: 'dance-video-side-camera', newValue: '1' }));
+  });
+  await expect(page.locator('#cam-panel')).toBeVisible();
 });
 
 test('火柴人骨架开关:默认显示,设为 0 后画布真正隐藏,识别管线照常启动', async ({ page }) => {
@@ -236,3 +362,7 @@ test('火柴人骨架开关:默认显示,设为 0 后画布真正隐藏,识别�
   });
   await expect(page.locator('#cam-stick')).toBeVisible();
 });
+
+
+
+
