@@ -22,7 +22,7 @@ export const FBX_DANCES = [
 
 export const SONGS = [
   { id: "demo-beat", label: "示例节拍", file: "demo-beat.wav", bpm: 120 },
-  { id: "pop-demo", label: "Pop Demo", file: "pop-demo.wav", bpm: 120 },
+  { id: "pop-demo", label: "Hip Hop Beat", file: "pop-demo.wav", bpm: 120 },
   { id: "samba-demo", label: "Samba Demo", file: "samba-demo.wav", bpm: 100 },
 ];
 
