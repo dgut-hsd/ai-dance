@@ -24,6 +24,8 @@ let stepIdx = 0;       // 当前步骤下标
 let uploading = false;
 let generating = false;
 let chartMount = null; // { draftId, element } 内嵌谱面编辑器实例(跨步骤复用,避免重导入)
+let laneModelUrl = "";     // 判轨白影:记住用户选的模型(用 loadDraft 前都是它),避免重绘被弹回第一个
+let laneGenStamp = 0;      // 判轨白影:最近一次生成时间戳,拼进预览图 URL 破坏缓存(换模型后能看到新图)
 
 async function api(url, options = {}) {
   const res = await fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(30000) });
@@ -587,8 +589,9 @@ function uploadFile(kind, accept) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `上传失败 (${res.status})`);
-      current = await api(`/api/drafts/${current.id}`, { headers: deviceHeaders() });
-      $("save-state").textContent = "已保存";
+current = await api(`/api/drafts/${current.id}`, { headers: deviceHeaders() });
+    laneGenStamp = Date.now(); // 换模型/重生成后,预览图 URL 版本前进,强制浏览器重新拉新图
+    $("save-state").textContent = "已保存";
       renderSteps(); renderAssets(); renderStep();
     } catch (e) {
       $("save-state").textContent = e.message;
@@ -889,6 +892,7 @@ async function renderLaneStep(stage, props) {
     }
 
     const generated = !!current.files?.lane;
+    const genModelName = (models.find((m) => m.url === laneModelUrl) || models[0])?.name || "";
     stage.innerHTML = "";
     const box = el("div", "lane-panel");
 
@@ -902,7 +906,18 @@ async function renderLaneStep(stage, props) {
       o.value = m.url;
       modelSel.appendChild(o);
     }
-    if (models[0]) modelSel.value = models[0].url;
+    // 记住上一次用户的选择;没有才用第一个。不能用 models[0] 兜底重置,否则每次重绘都被弹回。
+    if (models.some((m) => m.url === laneModelUrl)) modelSel.value = laneModelUrl;
+    else if (models[0]) modelSel.value = models[0].url;
+    modelSel.addEventListener("change", () => {
+      laneModelUrl = modelSel.value;
+      // 切了模型旧预览就失效:折叠"已生成白影预览"区,免得看着像没反应
+      const prev = box.querySelector(".lane-thumbs");
+      const tHead = box.querySelector(".lane-head.has-preview");
+      if (prev) prev.style.display = "none";
+      if (tHead) tHead.style.display = "none";
+      showToast("已切换模型，点「生成白影」用新模型渲染");
+    });
     modelField.appendChild(modelSel);
     box.appendChild(modelField);
 
@@ -935,6 +950,8 @@ async function renderLaneStep(stage, props) {
     genBtn.addEventListener("click", () => {
       const picked = rows.filter((r) => r.cb.checked).map((r) => r.nt);
       if (!picked.length) { alert("请至少勾选一个判定点"); return; }
+      const m = models.find((x) => x.url === modelSel.value);
+      $("save-state").textContent = `正在用「${m?.name || modelSel.value}」生成白影…`;
       generateLane(seq, picked, modelSel.value);
     });
     actions.appendChild(genBtn);
@@ -942,14 +959,15 @@ async function renderLaneStep(stage, props) {
 
     // 已生成:直接预览缩略图
     if (generated) {
-      const tHead = el("div", "lane-head");
-      tHead.append(el("span", "", "已生成白影预览"));
+      const tHead = el("div", "lane-head has-preview");
+      tHead.append(el("span", "", genModelName ? `已生成白影预览（${genModelName}）` : "已生成白影预览"));
       box.appendChild(tHead);
       const thumbs = el("div", "lane-thumbs");
       for (const nt of noteTimes) {
         const img = document.createElement("img");
         img.loading = "lazy";
-        img.src = `/api/drafts/${current.id}/lane/${nt.key}.png`;
+        // 拼时间戳破坏缓存:同一 key 换模型重生成后,URL 变了浏览器才肯重新拉图
+        img.src = `/api/drafts/${current.id}/lane/${nt.key}.png?v=${laneGenStamp}`;
         img.alt = `${nt.t.toFixed(2)}s`;
         img.title = `${nt.t.toFixed(2)}s`;
         img.onerror = () => img.remove();
@@ -1032,7 +1050,8 @@ async function generateLane(seq, noteTimes, modelUrl) {
     if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || "保存失败"); }
 
     current = await api(`/api/drafts/${current.id}`, { headers: deviceHeaders() });
-    $("save-state").textContent = "已保存";
+    laneGenStamp = Date.now(); // 换模型/重生成后,预览图 URL 版本前进,强制浏览器重新拉新图
+    $("save-state").textContent = `白影已用 ${String(modelUrl).split("/").pop()} 保存`;
   } catch (e) {
     $("save-state").textContent = "生成失败";
     alert("白影生成失败：" + (e.message || e));

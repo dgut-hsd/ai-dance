@@ -937,6 +937,8 @@ export async function createApp(options = {}) {
   app.get('/api/drafts/:id/lane/:file', device, async (req, res) => {
     const file = path.basename(String(req.params.file || ''));
     if (!/^[\d.]+\.png$/.test(file)) throw fail(400, '文件名非法');
+    // 换模型重新生成后文件名不变,必须禁缓存,否则浏览器显示旧模型的白影
+    res.set('Cache-Control', 'no-store');
     res.sendFile(path.join(draftStore.dirOf(req.params.id), 'lane', file), { dotfiles: 'allow' });
   });
   // 出炉上架:把作品产物搬进 songs/ + videos/ + assets/lane/ 并写索引,然后把 status 改成 published。
