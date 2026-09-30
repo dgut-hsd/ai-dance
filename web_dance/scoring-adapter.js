@@ -10,8 +10,10 @@ import { parseChart, parseTimingWindows } from "../scoring/src/chartCodec.js";
 import { createScoringLog, recordScoringFrame, finalizeScoringLog } from "./scoring-log.js";
 import { loadConfig, gradeFor, tierMultipliers, bandsFor } from "./scoring-config.js";
 const BONE_COUNT = DEFAULT_BONE_WEIGHTS.length;
-// 判定手感/评级/得分全部走 scoring-config.js 的实时旋钮(设置页可调)。
-// 采样窗上限 0.30:受 test/scoring-regression.test.js「音符在 advance(0.8) 前结算」约束,不可再放大。
+// 设置页存的是布尔(勾选框),引擎内部按 "rootYaw"/"none" 字符串分支
+// (eventScorer 判的是 yawMode !== "none")。两处构造 engine 的路径都必须过这里,
+// 否则 false 也会被当成"开启",朝向对齐就关不掉。
+const yawModeArg = (v) => (v ? "rootYaw" : "none");
 export class ScoringAdapter {
   constructor(sequence) {
     this.seq = sequence;
@@ -34,6 +36,9 @@ export class ScoringAdapter {
   applyConfig(cfg) {
     this.cfg = cfg || loadConfig();
     this._applyEngine();
+    // 监测开关可以在对局中途切:开→新建采集缓冲,关→丢弃(半截数据没有分析价值)。
+    if (this.cfg.monitorLog && !this.log) this.log = createScoringLog();
+    else if (!this.cfg.monitorLog) this.log = null;
     // 采样窗逐音符覆盖(events 上已固化),需重算未结算事件的窗口。
     const w = this.cfg.judgeWindow;
     for (const p of this.engine.pending) p.event = { ...p.event, window: { early: -w, late: w } };
@@ -54,7 +59,7 @@ export class ScoringAdapter {
       timingWeight: 1 - c.poseWeight,
       posePerfect: c.posePerfect,
       poseGreat: c.poseGreat,
-      yawMode: c.yawMode ? "rootYaw" : "none",
+      yawMode: yawModeArg(c.yawMode),
     });
   }
   reset() {
@@ -62,7 +67,9 @@ export class ScoringAdapter {
     this.lastTier = null; this.results = []; this.finished = false;
     this.tallies = {}; this._pendingFeedback = [];
     this.lastFrameT = Number.NEGATIVE_INFINITY;
-    this.log = createScoringLog();
+    // 监测关闭时 this.log 保持 null:judge() 里整段采集连同逐骨相似度计算一起跳过,
+    // 每帧开销为零;finalize() 也就不会产出 log,main.js 自然不会上报。
+    this.log = this.cfg.monitorLog ? createScoringLog() : null;
     // 采样窗在谱面层放宽(逐音符 window 优先于 chart 缺省值,故逐条覆盖)
     const w = this.cfg.judgeWindow;
     this.events = this.events.map((e) => ({ ...e, window: { early: -w, late: w } }));
@@ -75,7 +82,7 @@ export class ScoringAdapter {
       timingWeight: 1 - this.cfg.poseWeight,
       posePerfect: this.cfg.posePerfect,
       poseGreat: this.cfg.poseGreat,
-      yawMode: this.cfg.yawMode,
+      yawMode: yawModeArg(this.cfg.yawMode),
     });
   }
   frameAt(t) {
@@ -111,12 +118,15 @@ export class ScoringAdapter {
     const ref = this.frameAt(t);
     const acc = this._similarity(ref, frame);
     const conf = frame.conf?.length ? frame.conf.reduce((a, b) => a + b, 0) / frame.conf.length : 1;
-    recordScoringFrame(this.log, {
-      t: Math.round(t * 1000) / 1000,
-      acc: Math.round(acc * 1000) / 1000,
-      conf: Math.round(conf * 1000) / 1000,
-      bones: this._boneSims(ref, frame)?.slice(0, 32),
-    });
+    // 监测关闭(this.log === null)时不做逐骨计算,只留判定要用的 acc。
+    if (this.log) {
+      recordScoringFrame(this.log, {
+        t: Math.round(t * 1000) / 1000,
+        acc: Math.round(acc * 1000) / 1000,
+        conf: Math.round(conf * 1000) / 1000,
+        bones: this._boneSims(ref, frame),
+      });
+    }
     return { acc, combo: this.combo, tier: this.lastTier };
   }
   advance(t) {

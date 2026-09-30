@@ -95,14 +95,17 @@ ok(formatKnob("judgeWindow", 0.3).startsWith("0.30"), "judgeWindow 格式");
 ok(formatKnob("scoreBase", 100000) === "100000", "scoreBase 整数格式");
 eq(formatKnob("yawMode", true), "开", "勾选框读数");
 eq(formatKnob("yawMode", false), "关", "勾选框读数");
-// 控件类型:得分基数是数字框,朝向对齐是勾选框,其余为滑块
+// 控件类型:得分基数=数字框,朝向对齐与落盘监测=勾选框,其余=滑块
 eq(SCORING_KNOBS.scoreBase.widget, "number", "得分基数应为数字框");
 eq(SCORING_KNOBS.yawMode.widget, "toggle", "朝向对齐应为勾选框");
+eq(SCORING_KNOBS.monitorLog.widget, "toggle", "落盘监测应为勾选框");
 for (const [k, m] of Object.entries(SCORING_KNOBS)) {
-  if (k === "scoreBase" || k === "yawMode") continue;
-  eq(m.widget, undefined, `${k} 应为滑块`);
+  if (m.widget) continue;
   ok(m.min < m.max && m.step > 0, `${k} 滑块范围/step 应合法`);
 }
+// 落盘监测默认关闭:每帧逐骨计算 + 结算序列化都有开销,不该默认开着
+eq(SCORING_KNOBS.monitorLog.def, false, "落盘监测应默认关闭");
+eq(d.monitorLog, false, "默认配置里落盘监测应为关");
 
 // 11. 恢复默认
 resetConfig();

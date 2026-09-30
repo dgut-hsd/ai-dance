@@ -76,6 +76,11 @@ export const SCORING_KNOBS = {
     hint: "每连击提升的得分倍率,封顶见「连击封顶」。",
   },
   comboCap: { label: "连击封顶", def: 50, min: 0, max: 200, step: 5, group: "score", hint: "连击加成按此连数封顶。" },
+  monitorLog: {
+    label: "落盘监测", def: false, widget: "toggle", group: "monitor",
+    hint: "勾选后每帧额外算一次逐骨相似度并落盘到 data/scoring-logs/,供分析评级是否合理。"
+      + "关闭时该开销完全为零(连逐骨计算都不做)。开启后结算瞬间会有一次序列化卡顿,介意就保持关闭。",
+  },
   posePerfect: {
     label: "姿态 PERFECT", def: 0.80, min: 0.3, max: 1, step: 0.01, group: "score",
     hint: "窗内最佳姿态分 ≥ 此值才有 PERFECT 姿态档(与时机档取更严者)。",
@@ -90,6 +95,7 @@ export const KNOB_GROUPS = [
   { id: "judge", title: "判定与手感", desc: "影响命中宽容度与事件分构成" },
   { id: "grade", title: "评级分档", desc: "结算质量 → S/A/B/C/D" },
   { id: "score", title: "得分计算", desc: "分数量级、档位系数与连击加成" },
+  { id: "monitor", title: "监测", desc: "诊断用采集,只落盘数据,不改判定与得分" },
 ];
 
 export function defaultConfig() {

@@ -19,9 +19,20 @@ export function finalizeScoringLog(log, result, context = {}) {
   return { schema: "scoring-log/v1", result, context, frames: log.frames };
 }
 
+// JSON.stringify 几 MB 的数组本身就要几十上百毫秒,直接放在调用点会卡住
+// 结算画面(此时正在 showResult + 起高光)。先让出一帧再做序列化。
+const nextTick = (fn) => {
+  if (typeof requestIdleCallback === "function") requestIdleCallback(fn, { timeout: 2000 });
+  else setTimeout(fn, 0);
+};
+
 export async function postScoringLog(payload) {
   if (!payload) return;
-  const body = JSON.stringify({ ...payload, createdAt: Date.now() });
+  const body = await new Promise((resolve) => nextTick(() => {
+    try { resolve(JSON.stringify({ ...payload, createdAt: Date.now() })); }
+    catch (e) { console.warn("[scoring-log] 序列化失败:", e.message); resolve(null); }
+  }));
+  if (!body) return;
   try {
     const res = await fetch("/api/scoring-log", {
       method: "POST",
@@ -29,8 +40,8 @@ export async function postScoringLog(payload) {
       body,
     });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || `评分日志上报失败 (${res.status})`);
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `评分日志上报失败 (${res.status})`);
     }
   } catch (e) {
     console.warn("[scoring-log]", e.message);

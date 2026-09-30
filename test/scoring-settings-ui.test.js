@@ -21,13 +21,21 @@ const lastPanelClass = await page.evaluate(() => {
   return panels[panels.length - 1].className;
 });
 ok(lastPanelClass.includes("scoring-panel"), `评分面板应在最下方,实际末位是 ${lastPanelClass}`);
-ok((await page.locator("#scoring-knobs .scoring-group").count()) === 3, "应有 3 组旋钮");
+ok((await page.locator("#scoring-knobs .scoring-group").count()) === 4, "应有 4 组旋钮");
 
-// 控件类型:朝向对齐=勾选框,得分基数=数字框,其余=滑块
-ok((await page.locator('.scoring-knob input[type=checkbox]').count()) === 1, "朝向对齐应为勾选框");
+// 控件类型:朝向对齐/落盘监测=勾选框,得分基数=数字框,其余=滑块
+ok((await page.locator('.scoring-knob input[type=checkbox]').count()) === 2, "朝向对齐与落盘监测应为勾选框");
 ok((await page.locator('.scoring-knob input[type=number]').count()) === 1, "得分基数应为数字框");
 const rangeCount = await page.locator('.scoring-knob input[type=range]').count();
 ok(rangeCount >= 15, `其余应为滑块,实际 ${rangeCount}`);
+
+// 落盘监测:默认不勾(避免每帧额外计算 + 结算卡顿)
+const monitorCb = page.locator('.scoring-knob', { has: page.locator('span:text-is("落盘监测")') }).first().locator('input[type=checkbox]');
+ok(!(await monitorCb.isChecked()), "落盘监测默认应不勾选");
+await monitorCb.setChecked(true);
+ok(await monitorCb.isChecked(), "落盘监测应可勾选");
+const savedOn = await page.evaluate(() => JSON.parse(localStorage.getItem("dance-scoring-config")).monitorLog);
+eq(savedOn, true, "落盘监测开启状态应落盘");
 
 // 关键回归:bandGood 滑块必须真的能拖动(旧实现 commit 后重建 DOM,元素被换掉→卡死)
 const goodRow = page.locator('.scoring-knob', { has: page.locator('span:text-is("GOOD 时机")') }).first();
