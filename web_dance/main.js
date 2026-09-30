@@ -846,7 +846,8 @@ function poseEventsFor(seq) {
 function updatePoseLane() {
   if (!dom.poseHint) return;
   const src = activePoseSource(state);
-  // 视频模式下没有 3D 教练/选曲时钟,轨道会停在第一个动作,直接隐藏。
+  // 视频模式也有时钟:挑战开始后 session.songTime 照常走、参考视频与 GO 同步开播,
+  // 所以轨道在视频模式同样可用,不再隐藏。
   const plan = planPoseLaneFrame({
     events: src ? poseEventsFor(src.seq) : [],
     t: src?.t ?? 0,
@@ -855,7 +856,6 @@ function updatePoseLane() {
     trackedKeys: laneView.trackedKeys(),
     arrivedKeys: laneView.arrivedKeys(),
     disabled: poseHintDisabled,
-    videoSide: isVideoSide(),
     hasTrack: !!dom.judgeTrack,
     hasSource: !!src,
   });

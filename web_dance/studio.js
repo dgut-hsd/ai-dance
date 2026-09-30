@@ -655,6 +655,33 @@ function renderAudioStep(stage, props) {
     current = await api(`/api/drafts/${current.id}/meta`, { method: "PUT", headers: { ...deviceHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ bpm: v }) });
     $("save-state").textContent = "已保存";
   });
+  // 「测定」按钮:听音频自动估 BPM 并填回输入框(测完即保存)
+  if (has && bpmInput) {
+    const btn = el("button", "btn sm ghost", "测定 BPM");
+    btn.style.marginTop = "6px";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "测定中…";
+      try {
+        const ab = await (await fetch(`/api/drafts/${current.id}/raw/audio`)).arrayBuffer();
+        const { detectBpm } = await import("./bpm.js");
+        const bpm = await detectBpm(ab);
+        if (bpm == null) {
+          showToast("没测出来：音频太短或没有明显节拍");
+        } else {
+          bpmInput.value = String(bpm);
+          bpmInput.dispatchEvent(new Event("change"));
+          showToast(`测定结果 ${bpm} BPM`);
+        }
+      } catch (e) {
+        showToast("测定失败: " + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "测定 BPM";
+      }
+    });
+    bpmInput.parentElement.appendChild(btn);
+  }
 }
 
 async function extractAudio() {
