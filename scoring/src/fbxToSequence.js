@@ -68,6 +68,20 @@ const norm = (v) => {
   const l = Math.hypot(v[0], v[1], v[2]);
   return l < 1e-6 ? [0, 0, 0] : [v[0] / l, v[1] / l, v[2] / l];
 };
+
+// 契约 §1/§2.5:rootYaw = atan2(hipAxis.z, hipAxis.x),hipAxis = right_hip − left_hip。
+// 缺 rootYaw 时 chartCodec 的 targetYaw 为 undefined,评分侧 yaw 对齐拿不到基准。
+// 导出供离线生成器/单测直接复用(sampleFbxFrames 内部也走这两个函数,保证只有一份算法)。
+export function hipRootYaw(joints) {
+  const r = joints?.right_hip, l = joints?.left_hip;
+  if (!r || !l) return undefined;
+  return Math.atan2(r[2] - l[2], r[0] - l[0]);
+}
+/** 肩轴 = normalize(右肩 − 左肩);与 pose_capture/contract.js 的 computeShoulderAxis 同式。 */
+export function shoulderAxisOf(joints) {
+  const r = joints?.right_shoulder, l = joints?.left_shoulder;
+  return r && l ? norm(sub(r, l)) : undefined;
+}
 export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
   const beat = 60 / bpm;
   const notes = [];
@@ -220,9 +234,8 @@ export function sampleFbxFrames(THREE, clip, root, { loopTo = 24 } = {}) {
     if (!joints) continue;
     const bones = contractBones(joints);
     // v2 朝向字段(见本函数上方的说明):髋轴/肩轴/扭转/侧倾前倾/手臂轴向扭转
-    const hipAxis = sub(joints.right_hip, joints.left_hip);
-    const shoulderAxis = norm(sub(joints.right_shoulder, joints.left_shoulder));
-    const rootYaw = Math.atan2(hipAxis[2], hipAxis[0]);
+    const shoulderAxis = shoulderAxisOf(joints);
+    const rootYaw = hipRootYaw(joints);
     const torsoUp = norm(joints.shoulders_center); // canonical 里髋即原点
     // 追加字段(可选,消费端按存在性判断):
     //   rootPos       根位移 = (髋世界位置 − bind 位置) 投到 canonical 基、再除以髋高 → 与骨架尺寸无关
@@ -272,4 +285,5 @@ export function fbxClipToSequence(THREE, clip, root, { bpm = 120, audio = "pop-d
   const { frames, durationSec } = sampleFbxFrames(THREE, clip, root, { loopTo });
   return makeSequence(frames, { bpm, audio, danceId, durationSec });
 }
+// hipRootYaw / shoulderAxisOf 已在上面用 `export function` 导出(离线生成器按名字取用)。
 export { DIMS, SAMPLING_FPS };
