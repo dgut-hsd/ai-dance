@@ -1082,8 +1082,16 @@ export async function createApp(options = {}) {
   // 谱面编辑器:跳转到 /web_dance/ 下,保证 ./chart-editor.js 等相对路径正确解析。
   app.get('/editor', (req, res) => res.redirect('/web_dance/chart-editor.html'));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.
+  // Cache-Control: no-cache = 每次都回源校验(命中就回 304,很便宜)。
+  // 不设的话 express.static 不发 Cache-Control,浏览器会按 Last-Modified 走启发式缓存
+  // (文件年龄的 10%)—— 刚改完的前端模块会被静默命中旧文件,表现为"我改了但行为没变",
+  // 比没有缓存更难查。之前只能靠手改 import 上的 ?v= 兜,已经漏过两次。
+  const staticOpts = {
+    dotfiles: 'deny',
+    setHeaders(res) { res.setHeader('Cache-Control', 'no-cache'); },
+  };
   for (const dir of ['web_dance', 'pose_capture', 'scoring/src', 'models', 'fbx', 'songs', 'videos'])
-    app.use(`/${dir}`, express.static(path.join(root, dir), { dotfiles: 'deny' }));
+    app.use(`/${dir}`, express.static(path.join(root, dir), staticOpts));
   for (const file of ['chart.json', 'timing.json']) app.get(`/${file}`, (req, res) => res.sendFile(path.join(root, file)));
   app.get('/', (req, res) => res.redirect('/web_dance/'));
   app.use((err, req, res, next) => {
