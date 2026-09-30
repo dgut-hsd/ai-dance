@@ -26,6 +26,7 @@
   button { cursor: pointer; }
   button:hover { border-color: var(--accent); }
   button.primary { background: #14506b; border-color: #1d75a0; }
+  button.bpm-cands { margin-left: 2px; }
   main { display: grid; grid-template-columns: 240px 1fr; gap: 12px; padding: 12px;
     flex: 1; min-height: 0; overflow: hidden; }
   .left { display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
@@ -96,8 +97,11 @@
   <label class="needs-seq">目录名(ID) <input type="text" id="danceId" maxlength="64" spellcheck="false" placeholder="songs/ 下的目录名" style="width:150px"></label>
   <span class="sp needs-seq"></span>
   <label class="needs-seq">BPM <input type="number" id="bpm" step="1" min="20" max="300" style="width:64px"></label>
+  <button class="needs-seq" id="btnDetectBpm" title="从当前音频自动测 BPM，列出候选供挑选">测定</button>
   <label class="needs-seq">偏移s <input type="number" id="offset" step="0.01" style="width:72px"></label>
+  <label class="needs-seq">LPB <input type="number" id="lpb" step="1" min="1" max="32" value="4" style="width:52px" title="Lines Per Beat：每拍划分的网格数，决定音符可多精细地定位在节拍之间"></label>
   <label class="needs-seq"><input type="checkbox" id="snap" checked> 吸附节拍</label>
+  <label class="needs-seq" title="播放时经过判定点发出提示音，方便对音"><input type="checkbox" id="clickSound" checked> 判定点音效</label>
   <span class="sp needs-seq"></span>
   <button class="needs-seq" id="btnFill1">每拍</button>
   <button class="needs-seq" id="btnFill2">每2拍</button>
@@ -168,12 +172,12 @@
       <ul>
         <li><b>点空白 = 加</b>一个判定点;<b>拖动 = 改时刻</b>;<b>右键或列表里的 ✕ = 删</b>;<b>点 = 选中</b>。</li>
         <li>时间轴上半条拖动 = 移动播放头;选中判定点会自动把播放头跳过去,左栏姿势预览随之更新。</li>
-        <li>「BPM / 偏移s」决定拍在哪(先把偏移对到鼓点);「吸附节拍」开着时判定点会吸到最近的拍。</li>
+        <li>「BPM / 偏移s」决定拍在哪(先把偏移对到鼓点);「LPB」= 每拍的网格数(1=整拍,4=十六分音,8=三十二分音…),数字越大能摆的判定点越细;「吸附节拍」开着时判定点会吸到最近的网格线(拍/LPB 细分)。</li>
         <li>「每拍 / 每2拍 / 每4拍」= 按拍栅格重铺一遍(会覆盖现有判定点);「清空」全删。</li>
       </ul>
       <h3>③ 边听边看,然后保存</h3>
       <ul>
-        <li>点「播放 ▶」:波形 + 播放头 + <b>下方判定轨道预览</b>会跟着走 —— 玩家看到的卡片就是它。</li>
+        <li>点「播放 ▶」:波形 + 播放头 + <b>下方判定轨道预览</b>会跟着走 —— 玩家看到的卡片就是它;开着「判定点音效」时经过每个判定点会"嗒"一声，方便对音(强拍音更低更长)。</li>
         <li>选中判定点后,左栏属性区可改:时刻 / 类型 / 难度 / 判定窗 / <b>动作名</b> / 只算哪几根骨头。</li>
         <li>「保存到歌单」→ 写 <code>songs/&lt;ID&gt;/</code> 并刷新歌单;回游戏页刷新即可挑战(卡片就用这份谱面)。</li>
       </ul>
@@ -205,7 +209,7 @@
 }}
 </script>
 <script type="module">
-  import { mountChartEditor } from "./chart-editor.js?v=20260929b";
+  import { mountChartEditor } from "./chart-editor.js?v=20260930a";
   mountChartEditor(document.body, {});
 </script>
 <script>

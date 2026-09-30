@@ -24,6 +24,7 @@ const CSS = `
 .chart-embed button { cursor:pointer; }
 .chart-embed button:hover { border-color:var(--accent); }
 .chart-embed button.primary { background:#14506b; border-color:#1d75a0; }
+.chart-embed button.bpm-cands { margin-left:2px; }
 .chart-embed main { display:grid; grid-template-columns:240px 1fr; gap:12px; padding:12px;
   flex:1; min-height:0; overflow:hidden; }
 .chart-embed .ce-left { display:flex; flex-direction:column; gap:8px; overflow:auto; min-height:0; }
@@ -71,8 +72,11 @@ const HTML = `
   <label class="needs-seq">目录名(ID) <input type="text" id="danceId" maxlength="64" spellcheck="false" placeholder="songs/ 下的目录名" style="width:150px"></label>
   <span class="sp needs-seq"></span>
   <label class="needs-seq">BPM <input type="number" id="bpm" step="1" min="20" max="300" style="width:64px"></label>
+  <button class="needs-seq" id="btnDetectBpm" title="从当前音频自动测 BPM，列出候选供挑选">测定</button>
   <label class="needs-seq">偏移s <input type="number" id="offset" step="0.01" style="width:72px"></label>
+  <label class="needs-seq">LPB <input type="number" id="lpb" step="1" min="1" max="32" value="4" style="width:52px" title="Lines Per Beat：每拍划分的网格数，决定音符可多精细地定位在节拍之间"></label>
   <label class="needs-seq"><input type="checkbox" id="snap" checked> 吸附节拍</label>
+  <label class="needs-seq" title="播放时经过判定点发出提示音，方便对音"><input type="checkbox" id="clickSound" checked> 判定点音效</label>
   <span class="sp needs-seq"></span>
   <button class="needs-seq" id="btnFill1">每拍</button>
   <button class="needs-seq" id="btnFill2">每2拍</button>

@@ -658,24 +658,38 @@ function renderAudioStep(stage, props) {
     current = await api(`/api/drafts/${current.id}/meta`, { method: "PUT", headers: { ...deviceHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ bpm: v }) });
     $("save-state").textContent = "已保存";
   });
-  // 「测定」按钮:听音频自动估 BPM 并填回输入框(测完即保存)
+  // 「测定」按钮:听音频自动估 BPM,列出候选让用户挑(选完即填框并保存)
   if (has && bpmInput) {
+    const row = el("div", "bpm-detect");
     const btn = el("button", "btn sm ghost", "测定 BPM");
-    btn.style.marginTop = "6px";
+    row.style.marginTop = "6px";
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       btn.textContent = "测定中…";
+      row.querySelectorAll(".bpm-cands").forEach((n) => n.remove());
       try {
         const ab = await (await fetch(`/api/drafts/${current.id}/raw/audio`)).arrayBuffer();
-        const { detectBpm } = await import("./bpm.js");
-        const bpm = await detectBpm(ab);
-        if (bpm == null) {
+        const { detectBpmCandidates } = await import("./bpm.js");
+        const cands = await detectBpmCandidates(ab);
+        if (!cands.length) {
           showToast("没测出来：音频太短或没有明显节拍");
-        } else {
-          bpmInput.value = String(bpm);
-          bpmInput.dispatchEvent(new Event("change"));
-          showToast(`测定结果 ${bpm} BPM`);
+          return;
         }
+        const box = el("span", "bpm-cands");
+        box.style.marginLeft = "8px";
+        cands.forEach((c, i) => {
+          const cb = el("button", "btn sm " + (i === 0 ? "primary" : "ghost"), `${c.bpm}`);
+          cb.title = `候选 ${c.bpm} BPM（匹配分 ${c.score}）`;
+          cb.addEventListener("click", () => {
+            row.querySelectorAll(".bpm-cands").forEach((n) => n.remove());
+            bpmInput.value = String(c.bpm);
+            bpmInput.dispatchEvent(new Event("change"));
+            showToast(`已填 ${c.bpm} BPM`);
+          });
+          box.appendChild(cb);
+        });
+        row.appendChild(box);
+        showToast(`测出 ${cands.length} 个候选，挑一个填入`);
       } catch (e) {
         showToast("测定失败: " + e.message);
       } finally {
@@ -683,7 +697,8 @@ function renderAudioStep(stage, props) {
         btn.textContent = "测定 BPM";
       }
     });
-    bpmInput.parentElement.appendChild(btn);
+    row.appendChild(btn);
+    bpmInput.parentElement.appendChild(row);
   }
 }
 

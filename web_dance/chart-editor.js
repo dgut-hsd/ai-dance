@@ -31,7 +31,7 @@ const GU = 64;
 const sx = (t) => GU + t * PX_PER_SEC;
 const tx = (x) => Math.max(0, Math.min(duration(), (x - GU) / PX_PER_SEC));
 const WAVE_VER = "v5";
-const BUILD = "9D";
+const BUILD = "9E";
 let waveDirty = true;
 function setWaveStatus(msg) {
   try { console.log("[wave] " + msg); } catch { /* noop */ }
@@ -40,6 +40,7 @@ function setWaveStatus(msg) {
 const state = {
   seq: null, baseNotes: [], notes: [], sel: -1,
   playhead: 0, bpm: 120, offset: 0,
+  lpb: 4, clickSound: true, clicked: new Set(), clickAccent: null,
   playing: false, drag: null, sourceKey: null, rafId: 0,
   folder: { fbx: null, audio: null }, danceId: null, label: "",
   draftId: DRAFT_ID, draftAudioUrl: null, draftAudioName: null,
@@ -118,11 +119,27 @@ function beatTimes() {
   return out;
 }
 
+// LPB(Lines Per Beat):每拍的细分网格数(1=整拍,2=二分,4=16分,8=32分…)。
+// 网格线时间=偏移 + k·(拍长/lpb),吸附与绘制都走它。
+let lpbCacheKey = "", lpbCache = [];
+function gridTimes() {
+  const beat = 60 / Math.max(1, state.bpm);
+  const step = beat / Math.max(1, state.lpb);
+  const key = `${state.bpm}:${state.offset}:${state.lpb}:${duration()}`;
+  if (key === lpbCacheKey) return lpbCache;
+  const out = [];
+  let t = state.offset;
+  while (t <= duration() + 1e-6) { out.push(+t.toFixed(4)); t += step; }
+  lpbCacheKey = key;
+  lpbCache = out;
+  return out;
+}
+
 function snapTime(t) {
   if (!$("snap").checked) return Math.max(0, Math.min(duration(), +t.toFixed(3)));
-  const beats = beatTimes();
-  let best = beats[0] ?? 0, dist = Math.abs(t - best);
-  for (const b of beats) { const d = Math.abs(t - b); if (d < dist) { dist = d; best = b; } }
+  const grid = gridTimes();
+  let best = grid[0] ?? 0, dist = Math.abs(t - best);
+  for (const g of grid) { const d = Math.abs(t - g); if (d < dist) { dist = d; best = g; } }
   return Math.max(0, Math.min(duration(), +best.toFixed(3)));
 }
 
@@ -412,15 +429,26 @@ function redraw() {
   ctx.lineTo(GU + 0.5, SCRUB_H + NOTE_H);
   ctx.stroke();
 
-  const beats = beatTimes();
-  for (let i = 0; i < beats.length; i++) {
-    const b = beats[i];
+  const grid = gridTimes();
+  const lpb = Math.max(1, state.lpb);
+  const beat = 60 / Math.max(1, state.bpm);
+  const linePx = (beat / lpb) * PX_PER_SEC;
+  // 网格线太密(<2px)就不画细分线,只画拍线,免得播放时每帧重绘卡顿
+  const drawSub = linePx >= 2 && lpb > 1;
+  for (let i = 0; i < grid.length; i++) {
+    const b = grid[i];
     const x = sx(b);
-    ctx.fillStyle = i % 4 === 0 ? "rgba(120,150,255,.45)" : "rgba(120,150,255,.18)";
-    ctx.fillRect(x, SCRUB_H, 1, NOTE_H);
-    if (i % 4 === 0) {
-      ctx.fillStyle = "rgba(130,160,255,.75)";
-      ctx.fillText(String(i / 4 + 1), x + 3, SCRUB_H - 4);
+    if (i % lpb === 0) {
+      const bi = i / lpb;
+      ctx.fillStyle = bi % 4 === 0 ? "rgba(120,150,255,.45)" : "rgba(120,150,255,.18)";
+      ctx.fillRect(x, SCRUB_H, 1, NOTE_H);
+      if (bi % 4 === 0) {
+        ctx.fillStyle = "rgba(130,160,255,.75)";
+        ctx.fillText(String(bi / 4 + 1), x + 3, SCRUB_H - 4);
+      }
+    } else if (drawSub) {
+      ctx.fillStyle = "rgba(255,255,255,.07)";
+      ctx.fillRect(x, SCRUB_H, 1, NOTE_H);
     }
   }
   ctx.strokeStyle = "rgba(60,70,110,.6)";
@@ -669,6 +697,50 @@ function renderProps() {
   if ($("pLate")) $("pLate").onchange = (ev) => { n.window.late = +ev.target.value || 0.2; saveDraft(); redraw(); };
 }
 
+// ---- 判定点音效 ----------------------------------------------------------------
+// 播放经过判定点就"嗒"一声,方便对音;统一用一种音效,不做强弱拍区分。
+// 用 WebAudio 实时合成:高频噪声爆点,无需音频文件。
+let clickCtx = null, clickMaster = null;
+function clickCtxInit() {
+  if (!clickCtx) {
+    clickCtx = new (window.AudioContext || window.webkitAudioContext)();
+    clickMaster = clickCtx.createGain();
+    clickMaster.gain.value = 1.2;
+    clickMaster.connect(clickCtx.destination);
+  }
+  if (clickCtx.state === "suspended") clickCtx.resume();
+  return clickCtx;
+}
+function clickBeep() {
+  try {
+    clickCtxInit();           // 确保在用户手势/播放中 Resume
+    const ctx = clickCtx, t0 = ctx.currentTime + 0.001;
+    const dur = 0.045;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 1.5);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass";
+    bp.frequency.value = 4800; bp.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, t0);
+    g.gain.exponentialRampToValueAtTime(1.0, t0 + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    src.connect(bp).connect(g).connect(clickMaster);
+    src.start(t0);
+  } catch { /* 忽略音频异常(未授权等) */ }
+}
+function traverseNotes(prevT, curT) {
+  if (!state.clickSound) return;
+  for (let i = 0; i < state.notes.length; i++) {
+    const n = state.notes[i];
+    if (n.t > prevT + 1e-6 && n.t <= curT + 1e-6 && !state.clicked.has(n)) {
+      state.clicked.add(n);
+      clickBeep();
+    }
+  }
+}
+
 // ---- 播放 -------------------------------------------------------------------
 
 function ensureAudio() {
@@ -751,9 +823,14 @@ async function decodePeaks(ab) {
 
 async function startPlay() {
   if (state.playhead >= duration()) setPlayhead(0);
+  clickCtxInit();            // 用户手势内创建/恢复 AudioContext,否则会被策略挂起
   setPlayhead(state.playhead);
   state.playing = true;
+  state.clicked = new Set();
   $("btnPlay").textContent = "暂停 ⏸";
+  const startT = state.playhead;
+  const startWall = performance.now();
+  let audioReady = false;
   try {
     const audio = await ensureAudio();
     if (audio) {
@@ -766,16 +843,28 @@ async function startPlay() {
         }
       }
       audio.currentTime = Math.max(0, Math.min(state.playhead, audio.duration || state.playhead));
-      audio.play().catch(() => {});
+      await audio.play().catch(() => {});
+      audioReady = true;
     }
   } catch (e) {
     showErr("音频：" + e.message);
   }
-  let last = performance.now();
-  const tick = (now) => {
+  const tick = () => {
     if (!state.playing) return;
-    const dt = (now - last) / 1000; last = now;
-    setPlayhead(state.playhead + dt);
+    const prevT = state.playhead;
+    let t;
+    if (audioReady && state.audio && !state.audio.paused) {
+      // 完全跟随音频时钟:判定音与音乐严格对齐,不受 rAF 丢帧/标签页节流/墙钟漂移影响。
+      t = state.audio.currentTime;
+    } else if (audioReady) {
+      // 音频已就绪但还没真正起播(等待缓冲/起播),播放头锁在起点,避免先乱跑再回跳
+      t = startT;
+    } else {
+      // 没有音频(纯 rAF 预览),退回墙钟推进
+      t = startT + (performance.now() - startWall) / 1000;
+    }
+    setPlayhead(t);
+    traverseNotes(prevT, t);
     if (state.playhead >= duration()) { stopPlay(); drawWave(); return; }
     state.rafId = requestAnimationFrame(tick);
   };
@@ -783,6 +872,7 @@ async function startPlay() {
 }
 function stopPlay() {
   state.playing = false;
+  state.clicked = new Set();
   cancelAnimationFrame(state.rafId);
   $("btnPlay").textContent = "播放 ▶";
   if (state.audio) { try { state.audio.pause(); } catch { /* noop */ } }
@@ -963,6 +1053,52 @@ $("btnReset").onclick = () => {
     drawPose();
     renderLanePreview();   // 拍长变了 → 平台律动也跟着变
   }));
+
+  const lpbEl = $("lpb");
+  if (lpbEl) lpbEl.addEventListener("change", () => {
+    state.lpb = Math.max(1, Math.min(32, Math.round(Number(lpbEl.value) || 1)));
+    lpbEl.value = state.lpb;
+    redraw();
+    renderNoteList();
+    renderProps();
+  });
+  const csEl = $("clickSound");
+  if (csEl) csEl.addEventListener("change", () => { state.clickSound = csEl.checked; });
+
+  // 「测定」BPM:从载入的音频自动估 BPM,列出候选供挑选
+  const detectBtn = $("btnDetectBpm");
+  if (detectBtn) detectBtn.addEventListener("click", async () => {
+    detectBtn.disabled = true;
+    detectBtn.textContent = "测定中…";
+    detectBtn.parentElement.querySelectorAll(".bpm-cands").forEach((n) => n.remove());
+    const bpmInput = $("bpm");
+    try {
+      if (!state.audioBuf) await ensureAudio();
+      const ab = state.audioBuf;
+      if (!ab) { showErr("没有已载入的音频，无法测定 BPM"); return; }
+      const { detectBpmCandidates } = await import("./bpm.js");
+      const cands = await detectBpmCandidates(ab);
+      if (!cands.length) { showErr("没测出来：音频太短或没有明显节拍"); return; }
+      clearErr();
+      cands.forEach((c, i) => {
+        const b = document.createElement("button");
+        b.className = "needs-seq bpm-cands" + (i === 0 ? " primary" : "");
+        b.textContent = String(c.bpm);
+        b.title = `候选 ${c.bpm} BPM（匹配分 ${c.score}）`;
+        b.addEventListener("click", () => {
+          if (bpmInput) { bpmInput.value = String(c.bpm); bpmInput.dispatchEvent(new Event("change")); }
+          b.parentElement.querySelectorAll(".bpm-cands").forEach((n) => n.remove());
+        });
+        detectBtn.parentElement.insertBefore(b, detectBtn.nextSibling);
+      });
+      showErr("");
+    } catch (e) {
+      showErr("测定失败：" + e.message);
+    } finally {
+      detectBtn.disabled = false;
+      detectBtn.textContent = "测定";
+    }
+  });
 }
 
 function bindFolder() {
