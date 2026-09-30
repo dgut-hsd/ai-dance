@@ -8,7 +8,7 @@
   max-width: 480px; margin: 0 auto; padding: 24px 16px 48px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
-.highlight-view .eyebrow { letter-spacing: .2em; color: #52ffd0; font-size: 13px; margin: 0 0 4px; }
+.highlight-view .eyebrow { letter-spacing: .2em; color: #d5b45f; font-size: 11px; margin: 0 0 5px; }
 .highlight-view h1 { font-size: clamp(20px, 6.5vw, 30px); line-height: 1.25; margin: 0 0 10px; }
 #view-status { color: #cdd7e8; font-size: 15px; margin: 0 0 12px; }
 
@@ -18,16 +18,27 @@
   width: auto; height: auto;
   max-width: 100%; max-height: 58vh;
   aspect-ratio: 9 / 16; object-fit: contain;
-  background: #000; border: 1px solid #23334f;
+  background: #000; border: 1px solid rgba(213,180,95,.5); border-radius: 18px;
+  box-shadow: 0 22px 60px rgba(0,0,0,.55), 0 0 28px rgba(213,180,95,.1);
 }
 
+#view-story {
+  width: 100%; box-sizing: border-box; margin: 2px 0 8px; padding: 13px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid rgba(213,180,95,.3); background: rgba(12,12,14,.7); text-align: left;
+}
+#view-story strong { color: #ffd76d; font-size: 17px; font-style: italic; }
+#view-story span { color: #aeb8c9; font-size: 12px; }
 #view-result { font-size: 18px; font-weight: 700; color: #ffd54a; margin: 4px 0 18px; }
-.download-highlight, #refresh-highlight {
+.download-actions { width: 100%; display: grid; gap: 10px; }
+.download-highlight, .download-full, #refresh-highlight {
   display: block; width: 100%; box-sizing: border-box;
   padding: 15px 24px; border: 0; border-radius: 0;
   font-size: 16px; font-weight: 700; text-align: center; text-decoration: none; cursor: pointer;
 }
-.download-highlight { color: #071927; background: #52ffd0; }
+.download-highlight { color: #211704; background: linear-gradient(180deg, #f7e6b1, #d4aa4d); box-shadow: 0 8px 28px rgba(213,180,95,.2); }
+.download-full { color: #f5df9d; background: rgba(10,18,34,.8); border: 1px solid rgba(213,180,95,.55); }
+.full-status { margin: 10px 0 0; color: #aebbd0; font-size: 13px; }
 #refresh-highlight { color: #cdd7e8; background: #22304a; margin-top: 8px; }
 
 .hint, #view-expiry { color: #a6b5cc; font-size: 13px; line-height: 1.7; }

@@ -8,7 +8,8 @@
       "defaultSongId": "pop-demo",
       "chartFile": "hiphop.chart.json",
       "musicFile": "pop-demo.wav",
-      "fbxFile": "hiphop.fbx"
+      "fbxFile": "hiphop.fbx",
+      "mode": "3d"
     },
     {
       "id": "salsa",
@@ -17,7 +18,8 @@
       "defaultSongId": "samba-demo",
       "chartFile": "salsa.chart.json",
       "musicFile": "samba-demo.wav",
-      "fbxFile": "salsa.fbx"
+      "fbxFile": "salsa.fbx",
+      "mode": "3d"
     },
     {
       "id": "demo-arena-loop",
@@ -26,10 +28,65 @@
       "defaultSongId": "demo-arena-loop",
       "chartFile": "demo-arena-loop.chart.json",
       "musicFile": "demo-beat.wav",
-      "fbxFile": null
+      "fbxFile": null,
+      "mode": "3d"
+    },
+    {
+      "id": "copydance1",
+      "label": "风萧萧雨萧萧",
+      "danceId": "copydance1",
+      "defaultSongId": "copydance1",
+      "chartFile": "copydance1.chart.json",
+      "musicFile": "copyDance1_30s.wav",
+      "fbxFile": "copydance1.fbx",
+      "mode": "3d"
+    },
+    {
+      "id": "dance3-mixamo",
+      "label": "Dance3 Mixamo",
+      "danceId": "dance3-mixamo",
+      "defaultSongId": "dance3-mixamo",
+      "chartFile": "dance3-mixamo.chart.json",
+      "musicFile": "dance3.wav",
+      "fbxFile": "dance3_mixamo.fbx",
+      "mode": "3d"
+    },
+    {
+      "id": "dance1-video",
+      "label": "舞蹈1（视频动捕）",
+      "danceId": "dance1-video",
+      "defaultSongId": "dance1-video",
+      "chartFile": "dance1-video.chart.json",
+      "musicFile": "舞蹈1.wav",
+      "fbxFile": null,
+      "mode": "video"
     }
   ],
   "songs": [
+    {
+      "id": "demo-arena-loop",
+      "label": "合成示例舞",
+      "file": "demo-beat.wav",
+      "bpm": 120
+    },
+    {
+      "id": "copydance1",
+      "label": "Copy Dance 1",
+      "file": "copyDance1_30s.wav",
+      "bpm": 103.36
+    },
+    {
+      "id": "dance3-mixamo",
+      "label": "Dance3 原声（视频抽取）",
+      "file": "dance3.wav",
+      "bpm": 120
+    },
+    {
+      "id": "dance1-video",
+      "label": "舞蹈1（视频动捕）",
+      "file": "舞蹈1.wav",
+      "bpm": 120
+    },
     {
       "id": "demo-beat",
       "label": "示例节拍",
@@ -47,12 +104,6 @@
       "label": "Samba Demo",
       "file": "samba-demo.wav",
       "bpm": 100
-    },
-    {
-      "id": "demo-arena-loop",
-      "label": "合成示例舞",
-      "file": "demo-beat.wav",
-      "bpm": 120
     }
   ]
 }

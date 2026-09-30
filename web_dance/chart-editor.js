@@ -5,9 +5,24 @@ import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { parseChart, serializeChart } from "../scoring/src/chartCodec.js";
 import { DEFAULT_BONE_WEIGHTS, BONE_DEFS } from "../scoring/src/schema.js";
 import { wavPeaks } from "./wav-peaks.js";
+// 判定轨道预览:与游戏页共用同一套"计划 → DOM"实现,保证所见即所得
+import { beatDurFor, planPoseLaneFrame } from "./pose-lane.js";
+import { createLaneView } from "./lane-view.js";
+import { buildLaneFigure } from "./lane-figure.js";
+import { laneAssetFor, loadLaneManifest } from "./lane-assets.js";
 
-const $ = (id) => document.getElementById(id);
+// 挂载根:独立页面 = document;内嵌进工作台 = 传入的容器元素。
+let ROOT = document;
+let BODY = document.body;
+const $ = (id) => ROOT.querySelector("#" + id);
 const DRAFT_KEY = "chart-editor.draft";
+// 草稿模式:工作台内嵌时传 draftId,编辑器把谱面保存回草稿而不是 songs/。
+let DRAFT_ID = new URLSearchParams(location.search).get("draft");
+let onSaved = null; // 内嵌模式的保存回调
+const deviceHeaders = () => {
+  const t = localStorage.getItem("dance-device-token") || "";
+  return t ? { "X-Device-Token": t } : {};
+};
 const SCRUB_H = 18;
 const NOTE_H = 60;
 const NOTE_Y = SCRUB_H + (NOTE_H - 26) / 2;
@@ -27,7 +42,9 @@ const state = {
   playhead: 0, bpm: 120, offset: 0,
   playing: false, drag: null, sourceKey: null, rafId: 0,
   folder: { fbx: null, audio: null }, danceId: null, label: "",
+  draftId: DRAFT_ID, draftAudioUrl: null, draftAudioName: null,
   audio: null, audioUrl: null, audioBuf: null, audioPromise: null, peaks: null, decode: "waiting", decodeErr: "", autoFit: null,
+  laneManifest: null,   // 逐判定点 3D 白影清单(见 lane-assets.js);加载失败也不影响编辑
 };
 
 function slugify(s) {
@@ -117,7 +134,7 @@ function setSeq(seq, key, notesOverride) {
   state.autoFit = "window";
   state.seq = seq;
   state.sourceKey = key;
-  document.body.classList.remove("no-seq");
+  BODY.classList.remove("no-seq");
   state.notes = notesOverride ?? copyNotes(seq.chart?.notes || []);
   state.baseNotes = copyNotes(state.notes);
   state.sel = -1;
@@ -137,6 +154,8 @@ function setSeq(seq, key, notesOverride) {
   renderProps();
   drawPose();
   drawWave();
+  laneView.reset();
+  renderLanePreview();
   setWaveStatus("读取音频…（前端 fetch 字节）");
   ensureAudio().then(() => drawWave()).catch((e) => { showErr("音频：" + e.message); setWaveStatus("启动预载失败：" + e.message); });
 }
@@ -163,6 +182,42 @@ function drawPose() {
   }
   const wf = state.peaks ? "已显示" : (state.decode === "fail" ? "失败" + (state.decodeErr ? "(" + state.decodeErr + ")" : "") : (state.audioUrl ? "解码中" : "无音频"));
   $("info").textContent = `${seq.danceId} · ${state.playhead.toFixed(2)}s / ${duration().toFixed(2)}s · ${(seq.frames || []).length}帧 · ${state.notes.length}个判定点 · 波形:${wf}`;
+}
+
+// ---- 判定轨道预览(玩家右下角看到的卡片,所见即所得) --------------------------
+
+let laneView = null;
+function createLaneViewNow() {
+  laneView = createLaneView({
+    root: $("pose-hint"), track: $("judge-track"), stage: $("judge-stage"),
+    buildFigure: buildLaneFigure,   // 进度条/文字都不挂载(见 lane.css)
+  });
+}
+
+// 编辑器里的"谱面"就是 state.notes(未保存的草稿),直接当判定事件喂给同一套计划逻辑
+function previewEvents() {
+  return state.notes
+    .map((n, i) => ({ t: n.t, moveId: n.id ?? `pose-${i}`, targetT: n.t }))
+    .sort((a, b) => a.t - b.t);
+}
+
+function renderLanePreview() {
+  if (!state.seq) return;
+  const plan = planPoseLaneFrame({
+    events: previewEvents(),
+    t: state.playhead,
+    trackW: $("judge-track")?.clientWidth || 0,
+    beatDur: beatDurFor(state.seq),
+    trackedKeys: laneView.trackedKeys(),
+    arrivedKeys: laneView.arrivedKeys(),
+    hasSource: true,
+    hasTrack: true,
+  });
+  laneView.update(plan, {
+    seq: state.seq,
+    dpr: window.devicePixelRatio || 1,
+    entryFor: (ev) => laneAssetFor(state.laneManifest, state.seq?.danceId, ev.t),
+  });
 }
 
 // ---- 时间轴渲染与交互 --------------------------------------------------------
@@ -249,7 +304,7 @@ function buildPeaks(ch, sampleRate, durationSec) {
 }
 
 function waveSelfReport() {
-  const cvs = document.getElementById("waveform");
+  const cvs = $("waveform");
   if (!cvs) return "找不到 #waveform canvas";
   try {
     const dpr = window.devicePixelRatio || 1;
@@ -398,28 +453,65 @@ function setPlayhead(t) {
   scroll.scrollLeft = Math.max(0, Math.min(state.playhead * PX_PER_SEC, scroll.scrollWidth - scroll.clientWidth));
   redraw();
   drawPose();
+  renderLanePreview();   // 卡片预览跟着播放头走
 }
 
-const TIMELINE = $("timeline");
-TIMELINE.addEventListener("pointerdown", (e) => {
-  if (!state.seq) return;
-  const rect = TIMELINE.getBoundingClientRect();
-  const y = e.clientY - rect.top;
-  const t = tFromEvent(e);
-  if (state.playing) stopPlay();
-  if (y <= SCRUB_H) {
-    state.drag = { mode: "scrub" };
-    setPlayhead(t);
-    return;
-  }
-  const hit = noteAtCss(e.clientX - rect.left);
-  if (hit >= 0) {
-    state.drag = { mode: "note", idx: hit, moved: false };
-  } else {
-    addNote(snapTime(t));
-    state.drag = { mode: "none" };
-  }
-});
+function bindTimeline() {
+  const TIMELINE = $("timeline");
+  TIMELINE.addEventListener("pointerdown", (e) => {
+    if (!state.seq) return;
+    const rect = TIMELINE.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const t = tFromEvent(e);
+    if (state.playing) stopPlay();
+    if (y <= SCRUB_H) {
+      state.drag = { mode: "scrub" };
+      setPlayhead(t);
+      return;
+    }
+    const hit = noteAtCss(e.clientX - rect.left);
+    if (hit >= 0) {
+      state.drag = { mode: "note", idx: hit, moved: false };
+    } else {
+      addNote(snapTime(t));
+      state.drag = { mode: "none" };
+    }
+  });
+  const SCROLL = $("timelineScroll");
+  SCROLL.addEventListener("scroll", () => {
+    if (state.playing) return;
+    const t = SCROLL.scrollLeft / PX_PER_SEC;
+    const pt = Math.max(0, Math.min(duration(), t));
+    if (Math.abs(pt - state.playhead) > 0.01) {
+      state.playhead = pt;
+      redraw();
+      drawPose();
+    }
+  });
+  TIMELINE.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (!state.seq) return;
+    const rect = TIMELINE.getBoundingClientRect();
+    const hit = noteAtCss(e.clientX - rect.left);
+    const i = hit >= 0 ? hit : state.sel;
+    if (i >= 0 && i < state.notes.length) deleteNote(i);
+  });
+  const WAVEFORM = $("waveform");
+  WAVEFORM.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (!state.seq || !state.audioBuf) return;
+    state.decode = "decoding";
+    state.decodeErr = "";
+    drawWave();
+    decodePeaks(state.audioBuf).catch((err) => {
+      state.decode = "fail";
+      state.decodeErr = err?.message || String(err);
+      drawWave();
+      showErr("音频解码失败：" + state.decodeErr);
+    });
+  });
+}
+
 window.addEventListener("pointermove", (e) => {
   if (!state.drag) return;
   if (state.drag.mode === "scrub") setPlayhead(tFromEvent(e));
@@ -429,6 +521,7 @@ window.addEventListener("pointermove", (e) => {
     n.t = snapTime(tFromEvent(e));
     state.drag.moved = true;
     redraw();
+    renderLanePreview();
   }
 });
 window.addEventListener("pointerup", () => {
@@ -438,49 +531,13 @@ window.addEventListener("pointerup", () => {
   state.drag = null;
 });
 
-const SCROLL = $("timelineScroll");
-SCROLL.addEventListener("scroll", () => {
-  if (state.playing) return;
-  const t = SCROLL.scrollLeft / PX_PER_SEC;
-  const pt = Math.max(0, Math.min(duration(), t));
-  if (Math.abs(pt - state.playhead) > 0.01) {
-    state.playhead = pt;
-    redraw();
-    drawPose();
-  }
-});
-
-TIMELINE.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-  if (!state.seq) return;
-  const rect = TIMELINE.getBoundingClientRect();
-  const hit = noteAtCss(e.clientX - rect.left);
-  const i = hit >= 0 ? hit : state.sel;
-  if (i >= 0 && i < state.notes.length) deleteNote(i);
-});
-
-const WAVEFORM = $("waveform");
-WAVEFORM.addEventListener("contextmenu", (e) => {
-  e.preventDefault();
-  if (!state.seq || !state.audioBuf) return;
-  state.decode = "decoding";
-  state.decodeErr = "";
-  drawWave();
-  decodePeaks(state.audioBuf).catch((err) => {
-    state.decode = "fail";
-    state.decodeErr = err?.message || String(err);
-    drawWave();
-    showErr("音频解码失败：" + state.decodeErr);
-  });
-});
-
 // ---- 音符操作 ----------------------------------------------------------------
 
 function addNote(t) {
-  const n = { id: `m-${Date.now()}`, t: +t.toFixed(3), type: "pose",
+  const n = { id: `动作 ${state.notes.length + 1}`, t: +t.toFixed(3), type: "pose",
     difficulty: state.seq?.meta?.difficulty ?? 2, window: null, bones: null };
   state.notes.push(n);
-  selectNote(state.notes.length - 1);
+  selectNote(state.notes.length - 1);   // 选中 → 播放头跳过去 → 卡片预览立刻展示它
   saveDraft();
   redraw();
   renderNoteList();
@@ -489,6 +546,8 @@ function addNote(t) {
 
 function selectNote(i) {
   state.sel = i;
+  const n = state.notes[i];
+  if (n) setPlayhead(n.t);   // 点判定点就跳到它的时刻,姿势/卡片预览跟着它
   renderNoteList();
   renderProps();
   redraw();
@@ -502,13 +561,14 @@ function deleteNote(i) {
   redraw();
   renderNoteList();
   renderProps();
+  renderLanePreview();
 }
 
 function fillEveryN(step) {
   const out = [];
   const beats = beatTimes();
   for (let i = 0; i < beats.length; i += step) {
-    out.push({ id: `auto-${i}`, t: beats[i], type: "pose",
+    out.push({ id: `动作 ${i + 1}`, t: beats[i], type: "pose",
       difficulty: state.seq?.meta?.difficulty ?? 2, window: null, bones: null });
   }
   state.notes = out;
@@ -521,13 +581,19 @@ function fillEveryN(step) {
 
 // ---- 列表与属性 --------------------------------------------------------------
 
+/** 属性面板/列表用的是 innerHTML,名字是用户输入 → 转义一下 */
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
 function renderNoteList() {
   const ul = $("noteList");
   ul.innerHTML = "";
   state.notes.forEach((n, i) => {
     const li = document.createElement("li");
     li.className = i === state.sel ? "sel" : "";
-    li.innerHTML = `<b>${n.t.toFixed(2)}s</b><span class="tag">${n.type}${n.bones ? "·局部" : ""}${n.window ? "·自定义窗" : ""}${n.difficulty ? "·难度" + n.difficulty : ""}</span>`;
+    const name = n.id ? `${esc(n.id)} · ` : "";
+    li.innerHTML = `<b>${n.t.toFixed(2)}s</b><span class="tag">${name}${n.type}${n.bones ? "·局部" : ""}${n.window ? "·自定义窗" : ""}${n.difficulty ? "·难度" + n.difficulty : ""}</span>`;
     li.onclick = () => selectNote(i);
     const del = document.createElement("button");
     del.className = "del";
@@ -547,6 +613,7 @@ function renderProps() {
     <h3>判定点 #${state.sel + 1}</h3>
     <div class="grid">
       <label>时刻(s)</label><input type="number" id="pTime" step="0.01" value="${n.t.toFixed(3)}">
+      <label>动作名</label><input type="text" id="pName" maxlength="40" placeholder="卡片上显示的字" value="${esc(n.id ?? "")}">
       <label>类型</label><select id="pType">
         <option value="pose"${n.type === "pose" ? " selected" : ""}>pose</option>
         <option value="gesture"${n.type === "gesture" ? " selected" : ""}>gesture</option>
@@ -581,7 +648,16 @@ function renderProps() {
   del.style.marginTop = "8px";
   del.onclick = () => deleteNote(state.sel);
   box.appendChild(del);
-  $("pTime").onchange = (ev) => { n.t = +ev.target.value || n.t; saveDraft(); redraw(); renderNoteList(); drawPose(); };
+  // 动作名 → note.id(卡片上显示的字);清空则回退成 pose-N
+  $("pName").onchange = (ev) => {
+    const v = String(ev.target.value || "").trim();
+    if (v) n.id = v; else delete n.id;
+    saveDraft();
+    renderNoteList();
+    renderProps();
+    renderLanePreview();
+  };
+  $("pTime").onchange = (ev) => { n.t = +ev.target.value || n.t; saveDraft(); redraw(); renderNoteList(); drawPose(); renderLanePreview(); };
   $("pType").onchange = (ev) => { n.type = ev.target.value; saveDraft(); renderNoteList(); redraw(); };
   $("pDiff").onchange = (ev) => { n.difficulty = Math.min(10, Math.max(1, +ev.target.value || 2)); saveDraft(); renderNoteList(); };
   $("pWin").onchange = (ev) => {
@@ -604,7 +680,7 @@ function ensureAudio() {
 
 async function loadAudio() {
   if (state.audioUrl) return state.audio;
-  const u = state.seq?.chart?.audio || state.seq?.meta?.audio || "";
+  const u = state.draftAudioUrl || state.seq?.chart?.audio || state.seq?.meta?.audio || "";
   let ab = null, src = null;
   if (state.folder.audio) {
     ab = await state.folder.audio.arrayBuffer();
@@ -711,24 +787,25 @@ function stopPlay() {
   $("btnPlay").textContent = "播放 ▶";
   if (state.audio) { try { state.audio.pause(); } catch { /* noop */ } }
 }
-$("btnPlay").onclick = () => { if (!state.seq) return; state.playing ? stopPlay() : startPlay(); };
-
-$("btnFit").onclick = () => {
-  state.autoFit = "full";
-  state.playhead = 0;
-  fitTimeline();
-  setPlayhead(0);
-  drawWave();
-};
-$("zoom").addEventListener("input", () => {
-  state.autoFit = null;
-  const minPx = minZoomPxps();
-  PX_PER_SEC = Math.max(minPx, +$("zoom").value || PX_PER_SEC);
-  $("zoom").value = String(PX_PER_SEC);
-  resizeCanvas();
-  redraw();
-  drawWave();
-});
+function bindPlayControls() {
+  $("btnPlay").onclick = () => { if (!state.seq) return; state.playing ? stopPlay() : startPlay(); };
+  $("btnFit").onclick = () => {
+    state.autoFit = "full";
+    state.playhead = 0;
+    fitTimeline();
+    setPlayhead(0);
+    drawWave();
+  };
+  $("zoom").addEventListener("input", () => {
+    state.autoFit = null;
+    const minPx = minZoomPxps();
+    PX_PER_SEC = Math.max(minPx, +$("zoom").value || PX_PER_SEC);
+    $("zoom").value = String(PX_PER_SEC);
+    resizeCanvas();
+    redraw();
+    drawWave();
+  });
+}
 window.addEventListener("resize", () => {
   if (state.autoFit === "window") {
     fitWindow();
@@ -747,11 +824,13 @@ window.addEventListener("resize", () => {
   resizeCanvas();
   redraw();
   drawWave();
+  renderLanePreview();   // 轨道宽度变了 → 剪影流速/位置跟着重算
 });
 
 // ---- 导入 / 导出 --------------------------------------------------------------
 
 function audioFileName() {
+  if (state.draftAudioName) return state.draftAudioName;
   const seq = state.seq;
   const base = seq.danceId ? `../songs/${seq.danceId}/` : "";
   const audio = seq.chart?.audio || seq.meta?.audio || "";
@@ -792,17 +871,39 @@ function readDanceId(silent) {
   return null;
 }
 
-$("danceId").addEventListener("change", () => {
-  const v = readDanceId(true);
-  if (v) state.danceId = v;
-});
-
-$("btnSave").onclick = async () => {
+function bindSave() {
+  $("danceId").addEventListener("change", () => {
+    const v = readDanceId(true);
+    if (v) state.danceId = v;
+  });
+  $("btnSave").onclick = async () => {
   const btn = $("btnSave");
   if (!state.seq) return;
   const content = chartContent();
   const count = validateContent(content);
   if (count <= 0) { if (count === 0) alert("谱面没有任何判定点"); return; }
+  if (state.draftId) {
+    btn.disabled = true; btn.textContent = "保存中…";
+    try {
+      const headers = { ...deviceHeaders(), "Content-Type": "text/plain" };
+      const merged = { ...state.seq, chart: content };
+      const r1 = await fetch(`/api/drafts/${state.draftId}/sequence`, { method: "PUT", headers, body: JSON.stringify(merged) });
+      if (!r1.ok) throw new Error(`保存序列失败 (${r1.status})`);
+      const r2 = await fetch(`/api/drafts/${state.draftId}/chart`, { method: "PUT", headers, body: JSON.stringify(content) });
+      if (!r2.ok) throw new Error(`保存谱面失败 (${r2.status})`);
+      state.baseNotes = copyNotes(state.notes);
+      saveDraft();
+      alert("已保存到草稿");
+      window.parent?.postMessage?.({ type: "draft-saved" }, "*");
+      onSaved?.();
+    } catch (err) {
+      alert("保存失败：" + err.message);
+      showErr("保存失败：" + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = "保存到草稿";
+    }
+    return;
+  }
   const danceId = readDanceId();
   if (!danceId) return;
   const exist = dances().find((d) => d.danceId === danceId);
@@ -835,12 +936,14 @@ $("btnSave").onclick = async () => {
     btn.disabled = false;
     btn.textContent = "保存到歌单";
   }
-};
+  };
+}
 
-$("btnFill1").onclick = () => fillEveryN(1);
+function bindNoteButtons() {
+  $("btnFill1").onclick = () => fillEveryN(1);
 $("btnFill2").onclick = () => fillEveryN(2);
 $("btnFill4").onclick = () => fillEveryN(4);
-$("btnClear").onclick = () => { state.notes = []; state.sel = -1; saveDraft(); redraw(); renderNoteList(); renderProps(); };
+$("btnClear").onclick = () => { state.notes = []; state.sel = -1; saveDraft(); redraw(); renderNoteList(); renderProps(); renderLanePreview(); };
 
 $("btnReset").onclick = () => {
   localStorage.removeItem(DRAFT_KEY);
@@ -850,16 +953,22 @@ $("btnReset").onclick = () => {
   renderNoteList();
   renderProps();
   drawPose();
+  renderLanePreview();
 };
 
-["bpm", "offset"].forEach((id) => $(id).addEventListener("change", () => {
-  state.bpm = Math.max(20, Number($("bpm").value) || 120);
-  state.offset = Number($("offset").value) || 0;
-  redraw();
-  drawPose();
-}));
+  ["bpm", "offset"].forEach((id) => $(id).addEventListener("change", () => {
+    state.bpm = Math.max(20, Number($("bpm").value) || 120);
+    state.offset = Number($("offset").value) || 0;
+    redraw();
+    drawPose();
+    renderLanePreview();   // 拍长变了 → 平台律动也跟着变
+  }));
+}
 
-$("folderFile").addEventListener("change", async (e) => {
+function bindFolder() {
+  const folderInput = $("folderFile");
+  if (!folderInput) return; // 内嵌工作台没有「舞曲文件夹」入口(素材由工作台管)
+  folderInput.addEventListener("change", async (e) => {
   const input = e.target;
   const files = [...(input.files || [])];
   input.value = "";
@@ -883,7 +992,8 @@ $("folderFile").addEventListener("change", async (e) => {
     alert("FBX 解析失败：" + err.message);
     showErr("FBX 解析失败：" + err.message);
   }
-});
+  });
+}
 
 // ---- 初始化 ------------------------------------------------------------------
 
@@ -899,8 +1009,40 @@ function populateDances(selectValue) {
   sel.value = selectValue ?? "";
 }
 
+async function loadDraftMode() {
+  BODY.classList.add("draft-mode");
+  $("btnSave").textContent = "保存到草稿";
+  // 草稿模式隐藏「舞曲文件夹 / 曲子」选择(素材来自草稿)
+  for (const id of ["folderFile", "songSel"]) {
+    const node = $(id);
+    if (node?.closest("label")) node.closest("label").style.display = "none";
+  }
+  try {
+    const r = await fetch(`/api/drafts/${DRAFT_ID}`, { headers: deviceHeaders() });
+    if (!r.ok) throw new Error(`读取草稿失败 (${r.status})`);
+    const draft = await r.json();
+    const sr = await fetch(`/api/drafts/${DRAFT_ID}/text/sequence`, { headers: deviceHeaders() });
+    if (!sr.ok) throw new Error(`读取序列失败 (${sr.status})`);
+    const seq = JSON.parse(await sr.text());
+    state.draftAudioUrl = `/api/drafts/${DRAFT_ID}/raw/audio`;
+    state.draftAudioName = draft.files?.audio || "";
+    state.danceId = draft.danceId || slugify(draft.label || "dance");
+    state.label = draft.label || "";
+    $("danceId").value = state.danceId;
+    if (!seq.chart) seq.chart = {};
+    if (!seq.chart.audio) seq.chart.audio = state.draftAudioName;
+    setSeq(seq, "draft:" + DRAFT_ID);
+    $("info").textContent = `草稿模式：${draft.label || "未命名"} · ${(seq.frames || []).length} 帧 / ${duration().toFixed(2)}s。编辑完点「保存到草稿」`;
+  } catch (err) {
+    showErr("草稿加载失败：" + err.message);
+  }
+}
+
 async function init() {
   setWaveStatus(`波形引擎 ${WAVE_VER} 就绪（未载入音频）`);
+  // 逐点 3D 白影清单(没有也照常编辑,预览用 2D 剪影)
+  loadLaneManifest().then((m) => { state.laneManifest = m; renderLanePreview(); }).catch(() => {});
+  if (DRAFT_ID) { await loadDraftMode(); return; }
   try {
     await loadSongIndex();
     const sel = $("songSel");
@@ -928,4 +1070,23 @@ async function init() {
   }
 }
 
-init();
+/**
+ * 挂载谱面编辑器。
+ *  - 独立页面:chart-editor.html 的 <script type="module"> 里直接 import 后调用
+ *    mountChartEditor(document.body, {})(此时 DRAFT_ID 已从 URL 读好)。
+ *  - 内嵌工作台:const { mountChartEditor } = await import("./chart-editor.js");
+ *    mountChartEditor(container, { draftId, onSaved })。
+ */
+export function mountChartEditor(container, { draftId = null, onSaved: cb = null } = {}) {
+  ROOT = container;
+  BODY = container;
+  if (draftId) { DRAFT_ID = draftId; state.draftId = draftId; }
+  if (cb) onSaved = cb;
+  createLaneViewNow();
+  bindTimeline();
+  bindPlayControls();
+  bindSave();
+  bindNoteButtons();
+  bindFolder();
+  return init();
+}

@@ -4,15 +4,16 @@ import OSS from 'ali-oss';
 import QRCode from 'qrcode';
 import { spawn } from 'node:child_process';
 import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, writeFile, rename, rm, stat, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm, stat, readdir, copyFile } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import { Transform, Readable } from 'node:stream';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeVideo, validPng } from './media.js';
-import { selectHighlight, validateMetadata } from './highlight.js';
+import { makeVideo, makeFullVideo, validPng, runFFmpeg, ffmpegPath, thumbArgs } from './media.js';
+import { buildHighlightStory, validateMetadata } from './highlight.js';
 import { createSongStore } from './songstore.js';
+import { createDraftStore } from './draftstore.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const token = () => randomBytes(24).toString('base64url');
@@ -31,7 +32,13 @@ export async function createApp(options = {}) {
   if (!['local', 'oss'].includes(mode)) throw new Error('STORAGE_MODE must be local or oss');
   const songsDir = path.resolve(options.songsDir || process.env.SONGS_DIR || path.join(root, 'songs'));
   const songStore = createSongStore({ songsDir });
+  const draftsDir = path.resolve(options.draftsDir || process.env.DRAFTS_DIR || path.join(root, '.drafts'));
+  await mkdir(draftsDir, { recursive: true });
+  const draftStore = createDraftStore({ draftsDir });
   const videosDir = path.resolve(options.videosDir || process.env.VIDEOS_DIR || path.join(root, 'videos'));
+  const highlightIntro = path.resolve(options.highlightIntro || process.env.HIGHLIGHT_INTRO ||
+    path.join(videosDir, 'rokoko导入视频', '开场.mp4'));
+  const highlightIntroDuration = Number(options.highlightIntroDuration || process.env.HIGHLIGHT_INTRO_DURATION) || 3.6;
   const videoMapFile = path.join(videosDir, 'index.json');
   const readVideoMap = async () => {
     try {
@@ -43,6 +50,171 @@ export async function createApp(options = {}) {
     const tmp = `${videoMapFile}.tmp`;
     await writeFile(tmp, JSON.stringify({ schema: 'videos/index/v1', mapping }, null, 2));
     await rename(tmp, videoMapFile);
+  };
+  const readMp4Names = async () => {
+    try {
+      return (await readdir(videosDir)).filter((f) => /\.mp4$/i.test(f));
+    } catch { return []; }
+  };
+  const readDanceIds = async () => {
+    try {
+      const idx = JSON.parse(await readFile(path.join(songsDir, 'index.json'), 'utf8'));
+      return (idx.dances || []).map((d) => d.id).filter((id) => typeof id === 'string' && id);
+    } catch { return []; }
+  };
+
+  // ---- 作品(工坊) ↔ 已上架歌单 的桥梁 ---------------------------------------
+  const songsIndexFile = path.join(songsDir, 'index.json');
+  const readSongsIndex = async () => {
+    try {
+      const idx = JSON.parse(await readFile(songsIndexFile, 'utf8'));
+      return { schema: idx.schema || 'songs/index/v1', dances: idx.dances || [], songs: idx.songs || [] };
+    } catch { return { schema: 'songs/index/v1', dances: [], songs: [] }; }
+  };
+  const writeSongsIndex = async (idx) => {
+    const tmp = `${songsIndexFile}.tmp`;
+    await writeFile(tmp, JSON.stringify(idx, null, 2));
+    await rename(tmp, songsIndexFile);
+  };
+  const fileExists = async (p) => { if (!p) return false; try { await stat(p); return true; } catch { return false; } };
+  /** 作品的文件目录:普通作品在自己的 .drafts/<id>/;external 老作品在 songs/<danceId>/。 */
+  const workDirOf = (draft) => (draft.external && draft.danceId)
+    ? path.join(songsDir, draft.danceId)
+    : draftStore.dirOf(draft.id);
+  /** 作品里某个文件的绝对路径(真实文件名存在 files 里,两种目录布局通用)。 */
+  const workFileOf = (draft, kind) => {
+    const name = draft.files?.[kind];
+    return name ? path.join(workDirOf(draft), name) : null;
+  };
+
+  /** 把 songs/index.json 里已有的舞曲补成「已上架」作品记录(只补元数据,不动文件)。 */
+  const syncLegacyWorks = async () => {
+    const [idx, drafts, mapping] = await Promise.all([readSongsIndex(), draftStore.list(), readVideoMap()]);
+    const known = new Set(drafts.map((d) => d.danceId).filter(Boolean));
+    let added = 0;
+    for (const d of idx.dances) {
+      if (!d?.danceId || known.has(d.danceId)) continue;
+      const song = idx.songs.find((s) => s.id === (d.defaultSongId || d.id));
+      const videoName = mapping[d.danceId] || '';
+      // 老歌单没有 mode,按素材来源推断:有 FBX 动作的一律算 3D 作品
+      // (copydance1 这种「3D 动作 + 另外绑了参考视频」的,两个列表都该进,不能判成视频作品);
+      // 只有「没有 FBX、完全靠视频撑起来」的才算视频作品。
+      const legacyMode = d.fbxFile ? '3d' : (videoName ? 'video' : '3d');
+      await draftStore.create({
+        mode: legacyMode,
+        label: d.label || d.danceId,
+        status: 'published',
+        external: true,                 // 文件在 songs/<danceId>/
+        danceId: d.danceId,
+        bpm: song?.bpm ?? 120,
+        videoName,
+        songId: d.defaultSongId || '',
+        files: {
+          // 素材:3D 作品是 FBX,视频作品才是视频。两者都有时以 FBX 为准
+          // (copydance1 = FBX 动作 + 另外绑了参考视频,它的素材是 FBX,不是那个视频)
+          source: d.fbxFile || videoName || null,
+          audio: d.musicFile || null,
+          sequence: `${d.danceId}.json`,
+          chart: d.chartFile || null,
+          lane: null,
+        },
+      });
+      added++;
+    }
+    return added;
+  };
+
+  /** 从已上架歌单里摘掉一支舞曲(打回草稿 / 删除时用),并清掉视频绑定。 */
+  const unpublishFromIndex = async (danceId) => {
+    if (!danceId) return;
+    const idx = await readSongsIndex();
+    idx.dances = idx.dances.filter((d) => d.danceId !== danceId && d.id !== danceId);
+    idx.songs = idx.songs.filter((s) => s.id !== danceId);
+    await writeSongsIndex(idx);
+    const mapping = await readVideoMap();
+    if (danceId in mapping) { mapping[danceId] = ''; await writeVideoMap(mapping); }
+  };
+
+  /** 把 external(老)作品的文件拷回自己的作品目录,之后它就是普通草稿。 */
+  const materializeWork = async (draft) => {
+    if (!draft.external) return draft;
+    const dir = draftStore.dirOf(draft.id);
+    await mkdir(dir, { recursive: true });
+    const songDir = draft.danceId ? path.join(songsDir, draft.danceId) : '';
+    const copyIn = async (src, dstName) => {
+      if (!src || !dstName || !(await fileExists(src))) return null;
+      await copyFile(src, path.join(dir, dstName));
+      return dstName;
+    };
+    const files = { source: null, audio: null, sequence: null, chart: null, lane: null };
+    // 序列/谱面落成规范文件名,后续步骤才能照常读写
+    files.sequence = await copyIn(draft.files.sequence ? path.join(songDir, draft.files.sequence) : null, 'sequence.json');
+    files.chart = await copyIn(draft.files.chart ? path.join(songDir, draft.files.chart) : null, 'chart.json');
+    files.audio = await copyIn(draft.files.audio ? path.join(songDir, draft.files.audio) : null, draft.files.audio);
+    if (draft.files.source) {
+      // 3D:FBX 在 songs/ 里,拷回作品目录;视频:本来就在 videos/,只留名字,不重复拷一份
+      files.source = draft.mode === '3d'
+        ? await copyIn(path.join(songDir, draft.files.source), draft.files.source)
+        : draft.files.source;
+    }
+    // 判定轨道白影在 assets/lane/<danceId>/
+    const laneSrc = draft.danceId ? path.join(root, 'web_dance', 'assets', 'lane', draft.danceId) : '';
+    if (laneSrc && (await fileExists(path.join(laneSrc, 'manifest.json')))) {
+      const dstLane = path.join(dir, 'lane');
+      await mkdir(dstLane, { recursive: true });
+      for (const f of await readdir(laneSrc)) {
+        if (f === 'manifest.json' || /\.png$/i.test(f)) await copyFile(path.join(laneSrc, f), path.join(dstLane, f));
+      }
+      files.lane = 'lane/manifest.json';
+    }
+    draft.files = files;
+    draft.external = false;
+    return draftStore.put(draft);
+  };
+
+  /** 写操作前先确保作品有自己的本地目录(external 老作品会被拷回来)。 */
+  const ensureLocal = async (id) => {
+    const draft = await draftStore.get(id);
+    return draft.external ? materializeWork(draft) : draft;
+  };
+  // 舞曲视频:缩略图(懒生成) + 元数据(ffmpeg 探测,进程内缓存)。
+  const postersDir = path.join(videosDir, '.posters');
+  await mkdir(postersDir, { recursive: true });
+  const posterFile = (name) => path.join(postersDir, `${name}.jpg`);
+  const ensurePoster = async (name) => {
+    const dst = posterFile(name);
+    try { await stat(dst); return dst; } catch { /* 生成 */ }
+    const src = path.join(videosDir, name);
+    for (const ss of ['1', '0']) {
+      try {
+        await runFFmpeg(['-ss', ss, '-i', src, '-frames:v', '1', '-vf', 'scale=320:-2', dst], 30000);
+        return dst;
+      } catch { /* 换 0s 再试 */ }
+    }
+    return null;
+  };
+  const videoMeta = new Map();
+  const probeVideo = (file) => new Promise((resolve) => {
+    const child = spawn(ffmpegPath, ['-hide_banner', '-i', file], { windowsHide: true });
+    let stderr = '';
+    child.stderr.on('data', (b) => { stderr = (stderr + b).slice(-12000); });
+    child.on('error', () => resolve({ duration: null, width: null, height: null }));
+    child.on('close', () => {
+      const dur = /Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(stderr);
+      const vid = /Video:.*?(\d{2,5})x(\d{2,5})/.exec(stderr);
+      const seconds = dur ? (+dur[1]) * 3600 + (+dur[2]) * 60 + parseFloat(dur[3]) : null;
+      resolve({
+        duration: Number.isFinite(seconds) ? Math.round(seconds) : null,
+        width: vid ? +vid[1] : null,
+        height: vid ? +vid[2] : null,
+      });
+    });
+  });
+  const getVideoMeta = async (name) => {
+    if (videoMeta.has(name)) return videoMeta.get(name);
+    const meta = await probeVideo(path.join(videosDir, name));
+    videoMeta.set(name, meta);
+    return meta;
   };
   const baseURL = new URL(publicBase);
   if (!['http:', 'https:'].includes(baseURL.protocol) || baseURL.pathname !== '/' || baseURL.search || baseURL.hash)
@@ -62,6 +234,8 @@ export async function createApp(options = {}) {
   }) : oss;
   await mkdir(data, { recursive: true });
   const jobs = new Map();
+  const SHORT_VIDEO = 'short.mp4';
+  const LONG_VIDEO = 'long.mp4';
   const workDir = j => path.join(data, j.id);
   const object = (j, name) => `highlights/${j.id}/${name}`;
   const save = async j => {
@@ -75,6 +249,10 @@ export async function createApp(options = {}) {
       const j = JSON.parse(await readFile(path.join(data, name, 'job.json'), 'utf8'));
       if (j.id !== name) continue;
       if (j.status === 'processing') j.status = 'queued';
+      if (j.fullStatus === 'processing') {
+        j.fullStatus = 'failed';
+        j.fullError = '服务重启中断了完整纪念版生成，高光成片仍可正常领取';
+      }
       jobs.set(j.id, j);
     } catch { /* Ignore incomplete metadata, never serve it. */ }
   }
@@ -100,15 +278,30 @@ export async function createApp(options = {}) {
       try {
         j.status = 'processing'; await save(j);
         await downloadSource(j);
-        const clip = selectHighlight(j.metadata.samples, j.metadata.duration, 28);
+        const clip = { ...buildHighlightStory(j.metadata), introDuration: highlightIntroDuration,
+          sourceDuration: j.metadata.duration };
         const dir = workDir(j);
-        await (options.makeVideo || makeVideo)(path.join(dir, 'source'), path.join(dir, 'highlight.mp4'),
-          path.join(dir, 'poster.jpg'), path.join(dir, 'card.png'), clip);
+        await (options.makeVideo || makeVideo)(path.join(dir, 'source'), path.join(dir, SHORT_VIDEO),
+          path.join(dir, 'poster.jpg'), path.join(dir, 'card.png'), clip, highlightIntro, path.join(dir, 'thumb.jpg'));
         if (oss) {
-          await oss.put(object(j, 'highlight.mp4'), path.join(dir, 'highlight.mp4'), { headers: { 'Content-Type': 'video/mp4' } });
+          await oss.put(object(j, SHORT_VIDEO), path.join(dir, SHORT_VIDEO), { headers: { 'Content-Type': 'video/mp4' } });
           await oss.put(object(j, 'poster.jpg'), path.join(dir, 'poster.jpg'), { headers: { 'Content-Type': 'image/jpeg' } });
+          // 缩略图是给取片台认人用的,不能因为它上传失败就让整条成片失败。
+          try { await oss.put(object(j, 'thumb.jpg'), path.join(dir, 'thumb.jpg'), { headers: { 'Content-Type': 'image/jpeg' } }); }
+          catch (e) { console.error('Thumbnail upload failed', j.id, e.message); }
         }
-        j.clip = clip; j.status = 'ready'; j.error = null; j.readyAt = Date.now();
+        j.clip = clip; j.artifactVersion = 'short-long-v1'; j.status = 'ready'; j.error = null; j.readyAt = Date.now();
+        await save(j);
+        try {
+          j.fullStatus = 'processing'; j.fullError = null; await save(j);
+          await (options.makeFullVideo || makeFullVideo)(path.join(dir, 'source'), path.join(dir, LONG_VIDEO),
+            path.join(dir, 'card.png'), clip, highlightIntro);
+          if (oss) await oss.put(object(j, LONG_VIDEO), path.join(dir, LONG_VIDEO), { headers: { 'Content-Type': 'video/mp4' } });
+          j.fullStatus = 'ready'; j.fullReadyAt = Date.now();
+        } catch (e) {
+          console.error('Full video processing failed', j.id, e.message);
+          j.fullStatus = 'failed'; j.fullError = '完整纪念版生成失败，高光成片仍可正常领取';
+        }
         await save(j);
       } catch (e) {
         console.error('Highlight processing failed', j.id, e.message);
@@ -125,7 +318,7 @@ export async function createApp(options = {}) {
         await exclusive(j.id, async () => {
           if (j.expiresAt <= Date.now() || j.status === 'deleted') {
             j.status = j.status === 'deleted' ? 'deleted' : 'expired'; await save(j);
-            if (oss) await oss.deleteMulti(['source', 'highlight.mp4', 'poster.jpg'].map(n => object(j, n)));
+            if (oss) await oss.deleteMulti(['source', SHORT_VIDEO, LONG_VIDEO, 'highlight.mp4', 'full.mp4', 'poster.jpg', 'thumb.jpg'].map(n => object(j, n)));
             await rm(workDir(j), { recursive: true, force: true });
             jobs.delete(j.id);
           } else if (j.createdAt + DAY < Date.now() && j.status === 'ready') {
@@ -176,14 +369,24 @@ export async function createApp(options = {}) {
     res.json([...jobs.values()].sort((a, b) => b.createdAt - a.createdAt).map(j => ({
       id: j.id, ownerToken: j.ownerToken, status: j.status, mime: j.mime,
       createdAt: j.createdAt, expiresAt: j.expiresAt, readyAt: j.readyAt, retries: j.retries || 0,
-      error: j.error, duration: j.clip ? j.clip.duration + 2 : null, result: j.metadata?.result || null,
+      error: j.error, duration: j.clip ? j.clip.duration + (j.clip.cardDuration || 2) + (j.clip.introDuration || 0) : null, result: j.metadata?.result || null,
+      fullStatus: j.fullStatus || (j.status === 'ready' ? 'unavailable' : 'waiting'),
+      fullError: j.fullError || null,
+      fullDuration: j.clip?.sourceDuration ? j.clip.sourceDuration + (j.clip.cardDuration || 2) + (j.clip.introDuration || 0) : null,
+      highlightTitle: j.metadata?.highlightTitle || '', highlightCount: j.metadata?.highlights?.length || 0,
       shareUrl: `${publicBase}/v/${j.id}`,
-      ...(j.status === 'ready' ? { videoUrl: `/api/highlights/${j.id}/media`, posterUrl: `/api/highlights/${j.id}/poster` } : {}),
+      ...(j.status === 'ready' ? { videoUrl: `/api/highlights/${j.id}/media`, posterUrl: `/api/highlights/${j.id}/poster`, thumbUrl: `/api/highlights/${j.id}/thumb` } : {}),
+      ...(j.fullStatus === 'ready' ? { fullVideoUrl: `/api/highlights/${j.id}/full-media` } : {}),
     })));
   });
   app.post('/api/highlights', device, async (req, res) => {
     if (!mimeTypes.has(req.body?.mime)) throw fail(400, '不支持的录像格式');
-    if ([...jobs.values()].filter(j => ['uploading', 'queued', 'processing'].includes(j.status)).length >= 20)
+    // Only the work the single transcode worker must drain belongs in this limit.
+    // An `uploading` job consumes no transcode capacity: it is created when the round
+    // starts and only becomes `queued` after the client finishes uploading. Counting it
+    // here let abandoned tabs (closed page, dropped network) pile up until every new
+    // round got 429 - while the player saw nothing, because the client swallows the error.
+    if ([...jobs.values()].filter(j => ['queued', 'processing'].includes(j.status)).length >= 20)
       throw fail(429, '待处理视频较多，请稍后重试');
     const j = { id: token(), ownerToken: token(), status: 'uploading', mime: req.body.mime,
       createdAt: Date.now(), expiresAt: Date.now() + 7 * DAY };
@@ -262,8 +465,13 @@ export async function createApp(options = {}) {
   app.get('/api/highlights/:id', (req, res) => {
     const j = find(req);
     res.json({ status: j.status, expiresAt: j.expiresAt, error: j.error,
-      result: j.metadata?.result, duration: j.clip ? j.clip.duration + 2 : null,
-      ...(j.status === 'ready' ? { videoUrl: `/api/highlights/${j.id}/media`, posterUrl: `/api/highlights/${j.id}/poster` } : {}) });
+      result: j.metadata?.result, duration: j.clip ? j.clip.duration + (j.clip.cardDuration || 2) + (j.clip.introDuration || 0) : null,
+      fullStatus: j.fullStatus || (j.status === 'ready' ? 'unavailable' : 'waiting'),
+      fullError: j.fullError || null,
+      fullDuration: j.clip?.sourceDuration ? j.clip.sourceDuration + (j.clip.cardDuration || 2) + (j.clip.introDuration || 0) : null,
+      highlightTitle: j.metadata?.highlightTitle || '', highlightCount: j.metadata?.highlights?.length || 0,
+      ...(j.status === 'ready' ? { videoUrl: `/api/highlights/${j.id}/media`, posterUrl: `/api/highlights/${j.id}/poster`, thumbUrl: `/api/highlights/${j.id}/thumb` } : {}),
+      ...(j.fullStatus === 'ready' ? { fullVideoUrl: `/api/highlights/${j.id}/full-media` } : {}) });
   });
   app.get('/api/highlights/:id/qr', async (req, res) => {
     const j = find(req);
@@ -272,40 +480,112 @@ export async function createApp(options = {}) {
   // 直链签名 URL:OSS 模式走自定义域名签名(24 小时),本地模式走本机媒体地址。
   // 缓存一段时间,避免 /staff 自动刷新时二维码因签名每次不同而闪烁。
   const signedUrlCache = new Map();
-  const mediaUrl = (j, download) => {
+  const storedVideoName = (j, version) => j.artifactVersion === 'short-long-v1'
+    ? (version === 'long' ? LONG_VIDEO : SHORT_VIDEO)
+    : (version === 'long' ? 'full.mp4' : 'highlight.mp4');
+  const directVideoUrl = (j, version, download) => {
     const now = Date.now();
-    const cached = signedUrlCache.get(j.id);
-    if (cached && cached.until > now + 3600000) return download ? cached.download : cached.play;
+    const cacheKey = `${j.id}:${version}:${download ? 'download' : 'play'}`;
+    const cached = signedUrlCache.get(cacheKey);
+    if (cached && cached.until > now + 3600000) return cached.url;
     const expires = Math.max(1, Math.min(86400, Math.floor((j.expiresAt - now) / 1000)));
-    const entry = {
-      play: delivery ? delivery.signatureUrl(object(j, 'highlight.mp4'), { expires }) : `${publicBase}/api/highlights/${j.id}/media`,
-      download: delivery ? delivery.signatureUrl(object(j, 'highlight.mp4'), { expires, response: { 'content-disposition': 'attachment; filename="dance-highlight.mp4"' } }) : `${publicBase}/api/highlights/${j.id}/media?download=1`,
-      until: now + expires * 1000,
-    };
-    signedUrlCache.set(j.id, entry);
-    return download ? entry.download : entry.play;
+    const route = version === 'long' ? 'full-media' : 'media';
+    const filename = version === 'long' ? 'dance-long.mp4' : 'dance-short.mp4';
+    const url = delivery
+      ? delivery.signatureUrl(object(j, storedVideoName(j, version)), { expires,
+        ...(download ? { response: { 'content-disposition': `attachment; filename="${filename}"` } } : {}) })
+      : `${publicBase}/api/highlights/${j.id}/${route}${download ? '?download=1' : ''}`;
+    signedUrlCache.set(cacheKey, { url, until: now + expires * 1000 });
+    return url;
   };
   app.get('/api/highlights/:id/qr-play', async (req, res) => {
     const j = find(req);
     if (j.status !== 'ready') throw fail(409, '视频尚未生成');
-    res.type('svg').send(await QRCode.toString(mediaUrl(j, false), { type: 'svg', margin: 2, width: 240 }));
+    res.type('svg').send(await QRCode.toString(directVideoUrl(j, 'short', false), { type: 'svg', margin: 2, width: 240 }));
+  });
+  const sendDownloadQr = async (res, j, version) => {
+    if (version === 'long' && j.fullStatus !== 'ready') throw fail(409, '完整视频尚未生成');
+    res.type('svg').send(await QRCode.toString(directVideoUrl(j, version, true), { type: 'svg', margin: 2, width: 240 }));
+  };
+  app.get('/api/highlights/:id/qr-short', async (req, res) => {
+    const j = find(req);
+    if (j.status !== 'ready') throw fail(409, '高光视频尚未生成');
+    await sendDownloadQr(res, j, 'short');
+  });
+  app.get('/api/highlights/:id/qr-long', async (req, res) => {
+    const j = find(req);
+    await sendDownloadQr(res, j, 'long');
   });
   app.get('/api/highlights/:id/qr-download', async (req, res) => {
     const j = find(req);
     if (j.status !== 'ready') throw fail(409, '视频尚未生成');
-    res.type('svg').send(await QRCode.toString(mediaUrl(j, true), { type: 'svg', margin: 2, width: 240 }));
+    // 兼容旧后台：旧的“下载码”仍明确对应 short 高光版。
+    await sendDownloadQr(res, j, 'short');
   });
-  for (const [route, name] of [['media', 'highlight.mp4'], ['poster', 'poster.jpg']]) {
+  // 取片台认人用的缩略图。本次改动之前生成的任务没有这张图,所以这里按需补一张并同步到 OSS:
+  // 否则线上已有的成片在取片台上全是没有图的卡片,等于白做。
+  // 抽帧实现可注入,便于测试串行行为(与 options.makeVideo 同一套路)。
+  const extractThumb = options.extractThumb || ((src, dst, clip) => runFFmpeg(thumbArgs(src, dst, clip), 60000));
+  const backfillThumb = async (j) => {
+    const dst = path.join(workDir(j), 'thumb.jpg');
+    try { await stat(dst); return true; } catch { /* 需要生成 */ }
+    const src = path.join(workDir(j), storedVideoName(j, 'short'));
+    try { await stat(src); } catch { return false; }
+    try {
+      await extractThumb(src, dst, j.clip || {});
+    } catch (e) {
+      console.error('Thumbnail extraction failed', j.id, e.message);
+      await rm(dst, { force: true });
+      return false;
+    }
+    if (oss) {
+      try { await oss.put(object(j, 'thumb.jpg'), dst, { headers: { 'Content-Type': 'image/jpeg' } }); }
+      catch (e) { console.error('Thumbnail upload failed', j.id, e.message); }
+    }
+    return true;
+  };
+  // 取片台一打开会同时请求所有卡片的缩略图,历史任务还要在这次请求里现场抽帧。
+  // 不能并发:9 条老任务会在同一瞬间拉起 9 个 ffmpeg,去和正在给顾客转码的那个 worker 抢 CPU,
+  // 直接把「等视频」的时间拉长。串行排队。
+  let thumbQueue = Promise.resolve();
+  const ensureThumb = (j) => {
+    const next = thumbQueue.then(() => backfillThumb(j), () => backfillThumb(j));
+    thumbQueue = next.catch(() => {});
+    return next;
+  };
+  app.get('/api/highlights/:id/thumb', async (req, res) => {
+    const j = find(req);
+    if (j.status !== 'ready') throw fail(409, '视频尚未生成');
+    const local = await ensureThumb(j);
+    if (delivery) return res.redirect(delivery.signatureUrl(object(j, 'thumb.jpg'), {
+      expires: Math.max(1, Math.min(300, Math.floor((j.expiresAt - Date.now()) / 1000))),
+    }));
+    if (!local) throw fail(404, '缩略图不可用');
+    res.sendFile(path.join(workDir(j), 'thumb.jpg'), { dotfiles: 'allow' });
+  });
+  app.get('/api/highlights/:id/full-media', (req, res) => {
+    const j = find(req);
+    if (j.fullStatus !== 'ready') throw fail(409, j.fullStatus === 'failed' ? (j.fullError || '完整纪念版生成失败') : '完整纪念版尚未生成');
+    const name = storedVideoName(j, 'long');
+    if (delivery) return res.redirect(delivery.signatureUrl(object(j, name), {
+      expires: Math.max(1, Math.min(300, Math.floor((j.expiresAt - Date.now()) / 1000))),
+      response: { 'content-disposition': `${req.query.download === '1' ? 'attachment' : 'inline'}; filename="dance-long.mp4"` },
+    }));
+    if (req.query.download === '1') res.attachment('dance-long.mp4');
+    res.sendFile(path.join(workDir(j), name), { dotfiles: 'allow' });
+  });
+  for (const [route, fixedName] of [['media', null], ['poster', 'poster.jpg']]) {
     app.get(`/api/highlights/:id/${route}`, (req, res) => {
       const j = find(req);
       if (j.status !== 'ready') throw fail(409, '视频尚未生成');
+      const name = fixedName || storedVideoName(j, 'short');
       const download = route === 'media' && req.query.download === '1';
       if (delivery) return res.redirect(delivery.signatureUrl(object(j, name), {
         expires: Math.max(1, Math.min(300, Math.floor((j.expiresAt - Date.now()) / 1000))),
         // 对象上传时已带正确 Content-Type,不要再覆盖它(OSS 会拒绝 response-content-type)。
-        response: { 'content-disposition': `${download ? 'attachment' : 'inline'}; filename="dance-highlight.${route === 'media' ? 'mp4' : 'jpg'}"` },
+        response: { 'content-disposition': `${download ? 'attachment' : 'inline'}; filename="dance-${route === 'media' ? 'short.mp4' : 'highlight.jpg'}"` },
       }));
-      if (download) res.attachment('dance-highlight.mp4');
+      if (download) res.attachment('dance-short.mp4');
       // Data lives under .highlight-data; allow its dot-prefixed path segment
       // (send otherwise ignores dot-directories and returns 404 "Not Found").
       res.sendFile(path.join(workDir(j), name), { dotfiles: 'allow' });
@@ -357,19 +637,51 @@ export async function createApp(options = {}) {
     }
   });
 
-  // 可用参考视频列表(videos/*.mp4,供 /settings 的「右侧画面」配置)。
+  // 舞曲视频库(videos/*.mp4):列表带缩略图/时长/分辨率,支持上传/删除。
   app.get('/api/videos', async (req, res) => {
     try {
-      const files = (await readdir(videosDir))
-        .filter((f) => /\.mp4$/i.test(f))
-        .sort((a, b) => a.localeCompare(b))
-        .map((f) => ({ name: f, url: `/videos/${encodeURIComponent(f)}` }));
-      res.json(files);
+      const names = (await readdir(videosDir)).filter((f) => /\.mp4$/i.test(f)).sort((a, b) => a.localeCompare(b));
+      const out = [];
+      for (const name of names) {
+        const meta = await getVideoMeta(name);
+        out.push({ name, url: `/videos/${encodeURIComponent(name)}`, poster: `/api/videos/${encodeURIComponent(name)}/poster`, ...meta });
+      }
+      res.json(out);
     } catch (e) {
       res.json([]);
     }
   });
-  // 每首舞曲 → 参考视频 的绑定映射(游戏页只读,后台 /settings 可写)。
+  // 上传视频(原始流,文件名走 URL,白名单 .mp4)。
+  app.put('/api/videos/:name', device, async (req, res) => {
+    const name = path.basename(String(req.params.name));
+    if (!/\.mp4$/i.test(name) || name.startsWith('.')) throw fail(400, '文件名需为 .mp4');
+    await boundedWrite(req, path.join(videosDir, name), MAX_BYTES);
+    videoMeta.delete(name);
+    await rm(posterFile(name), { force: true });
+    res.json({ ok: true, name });
+  });
+  // 删除视频 + 封面,并清理绑定映射。
+  app.delete('/api/videos/:name', device, async (req, res) => {
+    const name = path.basename(String(req.params.name));
+    if (!/\.mp4$/i.test(name)) throw fail(400, '文件名非法');
+    await rm(path.join(videosDir, name), { force: true });
+    await rm(posterFile(name), { force: true });
+    videoMeta.delete(name);
+    const mapping = await readVideoMap();
+    let changed = false;
+    for (const [danceId, v] of Object.entries(mapping)) if (v === name) { mapping[danceId] = ''; changed = true; }
+    if (changed) await writeVideoMap(mapping);
+    res.json({ ok: true });
+  });
+  // 封面图(懒生成)。
+  app.get('/api/videos/:name/poster', async (req, res) => {
+    const name = path.basename(String(req.params.name));
+    if (!/\.mp4$/i.test(name)) throw fail(400, '文件名非法');
+    const poster = await ensurePoster(name);
+    if (!poster) return res.status(404).json({ error: '封面生成失败' });
+    res.sendFile(poster, { dotfiles: 'allow' });
+  });
+  // 每首舞曲 → 绑定的参考视频(评分与歌曲音频仍由舞曲自身提供)。游戏页只读,后台 /settings 可写。
   app.get('/api/videos-map', async (req, res) => {
     res.json({ mapping: await readVideoMap() });
   });
@@ -377,19 +689,394 @@ export async function createApp(options = {}) {
     const mapping = req.body?.mapping;
     if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping))
       throw fail(400, 'mapping 需为对象');
+    // 白名单校验:键必须是 songs/index.json 里的舞曲 id,值必须是 videos/ 里真实存在的 mp4(可为空)。
+    const [videoFiles, validDanceIds] = await Promise.all([readMp4Names(), readDanceIds()]);
+    const videoSet = new Set(videoFiles);
+    const danceSet = new Set(validDanceIds);
     const clean = {};
     for (const [k, v] of Object.entries(mapping)) {
-      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(k)) continue; // 舞曲 id 白名单
-      const base = typeof v === 'string' ? path.basename(v) : '';
-      clean[k] = /\.mp4$/i.test(base) ? base : '';
+      if (!danceSet.has(k)) continue;
+      const name = path.basename(String(v || ''));
+      clean[k] = /\.mp4$/i.test(name) && videoSet.has(name) ? name : '';
     }
     await writeVideoMap(clean);
     res.json({ ok: true, mapping: clean });
   });
 
+  // 编辑舞曲元数据(名字 + 歌曲),写回 songs/index.json。歌曲改动会同步 musicFile。
+  app.put('/api/dances/:id', device, async (req, res) => {
+    const id = String(req.params.id);
+    const { label, songId } = req.body || {};
+    const indexPath = path.join(songsDir, 'index.json');
+    let index;
+    try { index = JSON.parse(await readFile(indexPath, 'utf8')); }
+    catch { throw fail(404, '歌单不存在'); }
+    const dance = (index.dances || []).find((d) => d.id === id);
+    if (!dance) throw fail(404, '舞曲不存在');
+    if (typeof label === 'string' && label.trim()) dance.label = label.trim().slice(0, 120);
+    if (songId !== undefined) {
+      const song = (index.songs || []).find((s) => s.id === songId);
+      if (!song) throw fail(400, '歌曲不存在');
+      dance.defaultSongId = song.id;
+      dance.musicFile = song.file;
+    }
+    const tmp = `${indexPath}.tmp`;
+    await writeFile(tmp, JSON.stringify(index, null, 2));
+    await rename(tmp, indexPath);
+    res.json({ ok: true, dance });
+  });
+
+  // ---- 作品工坊:统一「作品」列表 + 生命周期(全部只改 status 字段,软逻辑) ----
+  /** 给作品补上列表要用的派生信息(歌曲名/视频名/是否已上架)。 */
+  const enrichWorks = async (list) => {
+    const [idx, mapping] = await Promise.all([readSongsIndex(), readVideoMap()]);
+    const songs = idx.songs || [];
+    return list.map((d) => {
+      // 早于 drafts/v2 的记录没有 status/external 字段,按「草稿」处理
+      const status = ['draft', 'published', 'trashed'].includes(d.status) ? d.status : 'draft';
+      const song = songs.find((s) => s.id === (d.songId || d.danceId || d.id));
+      return {
+        ...d,
+        status,
+        external: Boolean(d.external),
+        videoName: d.videoName || mapping[d.danceId] || '',
+        published: status === 'published',
+        songLabel: song?.label || '',
+        songFile: song?.file || d.files?.audio || '',
+      };
+    });
+  };
+
+  app.get('/api/works', device, async (req, res) => {
+    await syncLegacyWorks();
+    const list = await draftStore.list();
+    const status = req.query.status;
+    const mode = req.query.mode;
+    let works = await enrichWorks(list);
+    if (status) works = works.filter((w) => w.status === status);
+    if (mode) works = works.filter((w) => w.mode === mode);
+    res.json(works);
+  });
+
+  app.get('/api/works/:id', device, async (req, res) => {
+    const draft = await draftStore.get(req.params.id);
+    res.json((await enrichWorks([draft]))[0]);
+  });
+
+  /** 编辑作品:名字 / BPM / danceId / 绑定歌曲 / 绑定视频。已上架的会同步到歌单与视频映射。 */
+  app.put('/api/works/:id', device, async (req, res) => {
+    let draft = await draftStore.get(req.params.id);
+    const { label, bpm, danceId, songId, videoName } = req.body || {};
+    if (danceId !== undefined && draft.external && String(danceId) !== draft.danceId) {
+      throw fail(400, '已上架的老作品不能改目录名，请先「打回草稿」');
+    }
+    draft = await draftStore.updateMeta(req.params.id, { label, bpm, danceId, songId, videoName });
+    if (draft.status === 'published' && draft.danceId) {
+      const idx = await readSongsIndex();
+      const dance = idx.dances.find((d) => d.danceId === draft.danceId);
+      if (dance) {
+        dance.label = draft.label;
+        if (songId !== undefined) {
+          const song = idx.songs.find((s) => s.id === songId);
+          if (!song) throw fail(400, '歌曲不存在');
+          dance.defaultSongId = song.id;
+          dance.musicFile = song.file;
+        }
+        await writeSongsIndex(idx);
+      }
+      const mapping = await readVideoMap();
+      const next = String(videoName ?? draft.videoName ?? '');
+      if ((mapping[draft.danceId] || '') !== next) { mapping[draft.danceId] = next; await writeVideoMap(mapping); }
+    }
+    res.json((await enrichWorks([draft]))[0]);
+  });
+
+  /** 打回草稿:external 老作品先把文件拷回来,再改状态 + 从歌单摘掉(文件不删)。 */
+  app.post('/api/works/:id/unpublish', device, async (req, res) => {
+    let draft = await draftStore.get(req.params.id);
+    if (draft.status !== 'published') throw fail(400, '只有已上架的作品才能打回草稿');
+    if (draft.external) draft = await materializeWork(draft);
+    await unpublishFromIndex(draft.danceId);
+    draft = await draftStore.setStatus(req.params.id, 'draft');
+    res.json({ ok: true, work: (await enrichWorks([draft]))[0] });
+  });
+
+  /** 删除 = 软删除,进回收站(文件都留着)。 */
+  app.post('/api/works/:id/trash', device, async (req, res) => {
+    let draft = await draftStore.get(req.params.id);
+    if (draft.status === 'published') await unpublishFromIndex(draft.danceId);
+    draft = await draftStore.setStatus(req.params.id, 'trashed');
+    res.json({ ok: true, work: (await enrichWorks([draft]))[0] });
+  });
+
+  /** 从回收站找回(回到草稿)。 */
+  app.post('/api/works/:id/restore', device, async (req, res) => {
+    const draft = await draftStore.setStatus(req.params.id, 'draft');
+    res.json({ ok: true, work: (await enrichWorks([draft]))[0] });
+  });
+
+  /** 彻底删除:删作品目录 + 已上架的 songs/<danceId>/ + 歌单条目 + 白影。 */
+  app.delete('/api/works/:id', device, async (req, res) => {
+    const draft = await draftStore.get(req.params.id);
+    await unpublishFromIndex(draft.danceId);
+    if (draft.danceId) {
+      await rm(path.join(songsDir, draft.danceId), { recursive: true, force: true });
+      await rm(path.join(root, 'web_dance', 'assets', 'lane', draft.danceId), { recursive: true, force: true });
+    }
+    await draftStore.remove(req.params.id);
+    res.json({ ok: true });
+  });
+
+  // 作品工坊:草稿 CRUD(鉴权同后台,本地免密)。
+  app.get('/api/drafts', device, async (req, res) => {
+    await syncLegacyWorks();
+    res.json(await enrichWorks(await draftStore.list()));
+  });
+  app.post('/api/drafts', device, async (req, res) => {
+    res.status(201).json(await draftStore.create({ mode: req.body?.mode, label: req.body?.label }));
+  });
+  app.get('/api/drafts/:id', device, async (req, res) => {
+    res.json(await draftStore.get(req.params.id));
+  });
+  // 写文件前先把 external(老)作品拷成普通草稿,避免读写落在两个目录。
+  app.put('/api/drafts/:id/source', device, async (req, res) => {
+    await ensureLocal(req.params.id);
+    res.json(await draftStore.putFile(req.params.id, 'source', String(req.query.name || ''), req));
+  });
+  app.put('/api/drafts/:id/audio', device, async (req, res) => {
+    await ensureLocal(req.params.id);
+    res.json(await draftStore.putFile(req.params.id, 'audio', String(req.query.name || ''), req));
+  });
+  // 序列/谱面为较大的 JSON,走 text/plain 原始流(避免 express.json 256kb 上限)。
+  app.put('/api/drafts/:id/sequence', device, async (req, res) => {
+    await ensureLocal(req.params.id);
+    let text = '';
+    for await (const chunk of req) text += chunk;
+    res.json(await draftStore.putText(req.params.id, 'sequence', text));
+  });
+  app.put('/api/drafts/:id/chart', device, async (req, res) => {
+    await ensureLocal(req.params.id);
+    let text = '';
+    for await (const chunk of req) text += chunk;
+    res.json(await draftStore.putText(req.params.id, 'chart', text));
+  });
+  // 读作品的序列/谱面文本(external 老作品从 songs/<danceId>/ 读)。
+  app.get('/api/drafts/:id/text/:kind', device, async (req, res) => {
+    const kind = req.params.kind === 'sequence' || req.params.kind === 'chart' ? req.params.kind : null;
+    if (!kind) throw fail(400, 'kind 非法');
+    const draft = await draftStore.get(req.params.id);
+    const file = workFileOf(draft, kind);
+    let text = '';
+    if (file && (await fileExists(file))) text = await readFile(file, 'utf8');
+    res.type('text/plain').send(text);
+  });
+  app.put('/api/drafts/:id/meta', device, async (req, res) => {
+    res.json(await draftStore.updateMeta(req.params.id, req.body || {}));
+  });
+  // 从已上传的视频素材抽取音频(ffmpeg → wav)。
+  app.post('/api/drafts/:id/extract-audio', device, async (req, res) => {
+    const draft = await ensureLocal(req.params.id);
+    const source = draft.files?.source;
+    if (!source) throw fail(400, '请先上传视频素材');
+    if (!/\.(mp4|mov|webm|mkv)$/i.test(source)) throw fail(400, '素材不是视频，无法抽音频');
+    const audioName = source.replace(/\.[^.]+$/, '') + '.wav';
+    const dir = draftStore.dirOf(req.params.id);
+    await runFFmpeg(['-i', path.join(dir, source), '-vn', '-acodec', 'pcm_s16le', '-ar', '44100', '-ac', '2', path.join(dir, audioName)], 120000);
+    res.json(await draftStore.setFile(req.params.id, 'audio', audioName));
+  });
+  // 预览作品里的素材/音频文件(external 老作品指向 songs/ 或 videos/)。
+  app.get('/api/drafts/:id/raw/:kind', device, async (req, res) => {
+    const kind = req.params.kind === 'source' || req.params.kind === 'audio' ? req.params.kind : null;
+    if (!kind) throw fail(400, 'kind 非法');
+    const draft = await draftStore.get(req.params.id);
+    const name = draft.files?.[kind];
+    if (!name) throw fail(404, '文件不存在');
+    let file = path.join(workDirOf(draft), name);
+    // 视频模式的素材是 videos/ 里的 mp4,作品目录里通常没有
+    if (draft.mode === 'video' && kind === 'source' && !(await fileExists(file))) file = path.join(videosDir, name);
+    if (!(await fileExists(file))) throw fail(404, '文件不存在');
+    res.sendFile(file, { dotfiles: 'allow' });
+  });
+  // 保存判定轨道白影(前端在页面内渲染出 PNG,这里解码落盘 + 写 manifest)。
+  app.put('/api/drafts/:id/lane', device, async (req, res) => {
+    await ensureLocal(req.params.id);
+    let text = '';
+    for await (const chunk of req) text += chunk;
+    let body;
+    try { body = JSON.parse(text); } catch { throw fail(400, '请求体需为 JSON'); }
+    const notes = body.notes;
+    if (!Array.isArray(notes)) throw fail(400, 'notes 需为数组');
+    const draft = await draftStore.get(req.params.id);
+    const danceId = draft.danceId || draft.id;
+    const laneDir = path.join(draftStore.dirOf(req.params.id), 'lane');
+    await mkdir(laneDir, { recursive: true });
+    const manifestNotes = [];
+    for (const n of notes) {
+      const key = String(n.key ?? Number(n.t).toFixed(3));
+      const dataUrl = n.dataUrl;
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/png;base64,')) continue;
+      const buf = Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64');
+      const name = `${key}.png`;
+      await writeFile(path.join(laneDir, name), buf);
+      // file 必须写成「<danceId>/<key>.png」——和 CLI 生成器 tools/lane-silhouettes.mjs 同一份契约。
+      // 消费端 laneAssetUrl() 是直接拼 assets/lane/<file> 的,少一层目录就会 404 静默退回 2D 剪影。
+      manifestNotes.push({ t: n.t, key, moveId: n.moveId ?? null, file: `${danceId}/${name}`, w: n.w, h: n.h, joints: n.joints || {} });
+    }
+    manifestNotes.sort((a, b) => a.t - b.t);
+    const manifest = {
+      schema: 'lane-silhouettes/v1',
+      generatedAt: new Date().toISOString(),
+      model: body.model || '', size: body.size || 256, color: body.color || '#ffffff',
+      dances: { [danceId]: { danceId, notes: manifestNotes } },
+    };
+    await writeFile(path.join(laneDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    await draftStore.setFile(req.params.id, 'lane', 'lane/manifest.json');
+    res.json({ ok: true, notes: manifestNotes.length });
+  });
+  // 预览草稿里的判定轨道白影 PNG。
+  app.get('/api/drafts/:id/lane/:file', device, async (req, res) => {
+    const file = path.basename(String(req.params.file || ''));
+    if (!/^[\d.]+\.png$/.test(file)) throw fail(400, '文件名非法');
+    res.sendFile(path.join(draftStore.dirOf(req.params.id), 'lane', file), { dotfiles: 'allow' });
+  });
+  // 出炉上架:把作品产物搬进 songs/ + videos/ + assets/lane/ 并写索引,然后把 status 改成 published。
+  // 注意:不再删草稿目录 —— 文件留着,「打回草稿」才能只改一个字段就继续改。
+  app.post('/api/drafts/:id/publish', device, async (req, res) => {
+    let draft = await draftStore.get(req.params.id);
+    const f = draft.files || {};
+    if (!f.sequence || !f.chart || !f.audio) throw fail(400, '作品缺少 序列/谱面/音频，无法上架');
+    const slug = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/_+/g, "_").replace(/^[^a-z0-9]+/, "").slice(0, 64) || "dance";
+    const danceId = draft.danceId || slug(draft.label) || draft.id;
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(danceId)) throw fail(400, 'danceId 非法(需小写字母/数字/_-，字母或数字开头)');
+    const dir = workDirOf(draft);
+    const songDir = path.join(songsDir, danceId);
+    // 就是它自己(重新上架)时不必再要求「覆盖」
+    const sameDance = draft.danceId === danceId;
+    if ((await fileExists(songDir)) && !req.body?.overwrite && !sameDance) {
+      throw fail(409, `songs/${danceId}/ 已存在，请勾选「覆盖」后重试`);
+    }
+    const copy = async (src, dst) => {
+      if (!(await fileExists(src))) return false;
+      if (path.resolve(src) === path.resolve(dst)) return true; // external 重上架:源和目标是同一个文件
+      await mkdir(path.dirname(dst), { recursive: true });
+      await copyFile(src, dst);
+      return true;
+    };
+
+    await mkdir(songDir, { recursive: true });
+    // 1) 序列 + 谱面 + 音频
+    await copy(path.join(dir, f.sequence), path.join(songDir, `${danceId}.json`));
+    await copy(path.join(dir, f.chart), path.join(songDir, `${danceId}.chart.json`));
+    await copy(path.join(dir, f.audio), path.join(songDir, f.audio));
+
+    // 1b) 把序列/谱面里记的 danceId 改成最终 danceId。
+    //     生成阶段的 danceId 是占位名(FBX 采样默认 "dance"、视频动捕用视频文件名),
+    //     而判定轨道白影是按 seq.danceId 去 assets/lane 清单里找图的 —— 不改就永远取不到,
+    //     而且会静默退回 2D 剪影(界面上看不出报错)。已经对了的文件不重写。
+    for (const file of [`${danceId}.json`, `${danceId}.chart.json`]) {
+      const p = path.join(songDir, file);
+      try {
+        const o = JSON.parse(await readFile(p, 'utf8'));
+        if (o.danceId === danceId) continue;
+        o.danceId = danceId;
+        await writeFile(p, JSON.stringify(o));
+      } catch { /* 缺文件/坏 JSON 不该挡住上架 */ }
+    }
+
+    // 2) FBX(3D 模式) 或 视频(视频模式)
+    let fbxName = null, videoName = draft.videoName || null;
+    if (draft.mode === '3d' && f.source && /\.fbx$/i.test(f.source)) {
+      fbxName = f.source;
+      await copy(path.join(dir, f.source), path.join(songDir, fbxName));
+    } else if (draft.mode === 'video' && f.source) {
+      videoName = f.source;
+      const dstVideo = path.join(videosDir, videoName);
+      // 素材本来就在 videos/(绑定的库视频)时不用再拷一遍
+      if (!(await fileExists(dstVideo)) && await copy(path.join(dir, f.source), dstVideo)) {
+        await rm(posterFile(videoName), { force: true });
+        videoMeta.delete(videoName);
+      }
+    }
+
+    // 3) 判定轨道白影 → web_dance/assets/lane/<danceId>/
+    const laneDir = path.join(root, 'web_dance', 'assets', 'lane', danceId);
+    const laneSrcDir = draft.external ? laneDir : path.join(dir, 'lane');
+    const laneManifest = path.join(laneSrcDir, 'manifest.json');
+    if (await fileExists(laneManifest)) {
+      const manifest = JSON.parse(await readFile(laneManifest, 'utf8'));
+      const oldDance = Object.values(manifest.dances || {})[0];
+      const notes = [];
+      for (const n of oldDance?.notes || []) {
+        const name = path.basename(n.file);                                  // 兼容两种写法,只认文件名
+        await copy(path.join(laneSrcDir, name), path.join(laneDir, name));
+        notes.push({ ...n, file: `${danceId}/${name}` });                    // 统一规范成 <danceId>/<key>.png
+      }
+      if (oldDance) manifest.dances = { [danceId]: { ...oldDance, danceId, notes } };
+      const laneIndexPath = path.join(root, 'web_dance', 'assets', 'lane', 'index.json');
+      let prev = {};
+      try { prev = JSON.parse(await readFile(laneIndexPath, 'utf8')); } catch { /* 首次生成 */ }
+      const merged = {
+        schema: 'lane-silhouettes/v1', generatedAt: new Date().toISOString(),
+        model: manifest.model, size: manifest.size, color: manifest.color,
+        dances: { ...(prev.dances || {}), ...(manifest.dances || {}) },
+      };
+      const laneTmp = `${laneIndexPath}.tmp`;
+      await writeFile(laneTmp, JSON.stringify(merged, null, 2));
+      await rename(laneTmp, laneIndexPath);
+    }
+
+    // 4) 更新 songs/index.json
+    //    反复上架不该把 songs[] 越滚越多,也不该改掉用户给歌曲起的名字:
+    //    音频没变就继续复用这支舞原本绑定的那条歌曲记录(id/名字/条目统统不动)。
+    const index = await readSongsIndex();
+    const prevDance = index.dances.find((d) => d.id === danceId || d.danceId === danceId);
+    const prevSong = index.songs.find((s) => s.id === (prevDance?.defaultSongId ?? danceId));
+    const keepSong = prevSong && prevSong.file === f.audio ? prevSong : null;
+    const oldSongEntry = index.songs.find((s) => s.id === danceId);
+
+    index.dances = index.dances.filter((d) => d.id !== danceId && d.danceId !== danceId);
+    index.songs = index.songs.filter((s) => s.id !== danceId);
+    index.dances.push({
+      id: danceId, label: draft.label || danceId, danceId,
+      defaultSongId: keepSong ? keepSong.id : danceId,
+      chartFile: `${danceId}.chart.json`, musicFile: f.audio, fbxFile: fbxName,
+      // 作品的「出身模式」:游戏用它决定这支舞进 3D 列表还是视频列表。
+      // 3D 作品(哪怕是绑了视频的 copydance1)两个列表都能进;视频作品只进视频列表。
+      mode: draft.mode,
+    });
+    if (!keepSong) {
+      index.songs.push({
+        id: danceId,
+        label: oldSongEntry?.label || draft.label || danceId,
+        file: f.audio,
+        bpm: draft.bpm || 120,
+      });
+    }
+    await writeSongsIndex(index);
+
+    // 5) 视频绑定(视频模式)
+    if (draft.mode === 'video') {
+      const mapping = await readVideoMap();
+      mapping[danceId] = videoName || '';
+      await writeVideoMap(mapping);
+    }
+
+    // 6) 状态改成「已上架」(文件都留着,便于打回草稿继续改)
+    await draftStore.updateMeta(req.params.id, { danceId, videoName: videoName || '', songId: danceId });
+    draft = await draftStore.setStatus(req.params.id, 'published');
+    res.json({ ok: true, danceId, videoName, fbxName, work: (await enrichWorks([draft]))[0] });
+  });
+  app.delete('/api/drafts/:id', device, async (req, res) => {
+    await draftStore.remove(req.params.id);
+    res.json({ ok: true });
+  });
+
   app.get('/v/:id', (req, res) => res.sendFile(path.join(root, 'web_dance', 'highlight.html')));
   app.get('/staff', (req, res) => res.sendFile(path.join(root, 'web_dance', 'staff.html')));
   app.get('/settings', (req, res) => res.sendFile(path.join(root, 'web_dance', 'settings.html')));
+  // 舞曲视频已并入作品工坊(绑定音乐/视频、改名字、软删除都在那边),老入口直接跳过去。
+  app.get('/dance-videos', (req, res) => res.redirect('/studio'));
+  app.get('/studio', (req, res) => res.sendFile(path.join(root, 'web_dance', 'studio.html')));
   // 谱面编辑器:跳转到 /web_dance/ 下,保证 ./chart-editor.js 等相对路径正确解析。
   app.get('/editor', (req, res) => res.redirect('/web_dance/chart-editor.html'));
   // Explicit asset mounts: never expose credentials, recordings, .git, or backend sources.

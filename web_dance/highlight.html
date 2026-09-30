@@ -3,10 +3,16 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
 <title>我的舞蹈高光 · DANCE ARENA</title><link rel="stylesheet" href="/web_dance/highlight.css"></head>
 <body class="highlight-view"><main>
-  <p class="eyebrow">DANCE ARENA</p><h1>这一刻，为自己喝彩</h1>
+  <p class="eyebrow">DANCE ARENA · HIGHLIGHT REPLAY</p><h1>你的舞台时刻</h1>
   <p id="view-status" role="status">正在寻找你的高光…</p>
   <video id="highlight-video" controls playsinline preload="metadata" hidden></video>
-  <p id="view-result"></p><a id="download-highlight" class="download-highlight" hidden>下载我的高光</a>
+  <div id="view-story" hidden><strong id="view-title"></strong><span id="view-moments"></span></div>
+  <p id="view-result"></p>
+  <div class="download-actions">
+    <a id="download-highlight" class="download-highlight" hidden>下载传播高光版</a>
+    <a id="download-full" class="download-full" hidden>下载完整纪念版</a>
+  </div>
+  <p id="full-status" class="full-status" hidden></p>
   <button id="refresh-highlight" hidden>重新连接</button>
   <p id="view-expiry"></p><p class="hint">视频包含真人画面，请妥善保管领取链接。下载后可按手机提示保存到相册；若微信内无法下载，请使用浏览器打开。</p>
 </main><script type="module" src="/web_dance/highlight-view.js"></script></body>

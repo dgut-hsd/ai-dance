@@ -97,13 +97,112 @@ export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
     chart: { version: "chart/v2", audio, notes },
   };
 }
-export function fbxClipToSequence(THREE, clip, root, { bpm = 120, audio = "pop-demo.wav", danceId = "fbx-dance", loopTo = 24 } = {}) {
+// ---------------------------------------------------------------------------
+// v2 可选字段(FBX 直导,补丁Ⅴ):把 FBX 里被压成 10 骨单位向量时丢掉的朝向补导出来。
+// 为什么需要:retarget.js 的 bodyYaw(骨盆偏航 =「转弯」)依赖 rootYaw/shoulderAxis,
+// 只导单位向量的话 FBX 教练的骨盆偏航永不更新,看起来「不转身」。
+// 全部为可选字段,消费端按「字段是否存在」回退(见 docs/motion-beat-optimization.md §10.9)。
+//   rootYaw       髋轴偏航 atan2(hip.z, hip.x)
+//   shoulderAxis  肩轴单位向量(右肩−左肩,canonical)
+//   torsoTwist    胸椎扭转 = 肩轴偏航 − 髋轴偏航
+//   torsoRoll / torsoPitch  躯干侧倾 / 前倾(由脊柱方向分解)
+//   armTwist      [左上臂,右上臂,左前臂,右前臂] 绕长轴的轴向扭转
+// ---------------------------------------------------------------------------
+const ARM_TWIST_BONES = ["leftarm", "rightarm", "leftforearm", "rightforearm"];
+
+// 「首帧是 bind pose」的判定:两个条件同时成立才丢 ——
+//   (1) 首帧与骨架静态(bind)姿态足够接近(留 25° 余量:派生关节如「髋→肩中点」会差几度);
+//   (2) 首帧→第二帧是一个明显跳变(> 10°/帧,而正常舞蹈帧间只有 ~9°)。
+// 实测:copydance1(Rokoko)= 5.8° / 111° → 丢;内置 hiphop(Mixamo)= 98° / 1.8° → 保留,不受影响。
+const BIND_FRAME_EPS_RAD = 25 * Math.PI / 180;
+const BIND_FRAME_JUMP_RAD = 10 * Math.PI / 180;
+
+function wrapAngle(a) {
+  return Math.atan2(Math.sin(a), Math.cos(a));
+}
+
+/** 各臂骨「长轴」在该骨自身坐标系下的方向(休息姿态采样;不假设局部 Y 轴就是长轴)。 */
+function armTwistAxes(THREE, B) {
+  return ARM_TWIST_BONES.map((name) => {
+    const bone = B.get(name);
+    if (!bone) return null;
+    const child = bone.children.find((c) => c.isBone) || bone;
+    return child.getWorldPosition(new THREE.Vector3())
+      .sub(bone.getWorldPosition(new THREE.Vector3()))
+      .normalize()
+      .applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion()).invert())
+      .normalize();
+  });
+}
+
+/** swing-twist 分解里绕长轴的扭转量:2·atan2(旋转向量·长轴, w)。 */
+function armTwistValues(THREE, B, axes) {
+  return axes.map((axis, i) => {
+    if (!axis) return 0;
+    const q = B.get(ARM_TWIST_BONES[i]).getWorldQuaternion(new THREE.Quaternion());
+    return +(2 * Math.atan2(q.x * axis.x + q.y * axis.y + q.z * axis.z, q.w)).toFixed(4);
+  });
+}
+
+/**
+ * 采样一段 FBX 动画为契约帧(30fps,短片段按 loopTo 秒循环)。
+ * 两条消费路径(浏览器点谱面编辑器 / Node 的 export-songs)都从这里取帧,避免各写一份。
+ * @returns {{ frames: object[], durationSec: number }}
+ */
+export function sampleFbxFrames(THREE, clip, root, { loopTo = 24 } = {}) {
   const basis = computeCanonicalBasis(THREE, root);
   const B = collectBones(root);
   const jointBone = {};
   for (const [joint, keys] of Object.entries(JOINT_BONES)) {
     for (const k of keys) { if (B.has(k)) { jointBone[joint] = B.get(k); break; } }
   }
+  const twistAxes = armTwistAxes(THREE, B); // 必须在播放前采样(此时还是休息姿态)
+  const readJoints = () => {
+    const hips = jointBone.hips_center?.getWorldPosition(new THREE.Vector3());
+    if (!hips) return null;
+    const J = {};
+    for (const [joint, bone] of Object.entries(jointBone)) {
+      J[joint] = toCanonical(bone.getWorldPosition(new THREE.Vector3()), hips, basis);
+    }
+    return {
+      ...J,
+      shoulders_center: J.left_shoulder && J.right_shoulder
+        ? [(J.left_shoulder[0] + J.right_shoulder[0]) / 2,
+           (J.left_shoulder[1] + J.right_shoulder[1]) / 2,
+           (J.left_shoulder[2] + J.right_shoulder[2]) / 2]
+        : [0, 0, 0],
+    };
+  };
+  const contractBones = (joints) => BONE_DEFS.map((b) => norm(sub(joints[b.child], joints[b.parent])));
+  const angleBetween = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2])));
+
+  // 有些 FBX 导出(例如 Rokoko)会把骨架静态姿态(bind pose / T-pose)当成第 0 帧。
+  // 先记下这个姿态的契约骨方向,采样完再看首帧是不是它 —— 是就丢掉(见循环之后)。
+  root.updateMatrixWorld(true);
+  const bindJoints = readJoints();
+  const bindBones = bindJoints ? contractBones(bindJoints) : null;
+  // 根位移与骨盆倾斜的基准(必须在播放前采):
+  //   bindHipsWorld 髋的世界位置;hipUnit 髋高(髋到最低脚踝的竖直距离)当作体尺 → 位移按它归一化,
+  //   目标端再乘自己的髋高,这样与骨架绝对尺寸无关。
+  const bindHipsWorld = jointBone.hips_center ? jointBone.hips_center.getWorldPosition(new THREE.Vector3()) : null;
+  const footYs = ["left_ankle", "right_ankle"]
+    .map((k) => jointBone[k]?.getWorldPosition(new THREE.Vector3()).y)
+    .filter((y) => Number.isFinite(y));
+  const hipUnit = bindHipsWorld && footYs.length
+    ? Math.max(0.05, Math.abs(bindHipsWorld.y - Math.min(...footYs)))
+    : 0;
+  // 骨盆倾斜要输出「相对 bind 姿态的增量」:目标骨架的休息姿态本身就带倾斜(基准对齐过的),
+  // 输出绝对角会在目标上**重复计入**一次(实测三种符号组合全变差)。
+  const pelvisTiltOf = (bone) => {
+    if (!bone) return null;
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(bone.getWorldQuaternion(new THREE.Quaternion()));
+    return [
+      Math.atan2(up.dot(basis.forward), up.dot(basis.up)),  // pitch
+      Math.atan2(up.dot(basis.right), up.dot(basis.up)),    // roll
+    ];
+  };
+  const bindPelvisTilt = pelvisTiltOf(B.get("hips"));
+
   const mixer = new THREE.AnimationMixer(root);
   const action = mixer.clipAction(clip);
   action.play();
@@ -117,23 +216,60 @@ export function fbxClipToSequence(THREE, clip, root, { bpm = 120, audio = "pop-d
     const t = i * dt;
     if (i > 0) mixer.update(dt);
     root.updateMatrixWorld(true);
-    const hips = jointBone.hips_center?.getWorldPosition(new THREE.Vector3());
-    if (!hips) continue;
-    const J = {};
-    for (const [joint, bone] of Object.entries(jointBone)) {
-      J[joint] = toCanonical(bone.getWorldPosition(new THREE.Vector3()), hips, basis);
-    }
-    const joints = {
-      ...J,
-      shoulders_center: J.left_shoulder && J.right_shoulder
-        ? [(J.left_shoulder[0] + J.right_shoulder[0]) / 2,
-           (J.left_shoulder[1] + J.right_shoulder[1]) / 2,
-           (J.left_shoulder[2] + J.right_shoulder[2]) / 2]
-        : [0, 0, 0],
-    };
-    const bones = BONE_DEFS.map((b) => norm(sub(joints[b.child], joints[b.parent])));
-    frames.push({ t: +t.toFixed(3), bones, conf: new Array(BONE_DEFS.length).fill(1) });
+    const joints = readJoints();
+    if (!joints) continue;
+    const bones = contractBones(joints);
+    // v2 朝向字段(见本函数上方的说明):髋轴/肩轴/扭转/侧倾前倾/手臂轴向扭转
+    const hipAxis = sub(joints.right_hip, joints.left_hip);
+    const shoulderAxis = norm(sub(joints.right_shoulder, joints.left_shoulder));
+    const rootYaw = Math.atan2(hipAxis[2], hipAxis[0]);
+    const torsoUp = norm(joints.shoulders_center); // canonical 里髋即原点
+    // 追加字段(可选,消费端按存在性判断):
+    //   rootPos       根位移 = (髋世界位置 − bind 位置) 投到 canonical 基、再除以髋高 → 与骨架尺寸无关
+    //   pelvisPitch/Roll  骨盆上轴的绝对前倾/侧倾(骨盆自身坐标,休息姿态≈0)
+    const hb = B.get("hips");
+    const tilt = pelvisTiltOf(hb);
+    const hipsNow = jointBone.hips_center?.getWorldPosition(new THREE.Vector3());
+    const rootPos = bindHipsWorld && hipsNow
+      ? hipsNow.clone().sub(bindHipsWorld).divideScalar(hipUnit || 1)
+      : null;
+    frames.push({
+      t: +t.toFixed(3),
+      bones,
+      conf: new Array(BONE_DEFS.length).fill(1),
+      rootYaw: +rootYaw.toFixed(4),
+      rootYawConf: 1,
+      shoulderAxis: [+shoulderAxis[0].toFixed(4), +shoulderAxis[1].toFixed(4), +shoulderAxis[2].toFixed(4)],
+      torsoTwist: +wrapAngle(Math.atan2(shoulderAxis[2], shoulderAxis[0]) - rootYaw).toFixed(4),
+      torsoRoll: +Math.atan2(torsoUp[0], torsoUp[1]).toFixed(4),
+      torsoPitch: +Math.atan2(torsoUp[2], torsoUp[1]).toFixed(4),
+      armTwist: armTwistValues(THREE, B, twistAxes),
+      ...(rootPos ? { rootPos: [+rootPos.dot(basis.right).toFixed(4), +rootPos.dot(basis.up).toFixed(4), +rootPos.dot(basis.forward).toFixed(4)] } : {}),
+      ...(tilt && bindPelvisTilt ? {
+        pelvisPitch: +(tilt[0] - bindPelvisTilt[0]).toFixed(4),
+        pelvisRoll: +(tilt[1] - bindPelvisTilt[1]).toFixed(4),
+      } : {}),
+    });
   }
-  return makeSequence(frames, { bpm, audio, danceId, durationSec: dur });
+  // 首帧 == 骨架 bind pose、而第二帧已经是真动作 → 丢掉这个「T-pose 帧」,时间轴整体前移一帧。
+  // 不丢的话:播放会从 T-pose 猛切进动作(看着不连贯),而且这一帧会被当成 t=0 的参考姿态参与判定。
+  if (bindBones && frames.length > 2) {
+    const toBind = Math.max(...frames[0].bones.map((v, i) => angleBetween(v, bindBones[i])));
+    const toNext = Math.max(...frames[0].bones.map((v, i) => angleBetween(v, frames[1].bones[i])));
+    if (toBind < BIND_FRAME_EPS_RAD && toNext > BIND_FRAME_JUMP_RAD) {
+      frames.shift();
+      frames.forEach((f, i) => { f.t = +(i * dt).toFixed(3); });
+      console.warn(
+        `[fbxToSequence] 源片段第 0 帧是骨架 bind pose(与静态姿态差 ${(toBind * 180 / Math.PI).toFixed(1)}°,` +
+        `下一帧差 ${(toNext * 180 / Math.PI).toFixed(1)}°):已丢弃并整体前移 ${dt.toFixed(4)}s`,
+      );
+    }
+  }
+  return { frames, durationSec: dur };
+}
+
+export function fbxClipToSequence(THREE, clip, root, { bpm = 120, audio = "pop-demo.wav", danceId = "fbx-dance", loopTo = 24 } = {}) {
+  const { frames, durationSec } = sampleFbxFrames(THREE, clip, root, { loopTo });
+  return makeSequence(frames, { bpm, audio, danceId, durationSec });
 }
 export { DIMS, SAMPLING_FPS };

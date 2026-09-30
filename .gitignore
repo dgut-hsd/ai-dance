@@ -27,3 +27,17 @@ test-results/
 playwright-report/
 .xbfile/
 tools/pose3d/models/metrabs_eff2s_y4/variables/variables.data-00000-of-00001
+
+# 作品工坊运行时数据(草稿 + 上传的素材),不进仓库
+.drafts/
+
+# 本地临时/截图目录
+shots/
+tmp/
+
+# 视频封面等生成缓存
+videos/.posters/
+
+# 走查记录(本地归档)
+作品工坊实操走查记录_*.docx
+make_walkthrough_doc.py

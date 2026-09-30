@@ -74,6 +74,19 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; color: #111827; }
 .job.failed .job-status { color: #dc2626; background: #fdeaea; }
 .job-info { color: #6b7280; }
 
+/* 取片台认人缩略图:3:2 横切 + 贴底。
+   实测三条真实成片,人脸都落在画面下部(额头约 60%、眼睛约 78%、下巴被画面底边切掉),
+   所以焦点必须贴底 —— 按 center 裁会把脸整个裁掉。
+   若以后换了机位/摄像头导致人脸位置变化,只改这一个变量即可。 */
+:root { --thumb-focus: 100%; }
+.job-thumb {
+  width: 100%; aspect-ratio: 3 / 2; overflow: hidden; background: #0f172a;
+  display: flex; align-items: center; justify-content: center;
+}
+.job-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: center var(--thumb-focus); display: block; }
+.job-thumb.failed { background: #f3f4f6; }
+.job-thumb-note { font-size: 12px; color: #9ca3af; }
+
 /* 二维码 */
 .qr { width: 220px; height: 220px; border: 1px solid #e1e4e8; background: #fff; }
 
@@ -146,16 +159,25 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; color: #111827; }
 .camera-params-controls .param-val { min-width: 52px; font-size: 12px; color: #6b7280; font-variant-numeric: tabular-nums; }
 
 .hidden { display: none !important; }
+/* hidden 属性会被组件自己的 display 规则压过去(.long-waiting 就是 display:grid),
+   所以属性式隐藏也要显式生效,否则「完整视频生成中」在二维码出来之后还挂在弹窗里。 */
+[hidden] { display: none !important; }
 
 /* 弹窗(观看 / 扫码下载) */
 .modal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 100; }
 .modal-mask { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.5); }
 .modal-box {
   position: relative; z-index: 1; background: #ffffff; border: 1px solid #e1e4e8;
-  padding: 16px; width: min(460px, 92vw); display: flex; flex-direction: column; gap: 12px;
+  padding: 16px; width: min(620px, 92vw); display: flex; flex-direction: column; gap: 12px;
 }
 .modal-head { display: flex; align-items: center; justify-content: space-between; font-size: 15px; font-weight: 600; color: #111827; }
 .modal-close { border: 0; background: transparent; color: #6b7280; font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 6px; }
 .modal-close:hover { color: #111827; }
 .modal-hint { margin: 0; font-size: 13px; color: #6b7280; text-align: center; }
-#download-qr { margin: 0 auto; }
+.qr-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.qr-option { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 12px; border: 1px solid #e1e4e8; }
+.qr-option strong { color: #111827; font-size: 14px; }
+.qr-option span { color: #6b7280; font-size: 12px; }
+.qr-option .qr { width: min(220px, 100%); height: auto; aspect-ratio: 1; margin: 0 auto; }
+.long-waiting { min-height: 220px; margin: 0; display: grid; place-items: center; color: #6b7280; font-size: 13px; text-align: center; }
+@media (max-width: 560px) { .qr-options { grid-template-columns: 1fr; } }

@@ -10,7 +10,7 @@ Copy-Item .env.example .env
 npm start
 ```
 
-访问 `http://localhost:8000/web_dance/`，选择真人 PK。在游戏右上角展开「我的高光」，勾选录制，再开始游戏。结束后自动上传、剪辑，领取面板展示二维码、进度和领取链接。默认不录制，不采集麦克风。
+访问 `http://localhost:8000/web_dance/`，选择真人 PK。选曲页的「录制我的高光时刻」默认勾选，再开始游戏。结束后自动上传、剪辑，玩家端只负责录制和上传；生成进度与交付二维码都在工作人员后台 `/staff`。默认录制，不采集麦克风。
 
 本机模式无需阿里云；原始录像、任务和成片保存在 `.highlight-data/`（已忽略 Git）。FFmpeg 默认由 `ffmpeg-static` 安装；如果安装环境无法下载该二进制，可配置 `FFMPEG_PATH` 指向已安装的 FFmpeg。
 
@@ -63,6 +63,21 @@ OSS_PUBLIC_DOMAIN=https://media.example.com
 - 不支持录制中的断点恢复。网络失败重试会重新上传整个文件，尚未实现 OSS 分片续传。
 - 不支持在游戏中途暂停录像或后台标签页持续录制；手动停止/切换模式会取消本局高光。
 
+## 存储产物
+
+一条任务产出两条成片，落盘名即后缀：
+
+| 文件 | 内容 | 用途 |
+|---|---|---|
+| `short.mp4` | 3 段最佳动作 + 片头 + 成绩卡，9:16 竖屏 | 传播高光版，现场交付主推 |
+| `long.mp4` | 整段真人录像 + 同样的片头与成绩卡 | 完整纪念版，留住全场 |
+
+本机模式位于 `.highlight-data/<id>/`；OSS 模式对应 `highlights/<id>/short.mp4` 与 `highlights/<id>/long.mp4`。
+`artifactVersion` 不是 `short-long-v1` 的历史任务仍是 `highlight.mp4` / `full.mp4`，读取时按版本回退，不迁移文件。
+先转 `short.mp4`，成功即置 `ready`（顾客这时就能拿到高光码）；`long.mp4` 随后在同一个 worker 里继续转，
+状态记在 `fullStatus`（`waiting` / `processing` / `ready` / `failed` / `unavailable`）。服务重启会中断长版转码，
+按 `failed` 恢复，不影响高光成片。
+
 ## 接口与权限
 
 | 接口 | 用途 | 凭证 |
@@ -74,8 +89,11 @@ OSS_PUBLIC_DOMAIN=https://media.example.com
 | POST `/:id/complete` | 提交时长、评分采样和成绩，幂等 | `X-Owner-Token` |
 | POST `/:id/retry` | 失败转码重试，最多 3 次 | `X-Owner-Token` |
 | DELETE `/:id` | 删除并立即禁用访问 | `X-Owner-Token` |
-| GET `/:id`、`/:id/qr` | 状态、领取二维码 | 随机领取码 |
-| GET `/:id/media`、`/:id/poster` | 成片、封面 | 随机领取码 |
+| GET `/:id`、`/:id/qr` | 状态、领取页二维码（指向 `/v/:id` 播放页） | 随机领取码 |
+| GET `/:id/qr-short`、`/:id/qr-long` | **直接下载**二维码：高光版 / 完整版。码本身就是签名直下地址，扫完即下载，不再绕进页面；`long` 未就绪时返回 409，不发无效码 | 随机领取码 |
+| GET `/:id/media`、`/:id/poster`、`/:id/thumb` | 高光成片（`?download=1` 直下）、封面、取片台缩略图 | 随机领取码 |
+| GET `/:id/full-media` | 完整纪念版（`?download=1` 直下） | 随机领取码 |
+| GET `/api/highlights` | 取片台列表：状态、`fullStatus`、缩略图、管理令牌 | `X-Device-Token` |
 
 除创建接口外，上表缩写接口均位于 `/api/highlights` 下。领取码与管理令牌分别使用 192 位随机数；公开接口不返回管理令牌。领取页面地址不含 OSS 签名。播放请求再签发最长 5 分钟的 OSS 地址；已发出的签名在有效期内可能继续有效，文件清理完成后失效。领取码属于持有者访问凭证，不等同于用户身份认证。
 
@@ -87,6 +105,6 @@ OSS_PUBLIC_DOMAIN=https://media.example.com
 npm test
 ```
 
-测试包含高光选择、音频分支、真实 FFmpeg 转码解码、MP4 快速播放、Range 播放、任务隔离、管理权限、二维码、重启恢复、失败重试和过期删除。
+测试包含高光选择、音频分支、真实 FFmpeg 转码解码、MP4 快速播放、Range 播放、任务隔离、管理权限、二维码（含 short/long 直下与「长版未就绪不发码」）、重启恢复、失败重试和过期删除。
 
 上线前还需实机验收：完整跳一曲，检查动捕帧率与音画同步；连续两局；断网后恢复上传；使用 iPhone Safari、安卓 Chrome 和微信扫码观看/下载；真实 OSS CORS、自定义域名、签名到期重新播放。H5 下载文件不保证所有手机一键写入相册。

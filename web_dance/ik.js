@@ -65,8 +65,11 @@ export function solveTwoBone(p0, p2, l1, l2, pole, opts = {}) {
 
   // 中间关节 = 在 dir 上的投影 + 垂直偏移(偏移方向朝 pole 一侧)
   const mid = a.clone().addScaledVector(dir, l1 * Math.cos(ang));
-  let bend = poleV.clone().sub(a).addScaledVector(dir, -poleV.clone().sub(a).dot(dir));
-  if (bend.lengthSq() < 1e-12) {
+  const poleOffset = poleV.clone().sub(a);
+  let bend = poleOffset.clone().addScaledVector(dir, -poleOffset.dot(dir));
+  // pole 是否能给出弯折方向(它相对 a 有垂直于 dir 的分量)。退化时才允许用 hint 兜底。
+  const poleGivesDir = bend.lengthSq() > 1e-12;
+  if (!poleGivesDir) {
     // S2 退化:pole 与 dir 平行(如膝点落在关节连线上)。优先用上一帧 hint 的侧向偏移
     // 锁定弯折方向(增强伸直态方向连续),再回退到任选正交方向。
     if (hint) bend = hint.clone().sub(mid);
@@ -81,8 +84,10 @@ export function solveTwoBone(p0, p2, l1, l2, pole, opts = {}) {
   const off = l1 * Math.sin(ang);
   let p1 = mid.clone().addScaledVector(bend, off);
 
-  // 时序连续:若有上一帧中间关节,取离它更近的镜像解,避免伸直/退化时 flip
-  if (hint) {
+  // 时序连续:取离上一帧中间关节更近的镜像解 —— 但**只在 pole 给不出方向时**才这么做。
+  // 之前无条件按 hint 选边:源动作快速摆到另一侧时,hint(上一帧的肘/膝)离镜像解更近,
+  // 关节就被锁在**反侧**并持续数帧(实测:前踢腿被摆到身后 100°,连续 4+ 帧)。
+  if (hint && !poleGivesDir) {
     const alt = mid.clone().addScaledVector(bend, -off);
     if (alt.distanceTo(hint) < p1.distanceTo(hint)) p1 = alt;
   }

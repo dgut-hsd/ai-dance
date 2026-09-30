@@ -109,7 +109,9 @@ export function separateCapsulePairs(capsules, pairs, opts = {}) {
       const B = capsules[ib];
       const { overlap, normal } = capsulePenetration(A, B);
       if (overlap <= margin) continue;
-      const amount = overlap * pushFactor;
+      // 只推「超出允许量的那一部分」:允许量用来放过"衣服本来就会互相贴住/轻微压住"的情况
+      // (目标的衣服比源厚,源里正常的贴身姿势在目标上就是袖子压进外套 —— 全推会把姿势推歪)。
+      const amount = (overlap - margin) * pushFactor;
       // A 沿 −normal、B 沿 +normal 相互推开
       distribute(A, normal.clone().negate(), amount);
       distribute(B, normal, amount);

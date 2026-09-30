@@ -14,16 +14,30 @@ import { renderPoseSilhouette } from "../pose_capture/stick-figure.js";
 import { createScene } from "./scene.js";
 import { createJuice } from "./ui-lab/juice.js";
 import { animate, ease } from "./ui-lab/tween.js";
-import { loadAvatar, DEFAULT_MODEL, detectExt } from "./avatar.js";
+import { loadAvatar, DEFAULT_MODEL, detectExt, realignRetargeter } from "./avatar.js";
+import { createCoachGrounding } from "./coach-grounding.js";
+import { recenterSequenceTravel } from "./root-travel.js";
 import { ScoringAdapter } from "./scoring-adapter.js";
 import { SongSession, AudioEngine } from "./audio.js";
+import { SelectionPreviewAudio } from "./selection-preview-audio.js";
 import { HighlightController } from "./highlights.js";
+import { HighlightReplayController } from "./highlight-replay.js";
+import { resultCopyFor } from "./result-copy.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
 import { loadSongIndex, dances, songs, danceById, songById, loadSequence } from "./song-library.js";
-import { parseChart } from "../scoring/src/chartCodec.js";
 import {
-  createSilhouetteRenderer, renderSilhouetteFrame, canvasToPng, pickSignatureTimes,
+  createSilhouetteRenderer, renderSilhouetteFrame, canvasToPng, pickSignatureTimes, cropToAlpha,
 } from "./silhouette.js";
+// 右下判定轨道的几何/时序常量与纯逻辑(可在 Node 单测:test/pose-lane.test.js)
+import {
+  LANE_FALLBACK_STEP_SEC,
+  activePoseSource, beatDurFor, computePoseEvents,
+  planPoseLaneFrame,
+} from "./pose-lane.js";
+// 判定轨道的 DOM 应用层 / 单张剪影构造 / 逐点白影资源(与谱面编辑器共用,保证所见即所得)
+import { createLaneView } from "./lane-view.js";
+import { buildLaneFigure } from "./lane-figure.js";
+import { laneAssetFor, laneAssetUrl, loadLaneManifest } from "./lane-assets.js";
 
 // ---------------------------------------------------------------------------
 // 状态
@@ -79,7 +93,6 @@ const dom = {
   refPanel: $("ref-panel"),
   refVideo: $("ref-video"),
   moveTrack: $("move-track"),
-  beats: $("beats"),
   scorePanel: $("score-panel"),
   grade: $("grade"),
   score: $("score"),
@@ -107,21 +120,22 @@ const dom = {
   centerMsgText: $("center-msg-text"),
   songPick: $("song-pick"),
   songPickStrip: $("song-pick-strip"),
+  songPickOpen: $("song-pick-open"),
+  songPickShade: $("song-pick-shade"),
+  songPickDrawer: $("song-pick-drawer"),
+  songPickClose: $("song-pick-close"),
+  songPickPrev: $("song-pick-prev"),
+  songPickNext: $("song-pick-next"),
+  songPickCurrent: $("song-pick-current"),
+  songPickStart: $("song-pick-start"),
   poseHint: $("pose-hint"),
   judgeStage: $("judge-stage"),
   judgeTrack: $("judge-track"),
-  poseHintFill: $("pose-hint-fill"),
-  poseHintName: $("pose-hint-name"),
-  ready: $("ready"),
-  readyBackdrop: $("ready-backdrop"),
-  readySong: $("ready-song"),
-  readyGo: $("ready-go"),
   result: $("result"),
   resultGrade: $("result-grade"),
   resultTitle: $("result-title"),
   resultTagline: $("result-tagline"),
   resultSong: $("result-song"),
-  resultNext: $("result-next"),
   statScore: $("stat-score"),
   statAcc: $("stat-acc"),
   statCombo: $("stat-combo"),
@@ -176,25 +190,43 @@ if (recordConsent) {
   recordConsent.addEventListener("change", () =>
     sessionStorage.setItem("dance-record-highlight", recordConsent.checked ? "1" : "0"));
 }
-// 结算后悬停 5s:结算画面缩略到右上角,自动播放本地高光回放
+// 结算后立即串播本地三个高光片段；完整原片继续在后台上传。
 const replayOverlay = $("replay"), replayVideo = $("replay-video"), replayClose = $("replay-close");
+const replayTitle = $("replay-title"), replayCount = $("replay-count");
+const replayTier = $("replay-tier"), replayCombo = $("replay-combo");
 let replayTimer = null;
-function scheduleReplay() {
+function closeReplay() {
   clearTimeout(replayTimer);
-  replayTimer = setTimeout(() => {
-    const replay = highlights.getReplay();
-    if (!replay) return;
-    $("result").classList.add("result-mini");
-    replayVideo.src = replay.url;
-    replayOverlay.classList.remove("hidden");
-    replayVideo.play().catch(() => {});
-  }, 5000);
-}
-if (replayClose) replayClose.addEventListener("click", () => {
-  replayVideo.pause();
+  replayPlayer.stop();
   replayOverlay.classList.add("hidden");
   $("result").classList.remove("result-mini");
+}
+const replayPlayer = new HighlightReplayController({
+  video: replayVideo,
+  onSegmentChange: (segment, index, total) => {
+    replayCount.textContent = `${index + 1} / ${total}`;
+    replayTier.textContent = segment.fallback ? "精彩回放" : (segment.tier || "精彩动作");
+    replayCombo.textContent = segment.combo > 1 ? `${segment.combo} COMBO` : "";
+    replayCombo.hidden = segment.combo <= 1;
+    replayOverlay.classList.remove("segment-pop");
+    void replayOverlay.offsetWidth;
+    replayOverlay.classList.add("segment-pop");
+  },
+  onComplete: closeReplay,
 });
+function scheduleReplay(expectedGeneration = startGeneration) {
+  clearTimeout(replayTimer);
+  replayTimer = setTimeout(() => {
+    if (expectedGeneration !== startGeneration) return;
+    const replay = highlights.getReplay();
+    if (!replay) return;
+    replayTitle.textContent = "你的舞台时刻";
+    $("result").classList.add("result-mini");
+    replayOverlay.classList.remove("hidden");
+    void replayPlayer.start(replay.url, replay.segments);
+  }, 500);
+}
+if (replayClose) replayClose.addEventListener("click", closeReplay);
 
 // ---------------------------------------------------------------------------
 // 游戏手感层(juice):冲击波 / 火花 / 闪光 / 震屏 / 暗角 / hit-stop
@@ -366,7 +398,6 @@ function renderLoop() {
     console.error("renderLoop error:", e);
   }
 }
-renderLoop();
 
 // ---------------------------------------------------------------------------
 // 模型加载
@@ -397,6 +428,10 @@ async function loadModel(url, type) {
     // 进入 PK/挑战页即进入选曲:教练吸引态 + 摄像头镜像 + 海报卡片
     if (state.mode === "pk" || state.mode === "challenge") {
       enterSelect().catch((e) => setStatus("选曲加载失败:" + e.message));
+    } else if (state.mode === "performance") {
+      // 表演模式的曲目列表要等舞者就绪才能建(打开页面时 setMode 早于模型加载,那次会 bail),
+      // 不补这一步:从主页「表演」卡片进来时下拉是空的、点「开始」没反应。
+      enterPerformance();
     }
   } catch (e) {
     console.error(e);
@@ -535,6 +570,7 @@ function setupChallengePickers() {
 // ---------------------------------------------------------------------------
 function setMode(mode) {
   if (state.running) stopAll();
+  if (mode !== "pk") stopPreviewMusic(); // 离开选曲页就别再试听
   state.mode = mode;
   modeBtns.forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
   const isChallenge = mode === "challenge" || mode === "pk";
@@ -609,13 +645,28 @@ async function ensureCoach() {
 
 // 把参考序列按时间逐帧喂给教练的 Retargeter(IK/贴地/头全部复用)
 function makeCoachPlayer(seq, retargeter, boneDefs) {
+  // 走位去漂移(见 root-travel.js):源录像里的缓慢漂移会把人带出舞台;
+  // 编舞真的左右移动(快的那部分)原样保留。
+  const travel = recenterSequenceTravel(seq, { tauSec: 2.5, limit: 2.2 });
+  if (travel) {
+    console.info(
+      `[coach] 走位去漂移后:水平最大 ${travel.maxTravel.toFixed(2)} 单位` +
+      (travel.clampedFrames ? `,限幅 ${travel.clampedFrames} 帧` : ""),
+    );
+  }
   const frames = seq.frames || [];
+  const keepShoesAboveStage = createCoachGrounding(retargeter.root);
+  // 有 rootPos 的序列(新导出的内置曲)就消费根运动:教练跟参考一样走位(编舞一般自己回到中间);
+  // 旧序列没有这个字段 → applyFrame 内部自动回退到原来的「固定站位 + 脚贴地运动学」。
+  const hasRootPos = frames.some((f) => Array.isArray(f.rootPos));
   return {
     update(t) {
       // 插值采样(而非 round(t*fps) 硬切),消除低帧率接缝抖动
       const frame = sampleFrame(frames, t);
-      // 教练固定站位跟跳,不消费根运动(否则会跟着参考序列的位移满场跑)
-      if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
+      if (frame) {
+        retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: hasRootPos });
+        keepShoesAboveStage();
+      }
     },
   };
 }
@@ -680,15 +731,56 @@ function inPageSilhouette(entry) {
   return dataUrl;
 }
 
+// 选曲卡剪影:优先用「判定轨道白影」(assets/lane/,模型离屏渲染的 3D 白影)——
+// 每支舞都已经逐判定点生成好了,和右下角判定轨道用的是同一批图,天然「所见即所得」。
+// 从中挑关节铺得最开的一帧当招牌动作(与 tools/gen-silhouettes.mjs 的挑法同一个思路)。
+function laneCardSilhouette(danceId) {
+  const notes = laneManifest?.dances?.[danceId]?.notes;
+  if (!Array.isArray(notes) || !notes.length) return null;
+  let best = null, bestSpread = -1;
+  for (const n of notes) {
+    const pts = Object.values(n.joints || {});
+    let m = 0;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+        if (d > m) m = d;
+      }
+    }
+    if (m > bestSpread) { bestSpread = m; best = n; }
+  }
+  return best ? laneAssetUrl(best) : null;
+}
+
+// 白影是「固定取景、不裁剪」渲染的,单张里人物只占中间一条;
+// 直接贴到卡片上会显得又细又小 —— 先按 alpha 裁到人物再显示。
+async function setCroppedSilhouette(img, url) {
+  try {
+    const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+    const c = document.createElement("canvas");
+    c.width = bitmap.width;
+    c.height = bitmap.height;
+    c.getContext("2d").drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    img.src = canvasToPng(cropToAlpha(c, { padFrac: 0.08 }));
+  } catch {
+    img.src = url; // 裁剪失败就原样用原图
+  }
+}
+
 // 循环播放序列(吸引态 / 试跳),教练原地跟跳不消费根运动
 function makeLoopCoachPlayer(seq, retargeter, boneDefs) {
   const frames = seq.frames || [];
   const dur = seq.meta?.durationSec || 1;
+  const keepShoesAboveStage = createCoachGrounding(retargeter.root);
   return {
     update(t) {
       const tt = t % dur;
       const frame = sampleFrame(frames, tt);
-      if (frame) retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
+      if (frame) {
+        retargeter.applyFrame(frame, { boneDefs, mirror: false, rootMotion: false });
+        keepShoesAboveStage();
+      }
     },
   };
 }
@@ -713,298 +805,66 @@ function drawCardSilhouette(canvas, seq) {
 // ---------------------------------------------------------------------------
 // 右下判定轨道(Just Dance 式):剪影从右往左流入判定平台,抵达平台的那一瞬间剪影消失。
 // 数据与判定共用同一份谱面(chart/v1 → 判定事件):谱面上的动作点时刻 = 剪影抵达平台的时刻。
+//   几何/时序纯逻辑 → ./pose-lane.js
+//   DOM 应用层      → ./lane-view.js(与谱面编辑器共用,保证"编辑器里看到的卡片 = 玩家看到的")
+//   剪影资源        → ./lane-assets.js(tools/lane-silhouettes.mjs 逐判定点预渲染的 3D 白影 PNG)
 // ---------------------------------------------------------------------------
-const LANE_LEAD_SEC = 2.4;   // 剪影从右侧入场、滑到判定平台所需的时长(= 提前量)
-const LANE_ARRIVE_X = 46;    // 判定平台中心的横坐标(轨道内像素)
-const LANE_FIG_W = 98;       // 单个剪影宽度
-const LANE_FIG_H = 142;      // 单个剪影高度
-const LANE_MOTION_LOOKBACK = 0.4; // 箭头方向:比较动作点与它前 0.4s 的姿势
-const LANE_MOTION_MIN = 0.06;     // 关节位移小于此值视为"定住造型",不标箭头
-
 const poseHintCache = new WeakMap(); // seq -> 动作事件数组
-const laneFigs = new Map();          // "t" -> { el, arrived }
-let laneLabel = "";                  // 上次写入的标签文本
-let laneProgress = -1;               // 上次写入的进度条数值
-let laneStageLift = -1;              // 上次写入的判定平台律动位移
 // 排查性能用:?nohint=1 可整体关掉右下角判定轨道,便于对比帧率
 const poseHintDisabled = new URLSearchParams(location.search).get("nohint") === "1";
+// 碰撞代理半径模式:默认按蒙皮网格实测(衣服厚度);加 ?collisionradii=old 回到旧的按骨长估算,便于 A/B 对比。
+const COLLISION_RADII_MODE = new URLSearchParams(location.search).get("collisionradii") === "old" ? "formula" : "mesh";
+// 逐点白影清单(缺失/404 都不报错,自动退回 2D 剪影,不影响可玩性)
+let laneManifest = null;
+let laneManifestPromise = null;
+function ensureLaneManifest() {
+  if (!laneManifestPromise) {
+    laneManifestPromise = loadLaneManifest().then((m) => { laneManifest = m; return m; }).catch(() => null);
+  }
+  return laneManifestPromise;
+}
+
+const laneView = createLaneView({
+  root: dom.poseHint, track: dom.judgeTrack, stage: dom.judgeStage,
+  // 进度条与文字标签都不挂载了(见 lane.css):lane-view 的 fill/name 是可选槽位
+  buildFigure: (args) => buildLaneFigure(args),
+});
+
+// 渲染循环必须等上面判定轨道的常量/变量都初始化后才能启动(否则 updatePoseLane 会命中 TDZ)。
+renderLoop();
 
 function poseEventsFor(seq) {
   if (!seq) return [];
   if (poseHintCache.has(seq)) return poseHintCache.get(seq);
-  let events = [];
-  try {
-    events = parseChart(seq, seq.chart);
-  } catch {
-    events = [];
-  }
-  // 没有谱面时回退:每 0.5s 采一帧当动作点
-  if (!events.length && seq.frames?.length) {
-    const fps = seq.meta?.fps || 30;
-    const step = Math.max(1, Math.round(fps * 0.5));
-    events = seq.frames.filter((_, i) => i % step === 0).map((f) => ({ t: f.t }));
-  }
+  const events = computePoseEvents(seq);
   poseHintCache.set(seq, events);
   return events;
 }
 
-// 参考序列里最接近 t 的一帧(导出可能缺帧,按时间戳二分而不是按 fps 下标)
-function frameAtTime(seq, t) {
-  const frames = seq?.frames || [];
-  if (!frames.length) return null;
-  let lo = 0, hi = frames.length;
-  while (lo < hi) { const mid = (lo + hi) >> 1; if (frames[mid].t < t) lo = mid + 1; else hi = mid; }
-  if (!lo) return frames[0];
-  if (lo >= frames.length) return frames[frames.length - 1];
-  return t - frames[lo - 1].t <= frames[lo].t - t ? frames[lo - 1] : frames[lo];
-}
-
-// 当前在跳哪支舞、跳到第几秒(选曲试跳 / 正式挑战都算;表演模式不显示)
-function activePoseSource() {
-  if (state.phase === "select") {
-    const e = state.select.entries[state.select.selected];
-    if (!e?.seq) return null;
-    // 吸引态/试跳是循环播放,时钟要对时长取模,否则播过一轮后提示会停在最后一个动作
-    return { seq: e.seq, t: state.select.clock % (e.seq.meta?.durationSec || 1) };
-  }
-  if (state.mode === "challenge" || state.mode === "pk") {
-    const ch = state.challenge;
-    if (ch?.seq) return { seq: ch.seq, t: ch.running ? (ch.session?.songTime ?? 0) : 0 };
-  }
-  return null;
-}
-
-// 拍长(秒):优先序列拍栅格,其次 bpm,最后 0.5s
-function beatDurFor(seq) {
-  const beats = seq?.meta?.beatTimesSec;
-  if (beats && beats.length > 1) {
-    const d = beats[1] - beats[0];
-    if (d > 0.05) return d;
-  }
-  const bpm = seq?.meta?.timing?.bpm || seq?.meta?.bpm;
-  if (bpm > 0) return 60 / bpm;
-  return 0.5;
-}
-
-function laneRemove(key) {
-  const fig = laneFigs.get(key);
-  if (!fig) return;
-  fig.el.remove();
-  laneFigs.delete(key);
-}
-
-function laneClear() {
-  for (const key of [...laneFigs.keys()]) laneRemove(key);
-}
-
-// 造一张剪影:只画动作的真实姿势(不做镜像)——单手上举的动作就该只有那只手举着。
-// 同时算出这个动作"哪个部位往哪动",在旁边标一支方向箭头(上举 → 向上箭头,下蹲 → 向下箭头)。
-function laneMakeFig(key, ev, seq, dpr) {
-  const el = document.createElement("div");
-  el.className = "lane-fig";
-  el.style.width = LANE_FIG_W + "px";
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(LANE_FIG_W * dpr);
-  canvas.height = Math.round(LANE_FIG_H * dpr);
-  el.appendChild(canvas);
-  dom.judgeTrack.appendChild(el);
-  const nodeT = ev.targetT ?? ev.t;
-  const frame = frameAtTime(seq, nodeT);
-  if (frame) {
-    const joints = reconstructJoints(frame, seq.meta?.dimensions, seq.bones);
-    renderPoseSilhouette(canvas, joints, seq.bones, { color: "#ffd7a6" });
-    const arrow = laneMotionArrow(seq, nodeT, joints, dpr);
-    if (arrow) el.appendChild(arrow);
-  }
-  const fig = { el, arrived: false };
-  laneFigs.set(key, fig);
-  return fig;
-}
-
-// 剪影渲染器内部的"姿势包围盒 → 画布像素"映射(与 stick-figure.js 的常量保持一致),
-// 用它把"正在动的那个关节"换算到画布坐标,箭头才能贴在动作旁边而不是乱飘。
-const ARROW_MAP_JOINTS = [
-  "left_shoulder", "left_elbow", "left_wrist",
-  "right_shoulder", "right_elbow", "right_wrist",
-  "left_hip", "left_knee", "left_ankle",
-  "right_hip", "right_knee", "right_ankle",
-  "nose",
-];
-const ARROW_PAD_FRAC = 0.10;
-
-function laneJointToPixel(joints, name, dpr) {
-  const pts = ARROW_MAP_JOINTS.map((n) => joints[n]).filter(Boolean);
-  if (!pts.length || !joints[name]) return null;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of pts) {
-    if (p[0] < minX) minX = p[0];
-    if (p[0] > maxX) maxX = p[0];
-    if (p[1] < minY) minY = p[1];
-    if (p[1] > maxY) maxY = p[1];
-  }
-  const W = LANE_FIG_W * dpr;
-  const H = LANE_FIG_H * dpr;
-  const bw = Math.max(1e-6, maxX - minX);
-  const bh = Math.max(1e-6, maxY - minY);
-  const pad = Math.min(W, H) * ARROW_PAD_FRAC;
-  const scale = Math.min((W - 2 * pad) / bw, (H - 2 * pad) / bh);
-  const cx = (minX + maxX) / 2;
-  const cy = (minY + maxY) / 2;
-  const p = joints[name];
-  return {
-    x: (W / 2 + (p[0] - cx) * scale) / dpr,
-    y: (H / 2 - (p[1] - cy) * scale) / dpr,
-  };
-}
-
-// 比较两个姿势,找位移最大的关节(候选都是看得出来的末端/根节点)
-function laneBestMotion(jointsFrom, jointsTo) {
-  const CANDIDATES = [
-    "left_wrist", "right_wrist", "left_elbow", "right_elbow",
-    "left_ankle", "right_ankle", "left_knee", "right_knee",
-    "hips_center", "nose",
-  ];
-  let best = null;
-  for (const name of CANDIDATES) {
-    const a = jointsFrom[name];
-    const b = jointsTo[name];
-    if (!a || !b) continue;
-    const mx = b[0] - a[0];
-    const my = b[1] - a[1];
-    const mag = Math.hypot(mx, my);
-    if (!best || mag > best.mag) best = { name, mx, my, mag };
-  }
-  return best;
-}
-
-// 这个动作"哪个部位往哪动":比较动作点与它前面的姿势,取位移最大的关节。
-// 慢舞(幅度小)自动拉长回溯窗口到 0.8s;整首的第一个动作没有更早的姿势,就用往后 0.4s 的起手方向。
-function laneMotionArrow(seq, nodeT, jointsNow, dpr) {
-  const dims = seq.meta?.dimensions;
-  let best = null;
-  for (const lb of [LANE_MOTION_LOOKBACK, LANE_MOTION_LOOKBACK * 2]) {
-    const prevFrame = frameAtTime(seq, nodeT - lb);
-    if (!prevFrame) continue;
-    const cand = laneBestMotion(reconstructJoints(prevFrame, dims, seq.bones), jointsNow);
-    if (cand && (!best || cand.mag > best.mag)) best = cand;
-    if (best && best.mag >= LANE_MOTION_MIN) break;
-  }
-  const firstT = seq.frames?.[0]?.t ?? 0;
-  if ((!best || best.mag < LANE_MOTION_MIN) && nodeT - LANE_MOTION_LOOKBACK <= firstT + 1e-6) {
-    const nextFrame = frameAtTime(seq, nodeT + LANE_MOTION_LOOKBACK);
-    if (nextFrame) {
-      const cand = laneBestMotion(jointsNow, reconstructJoints(nextFrame, dims, seq.bones));
-      if (cand && (!best || cand.mag > best.mag)) best = cand;
-    }
-  }
-  if (!best || best.mag < LANE_MOTION_MIN) return null; // 几乎没动(定住造型)就不标箭头
-
-  const ux = best.mx / best.mag;
-  const uy = best.my / best.mag;
-  const anchor = laneJointToPixel(jointsNow, best.name, dpr);
-  const body = laneJointToPixel(jointsNow, "hips_center", dpr);
-  if (!anchor) return null;
-
-  // 出箭头的方向:运动方向 + 远离身体的方向(否则下蹲/手落下的动作箭头会压在身体上)
-  let dx = ux;
-  let dy = -uy; // 屏幕 y 向下
-  if (body) {
-    const ox = anchor.x - body.x;
-    const oy = anchor.y - body.y;
-    const olen = Math.hypot(ox, oy);
-    if (olen > 1) {
-      dx = dx * 0.55 + (ox / olen) * 0.85;
-      dy = dy * 0.55 + (oy / olen) * 0.85;
-    }
-  }
-  const dlen = Math.hypot(dx, dy) || 1;
-  dx /= dlen;
-  dy /= dlen;
-
-  const arrow = document.createElement("i");
-  arrow.className = "lane-arrow";
-  // 箭头基准朝上(0°):屏幕顺时针角度 = atan2(dx, dy)
-  const deg = Math.atan2(dx, dy) * 180 / Math.PI;
-  const push = 36;
-  // 限制在剪影框内,否则举手/下落类动作的箭头会被轨道边缘裁掉
-  const x = Math.min(LANE_FIG_W - 6, Math.max(6, anchor.x + dx * push));
-  const y = Math.min(LANE_FIG_H - 6, Math.max(10, anchor.y + dy * push));
-  arrow.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${deg.toFixed(1)}deg)`;
-  return arrow;
-}
+// 造一张剪影(2D 兜底 / 3D 白影)的逻辑已抽到 ./lane-figure.js,游戏页与编辑器共用。
 
 function updatePoseLane() {
   if (!dom.poseHint) return;
-  if (poseHintDisabled || !dom.judgeTrack) { dom.poseHint.classList.add("hidden"); laneClear(); return; }
-  const src = activePoseSource();
-  if (!src) { dom.poseHint.classList.add("hidden"); laneClear(); return; }
-  dom.poseHint.classList.remove("hidden");
-
-  const { seq, t } = src;
-  const events = poseEventsFor(seq);
-  if (!events.length) return;
-
-  // 轨道几何:右侧入场 → 左侧判定平台,走到平台正好花 LANE_LEAD_SEC 秒(这就是"提前量")
-  const trackW = dom.judgeTrack.clientWidth || 396;
-  const pxPerSec = Math.max(1, (trackW - LANE_ARRIVE_X) / LANE_LEAD_SEC);
-  const dpr = globalThis.devicePixelRatio || 1;
-
-  // 这一帧应该还在轨道上的剪影:还没到平台的(含刚到的正在淡出)
-  const live = new Set();
-  for (const ev of events) {
-    const dt = ev.t - t;
-    if (dt > LANE_LEAD_SEC) break;
-    if (dt < -0.05 && !laneFigs.has(ev.t.toFixed(3))) continue; // 早过点的,直接跳过
-    const key = ev.t.toFixed(3);
-    live.add(key);
-    let fig = laneFigs.get(key);
-    if (!fig) fig = laneMakeFig(key, ev, seq, dpr);
-    if (fig.arrived) continue; // 已抵达:停在平台上等淡出动画结束,不再更新位置
-
-    // 位置:平台处 x = LANE_ARRIVE_X,越早的动作越靠左
-    const x = LANE_ARRIVE_X + Math.max(0, dt) * pxPerSec;
-    fig.el.style.transform = `translateX(${(x - LANE_FIG_W / 2).toFixed(1)}px)`;
-    fig.el.classList.toggle("near", dt <= 0.45);
-
-    // 抵达判定平台:剪影立刻消失(淡出 + 放大),平台同时弹一下
-    if (dt <= 0) {
-      fig.arrived = true;
-      fig.el.classList.add("arrive");
-      setTimeout(() => laneRemove(key), 300);
-    }
-  }
-  // 清掉已经不在视野里的
-  for (const key of [...laneFigs.keys()]) if (!live.has(key)) laneRemove(key);
-
-  // 律动:判定平台跟着拍点上下浮一下(越接近拍点越高)
-  const beat = beatDurFor(seq);
-  const frac = ((t / beat) % 1 + 1) % 1;
-  const lift = 6 * Math.exp(-frac * 6);
-  if (dom.judgeStage && Math.abs(lift - laneStageLift) > 0.2) {
-    laneStageLift = lift;
-    dom.judgeStage.style.transform = `translateY(${(-lift).toFixed(2)}px)`;
-  }
-
-  // 标签:下一个动作名 + 还有几秒到它(0.1s 粒度,避免每帧写 DOM)
-  let i = 0;
-  for (let k = events.length - 1; k >= 0; k--) if (events[k].t <= t) { i = k; break; }
-  const cur = events[i];
-  const next = events[Math.min(events.length - 1, i + 1)];
-  const up = next.t > t ? next : cur;
-  const remain = Math.max(0, up.t - t);
-  const text = (up.moveId || "") + (remain > 0.05 ? ` · ${remain.toFixed(1)}s` : " · 就是现在");
-  if (text !== laneLabel && dom.poseHintName) {
-    laneLabel = text;
-    dom.poseHintName.textContent = text;
-  }
-
-  // 进度条:上一个节点 → 下一个节点,走满 = 现在就该做它
-  const gap = Math.max(0.2, next.t - cur.t);
-  const p = t < cur.t ? 0 : Math.min(1, (t - cur.t) / gap);
-  if (p - laneProgress >= 0.005 || p < laneProgress) {
-    laneProgress = p;
-    if (dom.poseHintFill) dom.poseHintFill.style.width = (p * 100).toFixed(1) + "%";
-  }
+  const src = activePoseSource(state);
+  // 视频模式下没有 3D 教练/选曲时钟,轨道会停在第一个动作,直接隐藏。
+  const plan = planPoseLaneFrame({
+    events: src ? poseEventsFor(src.seq) : [],
+    t: src?.t ?? 0,
+    trackW: dom.judgeTrack?.clientWidth || 0,
+    beatDur: src ? beatDurFor(src.seq) : LANE_FALLBACK_STEP_SEC,
+    trackedKeys: laneView.trackedKeys(),
+    arrivedKeys: laneView.arrivedKeys(),
+    disabled: poseHintDisabled,
+    videoSide: isVideoSide(),
+    hasTrack: !!dom.judgeTrack,
+    hasSource: !!src,
+  });
+  const seq = src?.seq ?? null;
+  laneView.update(plan, {
+    seq,
+    dpr: globalThis.devicePixelRatio || 1,
+    entryFor: seq ? (ev) => laneAssetFor(laneManifest, seq.danceId, ev.t) : null,
+  });
 }
 
 // 试跳时让海报上的剪影跟着循环(卡片也"活了")
@@ -1020,26 +880,25 @@ function animateCardPose(i) {
   }, 90);
 }
 
-// 扇形布局:从右下角向左展开,选中卡贴角放大,越远越缩越小/越后仰
+// 抽屉轮播:选中卡居中,相邻卡带透视层级向两侧展开。
 function layoutCards() {
   const n = state.select.entries.length;
   state.select.entries.forEach((e, k) => {
-    const el = e.el;
-    if (!el) return;
-    const w = el.offsetWidth || 210;
-    const spread = Math.round(w * 0.66);
-    let off = ((k - state.select.selected) % n + n) % n; // 0=选中(贴角), 1..=向左展开
-    if (off === 0) {
-      el.style.transform = `translateX(0px) translateY(-10px) rotateY(0deg) scale(1.12)`;
-      el.style.zIndex = n;
-      el.style.opacity = "";
-    } else {
-      const rot = 18 + (off - 1) * 14;
-      const scale = Math.max(0.64, 0.88 - (off - 1) * 0.12);
-      el.style.transform = `translateX(${-off * spread}px) translateY(${off * 4}px) rotateY(${-rot}deg) scale(${scale})`;
-      el.style.zIndex = n - off;
-      el.style.opacity = "";
+    if (!e.el) return;
+    let off = k - state.select.selected;
+    if (n > 1) {
+      if (off > n / 2) off -= n;
+      if (off < -n / 2) off += n;
     }
+    const distance = Math.abs(off);
+    const x = off * 132;
+    const y = distance * 10;
+    const scale = Math.max(0.72, 1 - distance * 0.16);
+    const rotate = off * -13;
+    e.el.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotateY(${rotate}deg) scale(${scale})`;
+    e.el.style.zIndex = String(n + 2 - distance);
+    e.el.style.opacity = distance > 2 ? "0" : String(Math.max(0.34, 1 - distance * 0.28));
+    e.el.style.pointerEvents = distance > 2 ? "none" : "auto";
   });
 }
 
@@ -1048,19 +907,17 @@ async function seqFor(entry) {
 }
 
 async function enterSelect() {
+  stopPreviewMusic();
   state.phase = "select";
   state.mode = "pk";
   clearTimeout(state.select.revertTimer);
   clearInterval(cardAnimTimer);
   state.select.player = null;
-  laneClear();
-  laneProgress = -1;
-  laneLabel = "";
+  laneView.reset();
   document.body.classList.add("pk-mode");
   scene.setSplitLayout(true);
-  // 选曲态只留:摄像头 + 教练 + 卡片;其余 HUD 收起
+  // 选曲态只留:摄像头 + 教练/视频 + 选曲入口;其余 HUD 收起
   dom.result.classList.add("hidden");
-  closeReady();
   dom.scorePanel.classList.add("hidden");
   dom.controls.classList.add("hidden");
   dom.dancePicker.classList.add("hidden");
@@ -1081,20 +938,36 @@ async function enterSelect() {
     layoutForMode(); // pk 布局:隐藏玩家 3D,显示教练
   }
 
-  // 预载全部舞曲序列,试跳/开始都即时
-  const entries = dances().map((dance) => {
+  // 两个列表按「作品出身模式」分:
+  //   视频模式(右侧放参考视频) → 只留绑了视频的舞曲;
+  //   3D 模式(右侧放 3D 教练)   → 剔除「视频作品」(mode==='video'),它们本来就该在视频模式下跳。
+  // 兜底:视频作品要是把视频解绑了,就退回 3D 列表,免得两个列表都看不到、彻底消失。
+  // 选曲列表按「作品出身模式」分:
+  //   视频模式(右侧放参考视频) → 只留绑了视频的舞曲;
+  //   3D 模式(右侧放 3D 教练)   → 剔除视频作品(mode==='video'),它们该在视频模式下跳。
+  // 兜底:视频作品要是把视频解绑了,就退回 3D 列表,免得两个列表都看不到、彻底消失。
+  const list = isVideoSide()
+    ? dances().filter((d) => videoUrlFor(d.id))
+    : dances().filter((d) => d.mode !== "video" || !videoUrlFor(d.id));
+  if (isVideoSide() && !list.length) {
+    setStatus("没有已绑定视频的舞曲（请在后台「右侧画面」为舞曲绑定视频）");
+  }
+  const entries = list.map((dance) => {
     const song = songById(dance.defaultSongId) || songs()[0];
     return { dance, song, skin: SELECT_SKIN[dance.id] || SELECT_SKIN.demo, seq: null, el: null };
   });
   await Promise.all(entries.map(async (e) => { e.seq = await seqFor(e); }));
+  // 选曲卡的剪影来自判定轨道白影清单,先确保它到手(通常早就加载完了)
+  await ensureLaneManifest();
 
   state.select.entries = entries;
   state.select.selected = 0;
   buildSelectCards();
   dom.songPick.classList.remove("hidden");
+  setSongPickerOpen(false);
   startAttract(0);
   await startCamera();
-  setStatus("选一支舞 · 单击预览 · 双击准备开始");
+  setStatus("选一支舞");
 }
 
 function buildSelectCards() {
@@ -1107,23 +980,26 @@ function buildSelectCards() {
     const heat = "●".repeat(e.skin.diff) + "○".repeat(Math.max(0, 3 - e.skin.diff));
     card.innerHTML = `
       <div class="sc-cover"></div>
-      <img class="sc-sil" src="${SILHOUETTES[e.dance.id] || SILHOUETTES.demo}" alt="" draggable="false">
+      <img class="sc-sil" alt="" draggable="false">
       <div class="sc-heat">${heat}</div>
       <div class="sc-info">
         <div class="sc-title">${e.dance.label}</div>
-        <div class="sc-meta">♪ ${e.song.label} · BPM ${e.song.bpm}</div>
+        <div class="sc-meta">♪ ${e.song.label}</div>
       </div>`;
-    // 预生成 PNG 缺失/加载失败时,页面内用 3D 舞者实时渲染一张白影剪影
+    // 剪影优先级:判定轨道白影(模型渲染) → 老的预生成 PNG → 页面内实时渲染 → demo 兜底。
+    // 注意别再把 demo.png 当默认值:它总能加载成功,error 回调永远不触发,
+    // 新舞曲会一直顶着同一张通用剪影(这正是之前 pose 卡不走模型通道的原因)。
     const silImg = card.querySelector(".sc-sil");
-    silImg.addEventListener("error", () => {
-      const dataUrl = inPageSilhouette(e);
-      if (dataUrl) silImg.src = dataUrl;
-    }, { once: true });
+    const fallbackSil = () => { silImg.src = inPageSilhouette(e) || SILHOUETTES.demo; };
+    silImg.addEventListener("error", fallbackSil, { once: true });
+    const laneUrl = laneCardSilhouette(e.dance.danceId);
+    if (laneUrl) setCroppedSilhouette(silImg, laneUrl);
+    else if (SILHOUETTES[e.dance.id]) silImg.src = SILHOUETTES[e.dance.id];
+    else fallbackSil();
     card.addEventListener("click", () => {
       selectCard(i);
       preview(i);
     });
-    card.addEventListener("dblclick", () => openReady(i));
     dom.songPickStrip.appendChild(card);
     e.el = card;
   });
@@ -1131,38 +1007,88 @@ function buildSelectCards() {
 }
 
 function selectCard(i) {
+  const n = state.select.entries.length;
+  if (!n) return;
+  i = ((i % n) + n) % n;
   state.select.selected = i;
   state.select.entries.forEach((e, k) => e.el.classList.toggle("selected", k === i));
+  const e = state.select.entries[i];
+  if (dom.songPickCurrent && e) {
+    dom.songPickCurrent.textContent = `${e.dance.label} · ${e.song.label}`;
+  }
   layoutCards();
 }
 
-function openReady(i) {
-  selectCard(i);
-  const e = state.select.entries[i];
-  if (e) {
-    dom.readySong.textContent = `${e.dance.label} · ${e.song.label} · BPM ${e.song.bpm}`;
-    dom.readyBackdrop.classList.remove("hidden");
-    dom.ready.classList.remove("hidden");
-    dom.readyGo.focus();
-  }
+function setSongPickerOpen(open) {
+  if (!dom.songPick) return;
+  const shouldOpen = Boolean(open);
+  const wasOpen = dom.songPick.classList.contains("picker-open");
+  dom.songPick.classList.toggle("picker-open", shouldOpen);
+  dom.songPickOpen?.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  if (wasOpen && !shouldOpen) stopSelectionPreview();
 }
 
-function closeReady() {
-  dom.ready.classList.add("hidden");
-  dom.readyBackdrop.classList.add("hidden");
+/** 关闭抽屉就是退出预览:音乐、3D 试跳和视频试看同步停止。 */
+function stopSelectionPreview() {
+  stopPreviewMusic();
+  clearTimeout(state.select.revertTimer);
+  clearInterval(cardAnimTimer);
+  state.select.player = null;
+  if (state.coach) state.coach.retargeter.reset();
+  if (isVideoSide()) stopRefVideo();
 }
 
-dom.readyBackdrop.addEventListener("click", closeReady);
+function stepSongPicker(delta) {
+  if (!state.select.entries.length) return;
+  const next = state.select.selected + delta;
+  selectCard(next);
+  preview(state.select.selected);
+}
+
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !dom.ready.classList.contains("hidden")) closeReady();
+  if (event.key !== "Escape") return;
+  if (dom.songPick?.classList.contains("picker-open")) setSongPickerOpen(false);
 });
+
+dom.songPickOpen?.addEventListener("click", () => {
+  setSongPickerOpen(true);
+  preview(state.select.selected);
+});
+dom.songPickClose?.addEventListener("click", () => setSongPickerOpen(false));
+dom.songPickShade?.addEventListener("click", () => setSongPickerOpen(false));
+function pulseSongArrow(button) {
+  if (!button) return;
+  button.classList.remove("switching");
+  void button.offsetWidth;
+  button.classList.add("switching");
+  setTimeout(() => button.classList.remove("switching"), 360);
+}
+dom.songPickPrev?.addEventListener("click", () => {
+  pulseSongArrow(dom.songPickPrev);
+  stepSongPicker(-1);
+});
+dom.songPickNext?.addEventListener("click", () => {
+  pulseSongArrow(dom.songPickNext);
+  stepSongPicker(1);
+});
+dom.songPickStart?.addEventListener("click", () => startSong(state.select.selected));
+
+let songWheelLocked = false;
+dom.songPickDrawer?.addEventListener("wheel", (event) => {
+  if (Math.abs(event.deltaY) < 8 || songWheelLocked) return;
+  event.preventDefault();
+  songWheelLocked = true;
+  stepSongPicker(event.deltaY > 0 ? 1 : -1);
+  setTimeout(() => { songWheelLocked = false; }, 180);
+}, { passive: false });
 
 function preview(i) {
   const e = state.select.entries[i];
   if (!e?.seq) return;
+  playSelectionPreview(e);
   if (isVideoSide()) {
     setRefVideo(videoUrlFor(e.dance.id));
-    playRefVideo();
+    playRefVideo({ restart: true });
   } else {
     const coach = state.coach;
     if (!coach) return;
@@ -1195,13 +1121,12 @@ function startSong(i) {
   if (!e) return;
   state.phase = "playing";
   state.select.player = null;
-  laneClear();
-  laneProgress = -1;
-  laneLabel = "";
+  stopPreviewMusic(); // 试听停掉,音乐交给挑战会话(放的是同一首)
+  laneView.reset();
   clearTimeout(state.select.revertTimer);
   clearInterval(cardAnimTimer);
   dom.songPick.classList.add("hidden");
-  closeReady();
+  setSongPickerOpen(false);
   dom.controls.classList.toggle("hidden", !debugMode); // 只有工作人员模式才显示底部控制条
   state.challengeDanceId = e.dance.id;
   state.challengeSongId = e.song.id;
@@ -1213,9 +1138,6 @@ function startSong(i) {
   state.coachPlayer = null;
   startChallenge().catch((err) => { stopAll(); setStatus("启动失败: " + err.message); });
 }
-// 「准备开始」面板的开始按钮
-dom.readyGo.addEventListener("click", () => startSong(state.select.selected));
-
 // ---------------------------------------------------------------------------
 // 表演模式:播放 FBX/GLB 内嵌动画(AnimationMixer)
 // ---------------------------------------------------------------------------
@@ -1266,28 +1188,86 @@ function buildPerformanceOptions() {
   }
 }
 
-// 表演模式循环音乐(与挑战 SongSession 分离,复用 AudioEngine + loop)
+// 表演模式音乐(与挑战 SongSession 分离,复用 AudioEngine):每支舞放**自己的**曲子。
+// 曲子按 danceId 从歌单找(songs/index.json 里 dance.defaultSongId 对应的音频),
+// 歌单里没有的(比如模型内嵌动画)才退回原来的循环伴奏。
+// 节奏对齐:动作比曲子短(salsa 2.25s / 曲子 24s)→ 动作与曲子都循环(原有手感);
+// 动作和曲子差不多长(copydance1 28.7s / 曲子 30s)→ 各放一遍,曲子放完自动收尾,
+// 否则每循环一次动作和音乐就错开一点。
+const PERFORMANCE_FALLBACK_AUDIO = "../songs/hiphop/pop-demo.wav";
+// 动作长度 ≥ 曲子长度 × 这个比例 → 认为「动作和曲子是同一支舞」,只放一遍;
+// 明显更短(salsa 2.25s / 曲子 24s = 0.09)才循环补齐。
+const PERFORMANCE_LOOP_RATIO = 0.8;
 let performanceAudio = null;
+let performanceAudioUrl = null;
 
-async function ensurePerformanceAudio() {
-  if (performanceAudio) return performanceAudio;
-  const AudioCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
-  const audioContext = AudioCtor ? new AudioCtor() : null;
-  const engine = new AudioEngine({ audioContext });
-  engine.loop = true;
-  await engine.load("../songs/hiphop/pop-demo.wav");
-  performanceAudio = engine;
-  return engine;
+/** 这支舞自己的音乐 URL;歌单里查不到就返回 null。 */
+function performanceMusicUrl(dance) {
+  const d = danceById(dance?.id) || dances().find((x) => x.danceId === dance?.id);
+  const song = d ? (songById(d.defaultSongId) || songs()[0]) : null;
+  return d && song?.file ? `../songs/${d.danceId}/${song.file}` : null;
 }
 
-function startPerformanceMusic() {
-  ensurePerformanceAudio()
-    .then((engine) => engine.play())
+async function ensurePerformanceAudio(url = PERFORMANCE_FALLBACK_AUDIO) {
+  // 只建一个引擎/一个 AudioContext(浏览器对 AudioContext 数量有上限),切舞时只换音频。
+  if (!performanceAudio) {
+    const AudioCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+    performanceAudio = new AudioEngine({ audioContext: AudioCtor ? new AudioCtor() : null });
+  }
+  if (performanceAudioUrl !== url) {
+    performanceAudio.stop();
+    await performanceAudio.load(url); // 换曲:重新解码,时长随之更新
+    performanceAudioUrl = url;
+  }
+  return performanceAudio;
+}
+
+/** 动作长度 ≈ 曲子长度 → 只放一遍(放完 stopMixer);明显更短 → 两边都循环。 */
+function applyPerformanceLoop(engine, action, clipDurationSec) {
+  const musicDur = engine.durationSec || 0;
+  const once = musicDur > 0 && clipDurationSec >= musicDur * PERFORMANCE_LOOP_RATIO;
+  engine.loop = !once;
+  engine.onEnded = once ? () => stopMixer() : null;
+  if (action) action.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, once ? 1 : Infinity);
+  return once;
+}
+
+function startPerformanceMusic(opt, action, clipDurationSec, token) {
+  const url = (opt?.kind === "builtin" ? performanceMusicUrl(opt.dance) : null) || PERFORMANCE_FALLBACK_AUDIO;
+  ensurePerformanceAudio(url)
+    .then((engine) => {
+      if (token !== mixerSeq || state.mode !== "performance") return; // 已切歌/已停止
+      applyPerformanceLoop(engine, action, clipDurationSec);
+      return engine.play();
+    })
     .catch((e) => console.warn("表演音频播放失败:", e));
 }
 
 function stopPerformanceMusic() {
-  if (performanceAudio) performanceAudio.stop();
+  if (!performanceAudio) return;
+  performanceAudio.onEnded = null;
+  performanceAudio.stop(); // 保留引擎/AudioContext,只停播放
+}
+
+// ---------------------------------------------------------------------------
+// PK 选曲页试听:独立于表演模式和正式挑战的 AudioEngine。
+// 点卡片/切换卡片会同时从头试听音乐、试看动作;开始挑战或离开选曲页立即停止。
+// ---------------------------------------------------------------------------
+const selectionPreviewAudio = new SelectionPreviewAudio({ AudioEngine, debounceMs: 180 });
+
+function playSelectionPreview(entry) {
+  if (!entry || state.phase !== "select") return;
+  const url = performanceMusicUrl(entry.dance) || PERFORMANCE_FALLBACK_AUDIO;
+  selectionPreviewAudio.request(url, {
+    onPlaying: () => {
+      if (state.phase === "select") dom.songPick.classList.add("previewing");
+    },
+  });
+}
+
+function stopPreviewMusic() {
+  selectionPreviewAudio.stop();
+  dom.songPick?.classList.remove("previewing");
 }
 
 async function startMixer(optionId) {
@@ -1304,7 +1284,18 @@ async function startMixer(optionId) {
       const { root, clips } = await loadDanceClips(opt.dance);
       if (seq !== mixerSeq || state.mode !== "performance") return; // 已被停止/切换
       if (!clips.length) throw new Error("该 FBX 里没有动画片段");
-      clip = retargetClipToSkeleton(clips[0], root, state.avatar.object);
+      // 用这支舞自己的源骨架当重定向基准,比通用参考更贴合(实测方向误差 4.6°→2.1°、腿 11°→1.5°)。
+      // 重定向基准变了 → Retargeter 与休息姿态缓存都要重建;只在同系骨架(有 Hips)时做。
+      if (/(?:^|\/)dancer_girl\.fbx(?:[?#]|$)/i.test(state.modelSource?.url || "")) {
+        realignRetargeter(state.avatar, root);
+        captureRestPose(state.avatar.object);
+      }
+      // 同系(Mixamo 命名)源 + dancer_girl 时,手臂直接用源局部旋转,不要用「另一个休息姿态」去修正
+      // —— 否则肘部会过度折叠、手插进躯干。实测(手进躯干帧数,开/不开):
+      //   hiphop 9→0、salsa 13→0(本来就是开着的)、copydance1 79→25。三支舞都只变好,故按模型开而不按舞曲挑。
+      const preserveArmRotations =
+        /(?:^|\/)dancer_girl\.fbx(?:[?#]|$)/i.test(state.modelSource?.url || "");
+      clip = retargetClipToSkeleton(clips[0], root, state.avatar.object, { preserveArmRotations, radiiMode: COLLISION_RADII_MODE });
       if (!clip.tracks.length) throw new Error("骨骼名对不上,无法重定向到当前舞者");
     } catch (e) {
       if (seq !== mixerSeq || state.mode !== "performance") return;
@@ -1322,13 +1313,24 @@ async function startMixer(optionId) {
   state.mixer = new THREE.AnimationMixer(state.avatar.object);
   const action = state.mixer.clipAction(clip);
   action.reset();
-  action.setLoop(THREE.LoopRepeat, Infinity); // 动作短,循环播放(与循环背景乐一致)
+  action.setLoop(THREE.LoopRepeat, Infinity); // 先按循环起跳;音乐加载完由 applyPerformanceLoop 决定放一遍还是循环
   action.play();
   state.running = true;
   dom.btnStart.disabled = true;
   dom.btnStop.disabled = false;
-  setStatus("播放舞蹈: " + (opt.label || clip.name));
-  startPerformanceMusic();
+  // 调试钩子(?debughook=1):让自动化测试能精确 seek 到某一帧并冻结,做同帧 A/B 截图。
+  if (new URLSearchParams(location.search).get("debughook") === "1") {
+    window.__dance = {
+      mixer: state.mixer,
+      avatar: state.avatar,
+      seek(t) { state.mixer.setTime(Math.max(0, t)); },
+      freeze() { state.mixer.timeScale = 0; },
+      resume() { state.mixer.timeScale = 1; },
+    };
+  }
+  const musicUrl = opt.kind === "builtin" ? performanceMusicUrl(opt.dance) : null;
+  setStatus(`播放舞蹈: ${opt.label || clip.name}` + (musicUrl ? ` · ♪ ${musicUrl.split("/").pop()}` : ""));
+  startPerformanceMusic(opt, action, clip.duration, seq);
 }
 
 function stopMixer() {
@@ -1462,7 +1464,18 @@ async function startChallenge() {
     // Give the one in-flight frame time to arrive; frame timestamps remain capture-based.
     const lag = Math.min(.25, (lastPerf?.stages?.captureToResult?.p95Ms ?? 80) / 1000);
     for (const result of ch.scorer.advance(Math.max(0, t - lag))) {
-      if (!result.ongoing) { lastTier = ""; judgeFeedback(result.tier, result.combo, result.score); }
+      if (!result.ongoing) {
+        highlights.markJudge({
+          time: t,
+          tier: result.tier,
+          accuracy: result.acc,
+          combo: result.combo,
+          scoreGain: result.score,
+          confidence: state.latestConf,
+          noteId: result.noteId,
+        });
+        lastTier = ""; judgeFeedback(result.tier, result.combo, result.score);
+      }
     }
     updateScoreHUD({ acc: ch.previewAcc ?? 0 });
     updateChallengeProgress(t, ch); beatPulse(t, ch);
@@ -1553,6 +1566,7 @@ function onFrame(frame, boneDefs) {
 }
 
 function stopAll({ keepCamera = false } = {}) {
+  stopPreviewMusic();
   highlights.abort();
   stopRefVideo();
   startGeneration++;
@@ -1689,57 +1703,22 @@ function resetScoreHUD() {
 function updateChallengeProgress(t, ch) {
   const dur = ch.seq.meta.durationSec || 1;
   dom.progressFill.style.width = Math.min(100, (t / dur) * 100) + "%";
-  // 节拍指示(优先 timing/v1,回退旧 beatTimesSec)
-  const timing = ch.session?.timing;
-  let beatIdx = 0;
-  if (timing) {
-    const b = timing.nearestBeat(t);
-    beatIdx = b ? b.index % 4 : 0;
-  } else {
-    const beats = ch.seq.meta.beatTimesSec;
-    if (beats && beats.length > 1) {
-      const beat = beats[1] - beats[0] || 0.5;
-      beatIdx = Math.floor(t / beat) % 4;
-    }
-  }
-  [...dom.beats.children].forEach((el, i) => el.classList.toggle("on", i === beatIdx));
 }
 
 // ---------------------------------------------------------------------------
-// 结算头衔(称号)系统:评级 + 特殊成就给出有趣头衔,并暗示下一档头衔以刺激再来一局
+// 结算页只保留评级与成绩；特殊成绩仍用于控制庆祝动效强度。
 // ---------------------------------------------------------------------------
-const TITLE_LADDER = [
-  { grade: "S", title: "封神舞者", en: "DANCE LEGEND" },
-  { grade: "A", title: "节奏大师", en: "RHYTHM MASTER" },
-  { grade: "B", title: "舞台新星", en: "STAGE STAR" },
-  { grade: "C", title: "渐入佳境", en: "RISING DANCER" },
-  { grade: "D", title: "热身完毕", en: "WARM-UP DONE" },
-];
-const TITLE_TAGLINES = {
-  S: "这就是街舞的天花板",
-  A: "天生为舞台而生",
-  B: "再练一把就能封神",
-  C: "手感正在升温",
-  D: "下一把就是你的主场",
-};
 // 结算主色:整个结算界面的霓虹光源都用这一个变量驱动,保证配色统一
 const GRADE_COLORS = { S: "#ffd54a", A: "#39ffcf", B: "#4d7cff", C: "#c88bff", D: "#ff8a8a" };
 
-function titleFor(r) {
+function isSpecialResult(r) {
   const t = r.tallies || {};
   const total = (t.perfect ?? 0) + (t.great ?? 0) + (t.good ?? 0) + (t.miss ?? 0) || 1;
   const perfect = t.perfect ?? 0;
   const fullCombo = r.maxCombo >= total && total > 0;
   const allPerfect = total > 0 && perfect === total;
 
-  // 特殊成就优先于评级头衔
-  if (allPerfect) return { title: "人机合一", en: "PERFECT DANCE", tagline: "一音不差,你就是这个舞台的神", special: true, next: null };
-  if (fullCombo && (r.grade === "S" || r.grade === "A")) return { title: "完美全连", en: "FULL COMBO", tagline: "零断连,全场为你尖叫", special: true, next: null };
-
-  const idx = TITLE_LADDER.findIndex((x) => x.grade === r.grade);
-  const base = idx >= 0 ? TITLE_LADDER[idx] : TITLE_LADDER[TITLE_LADDER.length - 1];
-  const next = idx > 0 ? TITLE_LADDER[idx - 1] : null;
-  return { title: base.title, en: base.en, tagline: TITLE_TAGLINES[r.grade] || "", special: false, next };
+  return allPerfect || (fullCombo && (r.grade === "S" || r.grade === "A"));
 }
 
 // 数字滚动:结算时把大数字从 0 滚到目标值(与 juice 共用时钟,天然支持 hit-stop)
@@ -1779,16 +1758,14 @@ function celebrate(grade, special) {
 }
 
 function showResult(r) {
-  const meta = titleFor(r);
+  const special = isSpecialResult(r);
+  const copy = resultCopyFor(r.grade);
   const gradeColor = GRADE_COLORS[r.grade] || "#ffd54a";
   dom.result.style.setProperty("--grade", gradeColor);
   dom.resultGrade.textContent = r.grade;
-  dom.resultTitle.textContent = meta.title;
-  dom.resultTagline.textContent = `${meta.en} · ${meta.tagline}`.toUpperCase();
+  dom.resultTitle.textContent = copy.title;
+  dom.resultTagline.textContent = copy.tagline;
   dom.resultSong.textContent = `${challengeDance().label} · ${challengeSong().label}`;
-  dom.resultNext.textContent = meta.next
-    ? `再冲一步 · 解锁「${meta.next.title}」`
-    : (meta.special ? "传奇成就已达成,接受全场膜拜吧!" : "已是本曲最高头衔,去刷新纪录吧!");
 
   dom.result.classList.remove("hidden");
   // 重新触发入场编排(移除再添加 .reveal,强制重排)
@@ -1820,18 +1797,20 @@ function showResult(r) {
   fillBar(dom.statComboBar, comboPct, 800);
   fillBar(dom.statHitBar, r.hitRate * 100, 900);
 
-  celebrate(r.grade, meta.special);
+  celebrate(r.grade, special);
 }
 
-function finishChallenge() {
+async function finishChallenge() {
   const ch = state.challenge;
   if (!ch || !ch.running) return;
   ch.running = false;
   const r = ch.scorer.finalize();
-  void highlights.finish(r);
   showResult(r);
+  const replayReady = highlights.finish(r);
   stopAll({ keepCamera: true });
-  scheduleReplay();
+  const replayGeneration = startGeneration;
+  await replayReady;
+  scheduleReplay(replayGeneration);
 }
 
 // ---------------------------------------------------------------------------
@@ -1921,6 +1900,10 @@ async function init() {
     return;
   }
   setupChallengePickers();
+  ensureLaneManifest(); // 逐点 3D 白影清单:缺失/404 会自动退回 2D 剪影
+  // 视频绑定表两种模式都要用:3D 模式下也要靠它判断「这支舞是不是视频作品」,
+  // 否则 videoUrlFor() 恒为 null,选曲过滤会失效(曾经只有进视频模式才加载)。
+  await loadVideoMap();
   await applyLaunchParams();
 }
 init();

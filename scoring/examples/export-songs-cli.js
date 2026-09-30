@@ -16,13 +16,18 @@
  * 音频与 FBX 源都从 songs/<danceId>/ 原地取(幂等);web_dance/audio 与仓库根 fbx/ 已废弃。
  *
  * 用法:
- *   npm run export-songs [-- --out <dir>]
+ *   npm run export-songs [-- --out <dir>] [--force]
+ *
+ * 默认「只增不改」:demo 的序列/谱面是编辑器内容,存在就跳过;songs/index.json 以已有文件为骨架,
+ * 同一支舞(danceId 相同)原样保留(位置/id/label 都不动),只追加生成器里多出来的。
+ * 加 --force 回到全量重写(会用生成器内容覆盖 demo 目录与 index 顺序)。
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { SONGS, CHALLENGE_DANCES, FBX_DANCES, buildDemoSequence, fbxClipToSequence, parseFbxFile } from "./song-sources.js";
+import { mergeSongIndex, isEditorOwned } from "../src/songIndex.js";
 import { assertValidSequence } from "../src/contractValidate.js";
 import { toStandaloneChart } from "../src/chartCodec.js";
 
@@ -73,6 +78,7 @@ async function fbxSources(fbxId, danceId) {
 }
 
 async function main() {
+  const force = process.argv.includes("--force"); // 全量重写(含 demo 目录与 index 顺序)
   const out = process.argv[2] === "--out" ? process.argv[3] : DEFAULT_OUT;
   const indexDances = [];
   const indexSongs = SONGS.map((s) => ({ id: s.id, label: s.label, file: s.file, bpm: s.bpm }));
@@ -81,6 +87,31 @@ async function main() {
     const song = songOf(d.defaultSongId);
     let seq;
     let fbxFile = null;
+
+    // demo 的序列/谱面是**编辑器内容**(在谱面编辑器里手改过),默认不覆盖;其它曲目若谱面被编辑器
+    // 改过(带 judgeOffsetSec / refFrameIdx 之类标记)同样跳过。要重生成加 --force。
+    const dir = join(out, d.danceId);
+    const dirFiles = existsSync(dir) ? readdirSync(dir) : [];
+    const readJson = (name) => {
+      try {
+        return JSON.parse(readFileSync(join(dir, name), "utf8"));
+      } catch {
+        return null;
+      }
+    };
+    if (!force && isEditorOwned(dirFiles, d, readJson)) {
+      console.log(`  ${d.id} → ${d.danceId}/ 跳过(已存在且是编辑器内容;要重生成加 --force)`);
+      indexDances.push({
+        id: d.id,
+        label: d.label,
+        danceId: d.danceId,
+        defaultSongId: d.defaultSongId,
+        chartFile: `${d.danceId}.chart.json`,
+        musicFile: song.file,
+        fbxFile: d.kind === "demo" ? null : `${d.danceId}.fbx`,
+      });
+      continue;
+    }
 
     if (d.kind === "demo") {
       seq = embedDemoChart(buildDemoSequence(), song);
@@ -94,7 +125,6 @@ async function main() {
 
     assertValidSequence(seq);
 
-    const dir = join(out, d.danceId);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${d.danceId}.json`), JSON.stringify(seq, null, 2));
     // 独立谱面(编辑器交换格式,sequenceFile 指向本曲参考序列)
@@ -122,13 +152,23 @@ async function main() {
     );
   }
 
-  const index = {
-    schema: "songs/index/v1",
-    dances: indexDances,
-    songs: indexSongs,
-  };
-  writeFileSync(join(out, "index.json"), JSON.stringify(index, null, 2));
-  console.log(`songs/index.json: dances=${indexDances.length} songs=${indexSongs.length}`);
+  // index.json 走「只增不改」(scoring/src/songIndex.js):已有条目(含人工改过的 label / id / 顺序)
+  // 原样保留,只把生成器里有、index 里没有的追加到末尾。--force 回到「全量重写」的旧行为。
+  const indexPath = join(out, "index.json");
+  let prev = null;
+  if (existsSync(indexPath)) {
+    try {
+      prev = JSON.parse(readFileSync(indexPath, "utf8"));
+    } catch (e) {
+      console.warn("已有 index.json 读取失败,按全新生成:", e.message);
+    }
+  }
+  const merged = mergeSongIndex(prev, { dances: indexDances, songs: indexSongs }, { force });
+  writeFileSync(indexPath, JSON.stringify(merged.index, null, 2));
+  console.log(
+    `songs/index.json: dances=${merged.index.dances.length} songs=${merged.index.songs.length}` +
+    (force ? "(全量重写)" : `(保留已有 ${merged.preserved} 条 / 新增 ${merged.appended} 条)`),
+  );
   console.log("export-songs done.");
 }
 

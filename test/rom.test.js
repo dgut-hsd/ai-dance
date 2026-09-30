@@ -149,9 +149,9 @@ test("T-ARM-2 clampArmDirection 上臂向后摆超后伸极限被钳回(前向�
   assert.ok(Math.abs(out.length() - rel.length()) < 1e-6, "长度应守恒");
 });
 
-test("T-ARM-3 clampArmDirection 上臂跨过中线(内收超 40°)被钳回", () => {
-  // 右臂(sideSign +1)重度探向对侧:自身侧向分量 ≈ −0.8 < −sin40(≈−0.643)
-  const rel = new THREE.Vector3(-0.8, 0.5, 0.33).normalize().multiplyScalar(0.7);
+test("T-ARM-3 clampArmDirection 上臂跨过中线(内收超上限)被钳回", () => {
+  // 右臂(sideSign +1)重度探向对侧:自身侧向分量 ≈ −0.95 < −sin(内收上限)
+  const rel = new THREE.Vector3(-0.95, 0.28, 0.15).normalize().multiplyScalar(0.7);
   const out = clampArmDirection(rel, UP, FORWARD, RIGHT, +1);
   const dir = out.clone().normalize();
   const addMax = -Math.sin(ROM.shoulderAdduction);
@@ -162,7 +162,7 @@ test("T-ARM-3 clampArmDirection 上臂跨过中线(内收超 40°)被钳回", ()
 
 test("T-ARM-4 clampArmDirection 左臂(sideSign −1)镜像对称:内收符号正确", () => {
   // 左臂(sideSign −1)探向自身对侧(= 向右,+x):dL = dir·R×(−1) 应变负并触发内收钳
-  const rel = new THREE.Vector3(0.8, 0.5, 0.33).normalize().multiplyScalar(0.7);
+  const rel = new THREE.Vector3(0.95, 0.28, 0.15).normalize().multiplyScalar(0.7);
   const out = clampArmDirection(rel, UP, FORWARD, RIGHT, -1);
   const dir = out.clone().normalize();
   const addMax = -Math.sin(ROM.shoulderAdduction);

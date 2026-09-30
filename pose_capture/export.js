@@ -51,6 +51,20 @@ export async function exportVideoToSequence({
     withHands: m.hands,
     handModelPath: m.handModel,
   });
+  // 预热:拿张空白小图先跑一次推理,把 GPU shader 编译/图初始化的一次性开销(~10s)提前吃掉。
+  // 不做这一步的话,播放期间第一次 detect 会一直占着 inFlight,这段时间的帧全被丢掉 ——
+  // 实测 30s 的舞会直接缺掉前 11.5s(只剩 2 帧),参考序列等于废了三分之一。
+  // 注意:Tasks Vision 的 VIDEO 模式要求时间戳严格递增。预热占用 WARM_TS,
+  // 所以真实帧统一加上 TS_OFFSET,否则第一帧会因为「时间戳没变大」而抛错 ——
+  // 一旦抛错,后面每一帧都在同一个坑里失败,整段会静默变成空序列。
+  const WARM_TS = 0;
+  const TS_OFFSET = 1;
+  try {
+    const warmCanvas = document.createElement("canvas");
+    warmCanvas.width = 64;
+    warmCanvas.height = 64;
+    await engine.detect(await createImageBitmap(warmCanvas), WARM_TS);
+  } catch (err) { onError(err); /* 预热失败不影响主流程 */ }
   onStatus("processing");
 
   // ---- 3. 播放并逐帧采集 ----
@@ -62,6 +76,7 @@ export async function exportVideoToSequence({
   const frames = [];
   let dimsSum = null;
   let dimsCount = 0;
+  let frameErrors = 0;
 
   await new Promise((resolve, reject) => {
     let ended = false;
@@ -85,7 +100,7 @@ export async function exportVideoToSequence({
       (async () => {
         try {
           const bitmap = await createImageBitmap(video);
-          const { world, img, hands } = await engine.detect(bitmap, metadata.mediaTime * 1000);
+          const { world, img, hands } = await engine.detect(bitmap, metadata.mediaTime * 1000 + TS_OFFSET);
           bitmap.close();
 
           // 进度按视频时间推进,与是否检测到人无关(避免 world=null 时进度卡死)
@@ -123,7 +138,9 @@ export async function exportVideoToSequence({
             dimsCount++;
           }
         } catch (err) {
-          // 偶发取帧失败,跳过
+          // 偶发取帧失败可以跳过,但第一次必须报出来:
+          // 若是系统性错误(时间戳不递增之类),后面每一帧都会同样失败,整段会静默变空。
+          if (!frameErrors++) onError(err);
         } finally {
           inFlight--;
           maybeResolve();
@@ -134,6 +151,13 @@ export async function exportVideoToSequence({
     video.requestVideoFrameCallback(onFrame);
     video.play().catch(reject);
   });
+
+  // 一帧都没采到就是整体失败,直接报错,别把空序列存进草稿(否则到制谱那步才发现)
+  if (!frames.length) {
+    engine.close();
+    URL.revokeObjectURL(url);
+    throw new Error(`视频动捕没采到任何帧(失败 ${frameErrors} 次)`);
+  }
 
   // ---- 4. 组装 §4 dance-sequence JSON ----
   const dimensions = {};

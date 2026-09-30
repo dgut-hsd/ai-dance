@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>谱面编辑器 — DANCE ARENA</title>
+<link rel="stylesheet" href="./lane.css">
 <style>
   :root {
     --bg: #0c0e14; --panel: #151927; --line: #2a3150; --text: #dfe5ff;
@@ -62,6 +63,25 @@
   .err { color: #ff6b6b; font-weight: 600; }
   body.no-seq .needs-seq { display: none; }
   body.no-seq main { display: none; }
+  /* ---------- 空状态引导:没载入序列时把"这是什么/怎么用"讲清楚 ---------- */
+  #guide { display: none; padding: 18px 22px 28px; overflow: auto; }
+  body.no-seq #guide { display: block; }
+  #guide h2 { margin: 0 0 6px; font-size: 18px; }
+  #guide .lead { margin: 0 0 14px; color: var(--text); max-width: 900px; }
+  #guide .cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 22px; align-items: start; }
+  #guide h3 { margin: 14px 0 6px; font-size: 13px; color: var(--accent); }
+  #guide ul { margin: 0; padding-left: 18px; }
+  #guide li { margin: 3px 0; color: var(--dim); }
+  #guide li b, #guide dd b { color: var(--text); }
+  #guide code { background: #0f1322; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+  #guide dl { margin: 0; }
+  #guide dt { color: var(--text); margin-top: 8px; }
+  #guide dd { margin: 2px 0 0; color: var(--dim); }
+  #guide .tip { margin-top: 14px; color: var(--warn); }
+  /* ---------- 判定轨道预览 ---------- */
+  #lanePreviewWrap { flex: none; }
+  #lanePreviewWrap > h3 { margin: 0 0 6px; font-size: 12px; color: var(--dim); font-weight: 600; }
+  #lanePreviewBox { background: #10141f66; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px 12px; }
 </style>
 </head>
 <body class="no-seq">
@@ -115,15 +135,79 @@
         <canvas id="waveform"></canvas>
       </div>
     </div>
+    <div id="lanePreviewWrap">
+      <h3>判定轨道预览 · 玩家右下角看到的就是这张卡片(所见即所得)</h3>
+      <div id="lanePreviewBox">
+        <div id="pose-hint" class="lane-embed">
+          <div id="judge-lane">
+            <div id="judge-stage"></div>
+            <div id="judge-track"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
+
+<!-- 空状态引导:没载入序列时显示(见 CSS 的 body.no-seq) -->
+<section id="guide">
+  <h2>谱面编辑器 · 3 分钟上手</h2>
+  <p class="lead">
+    一句话:<b>音乐是尺子,参考序列是标准答案,谱面是"第几秒考哪个姿势"</b>;
+    右下角那张卡片就是把这道题提前 2.4 秒摆给玩家看 —— 剪影画的就是参考序列那一帧的姿势。
+  </p>
+  <div class="cols">
+    <div>
+      <h3>① 先来一支舞</h3>
+      <ul>
+        <li><b>新建</b>:点「舞曲文件夹」选一个含 <code>.fbx</code>(+音频)的文件夹 → FBX 被采集成 30fps 参考序列,
+          并自动铺「每 2 拍」一个判定点。</li>
+        <li><b>改谱</b>:用「曲子」下拉挑歌单里已有的舞曲,直接编辑它的判定点。</li>
+      </ul>
+      <h3>② 摆判定点(时间轴下半条)</h3>
+      <ul>
+        <li><b>点空白 = 加</b>一个判定点;<b>拖动 = 改时刻</b>;<b>右键或列表里的 ✕ = 删</b>;<b>点 = 选中</b>。</li>
+        <li>时间轴上半条拖动 = 移动播放头;选中判定点会自动把播放头跳过去,左栏姿势预览随之更新。</li>
+        <li>「BPM / 偏移s」决定拍在哪(先把偏移对到鼓点);「吸附节拍」开着时判定点会吸到最近的拍。</li>
+        <li>「每拍 / 每2拍 / 每4拍」= 按拍栅格重铺一遍(会覆盖现有判定点);「清空」全删。</li>
+      </ul>
+      <h3>③ 边听边看,然后保存</h3>
+      <ul>
+        <li>点「播放 ▶」:波形 + 播放头 + <b>下方判定轨道预览</b>会跟着走 —— 玩家看到的卡片就是它。</li>
+        <li>选中判定点后,左栏属性区可改:时刻 / 类型 / 难度 / 判定窗 / <b>动作名</b> / 只算哪几根骨头。</li>
+        <li>「保存到歌单」→ 写 <code>songs/&lt;ID&gt;/</code> 并刷新歌单;回游戏页刷新即可挑战(卡片就用这份谱面)。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>名词对照</h3>
+      <dl>
+        <dt>判定点(pose)</dt><dd>第 <code>t</code> 秒要求玩家做的姿势。卡片上飘过的剪影 = 参考序列里该时刻的那一帧。</dd>
+        <dt>参考序列(frames)</dt><dd>逐帧姿势,判分时的标准答案;FBX / 视频动捕 / 摄像头三种来源。</dd>
+        <dt>判定窗(±0.25s)</dt><dd>玩家在这段时间内做到都算命中,越宽越宽容。</dd>
+        <dt>骨骼子集(局部)</dt><dd>只拿这几根骨头比对 → "只考手部"这类局部动作。</dd>
+        <dt>动作名(note.id)</dt><dd>给这个判定点起的名字,存在谱面里(便于自己认谱);当前卡片不显示文字。</dd>
+        <dt>难度</dt><dd>该判定点的分值权重(1~10)。</dd>
+      </dl>
+      <h3>想要选曲卡那种 3D 白影剪影?</h3>
+      <p>
+        判定轨道的剪影默认是 2D 剪影;跑一次
+        <code>node tools/lane-silhouettes.mjs</code>
+        会按判定点逐张预渲染 3D 白影 + 清单,游戏与这里的预览都会自动换成它(没生成的舞曲自动退回 2D)。
+      </p>
+      <p class="tip">保存需要 Node 服务(<code>npm start</code> → 用 http 打开本页);纯静态服务器只能看不能存。</p>
+    </div>
+  </div>
+</section>
 <script type="importmap">
 {"imports":{
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
   "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
 }}
 </script>
-<script type="module" src="./chart-editor.js?v=20260929a"></script>
+<script type="module">
+  import { mountChartEditor } from "./chart-editor.js?v=20260929b";
+  mountChartEditor(document.body, {});
+</script>
 <script>
   window.addEventListener('error', (e) => {
     const el = document.getElementById('err');

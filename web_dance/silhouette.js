@@ -115,8 +115,8 @@ export function createSilhouetteRenderer(opts = {}) {
   };
 }
 
-/** 按 alpha 把画面裁剪到实际内容(带边距),让剪影尽量填满画布 */
-export function cropToAlpha(source, { padFrac = 0.06, alphaThreshold = 8 } = {}) {
+/** 按 alpha 扫出内容包围盒(未加边距);全透明返回 null */
+export function alphaCropBox(source, { alphaThreshold = 8 } = {}) {
   const w = source.width;
   const h = source.height;
   const probe = document.createElement("canvas");
@@ -137,21 +137,118 @@ export function cropToAlpha(source, { padFrac = 0.06, alphaThreshold = 8 } = {})
       }
     }
   }
-  if (maxX < 0) return probe; // 全透明:原样返回,交给调用方判断
+  if (maxX < 0) return null;
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
 
-  const pad = Math.round(Math.max(maxX - minX, maxY - minY) * padFrac);
-  minX = Math.max(0, minX - pad);
-  minY = Math.max(0, minY - pad);
-  maxX = Math.min(w - 1, maxX + pad);
-  maxY = Math.min(h - 1, maxY + pad);
-  const cw = maxX - minX + 1;
-  const ch = maxY - minY + 1;
-
+/** 把 source 的某个矩形拷到新 canvas(box 为空则原尺寸拷贝) */export function cropCanvas(source, box) {
+  const x = box ? Math.max(0, Math.round(box.x)) : 0;
+  const y = box ? Math.max(0, Math.round(box.y)) : 0;
+  const w = box ? Math.round(box.w) : source.width;
+  const h = box ? Math.round(box.h) : source.height;
   const out = document.createElement("canvas");
-  out.width = cw;
-  out.height = ch;
-  out.getContext("2d").drawImage(probe, minX, minY, cw, ch, 0, 0, cw, ch);
+  out.width = w;
+  out.height = h;
+  out.getContext("2d").drawImage(source, x, y, w, h, 0, 0, w, h);
   return out;
+}
+
+/**
+ * 一组画面共用的裁剪框(逐判定点出图用):取所有 alpha 包围盒的并集 + 边距。
+ * 为什么不用"每张各自裁剪":那样每帧取景都不同,剪影大小会忽大忽小、关节像素也没法统一;
+ * 共用裁剪框既能填满画面,又保证同一支舞里所有动作的比例一致。
+ */
+export function unionCropBox(boxes, { size, padFrac = 0.06 } = {}) {
+  const valid = (boxes ?? []).filter(Boolean);
+  if (!valid.length || !(size > 0)) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const b of valid) {
+    minX = Math.min(minX, b.x);
+    minY = Math.min(minY, b.y);
+    maxX = Math.max(maxX, b.x + b.w - 1);
+    maxY = Math.max(maxY, b.y + b.h - 1);
+  }
+  const pad = Math.round(Math.max(maxX - minX, maxY - minY) * padFrac);
+  const x = Math.max(0, minX - pad);
+  const y = Math.max(0, minY - pad);
+  return {
+    x,
+    y,
+    w: Math.min(size, maxX + pad + 1) - x,
+    h: Math.min(size, maxY + pad + 1) - y,
+  };
+}
+
+/** 按 alpha 把画面裁剪到实际内容(带边距),让剪影尽量填满画布 */
+export function cropToAlpha(source, { padFrac = 0.06, alphaThreshold = 8 } = {}) {
+  const box = alphaCropBox(source, { alphaThreshold });
+  if (!box) {
+    const out = document.createElement("canvas");
+    out.width = source.width;
+    out.height = source.height;
+    out.getContext("2d").drawImage(source, 0, 0);
+    return out;
+  }
+  const pad = Math.round(Math.max(box.w, box.h) * padFrac);
+  return cropCanvas(source, {
+    x: Math.max(0, box.x - pad),
+    y: Math.max(0, box.y - pad),
+    w: Math.min(source.width, box.w + pad * 2),
+    h: Math.min(source.height, box.h + pad * 2),
+  });
+}
+
+/**
+ * 正交相机下的「世界坐标 → 原始画布像素」。
+ * 与 createSilhouetteRenderer 的取景完全对应:相机在 (0, centerY, distance) 看向 (0, centerY, 0),
+ * up = +y、无 roll,正交半宽/半高都是 half(米)。
+ * 用它把模型骨骼的世界坐标换算成图片里的像素 —— 车道箭头要贴到"正在动的那个关节"上,
+ * alpha 裁剪会让每张图取景不同,靠包围盒猜是猜不准的,所以生成器直接把这组像素写进 manifest。
+ */
+export function projectOrthoJoint(point, { size, half = 1.7, centerY = 0.9 } = {}) {
+  if (!point || !Number.isFinite(point[0]) || !Number.isFinite(point[1])) return null;
+  const ndcX = point[0] / half;
+  const ndcY = (point[1] - centerY) / half;
+  return [(ndcX * 0.5 + 0.5) * size, (0.5 - ndcY * 0.5) * size];
+}
+
+/** 读当前渲染器的取景参数,交给 projectOrthoJoint */
+export function silhouetteView(sil) {
+  return { size: sil?.opts?.size ?? 512, half: sil?.camera?.right ?? 1.7, centerY: sil?.camera?.position?.y ?? 0.9 };
+}
+
+/**
+ * 渲染一张「带关节像素」的剪影(生成器用)。
+ *
+ * @param jointPoints { name: [x,y,z] } 该帧各关节的世界坐标,或 (ctx) => 上面那种对象
+ *        (传函数时会在套帧 + updateMatrixWorld 之后调用,这样取到的是当前帧的骨骼位置)
+ * @param crop        裁剪框;传 null = 固定取景不裁剪
+ * @returns { canvas, width, height, joints: { name: [x,y] } } —— joints 已是裁剪后图内像素
+ */
+export function renderSilhouetteShot({
+  sil, object3D, skeletons, retargeter, seq, t, boneDefs,
+  mirror = false, rootMotion = false, crop = null, jointPoints = null,
+}) {
+  applySequenceFrame(seq, t, retargeter, boneDefs, { mirror, rootMotion });
+  skeletons?.forEach((s) => s.update());
+  object3D.updateMatrixWorld(true);
+  const points = typeof jointPoints === "function"
+    ? jointPoints({ retargeter, object3D, seq, t })
+    : jointPoints;
+  const raw = sil.renderRaw();
+  const canvas = crop ? cropCanvas(raw, crop) : raw;
+
+  const joints = {};
+  if (points) {
+    const view = silhouetteView(sil);
+    const ox = crop ? Math.max(0, Math.round(crop.x)) : 0;
+    const oy = crop ? Math.max(0, Math.round(crop.y)) : 0;
+    for (const [name, p] of Object.entries(points)) {
+      const px = projectOrthoJoint(p, view);
+      if (px) joints[name] = [+(px[0] - ox).toFixed(2), +(px[1] - oy).toFixed(2)];
+    }
+  }
+  return { canvas, width: canvas.width, height: canvas.height, joints };
 }
 
 /** 把某支舞序列的某一帧套到(重定向器驱动的)模型上 */

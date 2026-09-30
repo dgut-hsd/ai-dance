@@ -138,6 +138,9 @@ export function sampleFrame(frames, t) {
 
   const yaw0 = f0.rootYaw ?? 0;
   const yaw1 = f1.rootYaw ?? 0;
+  // 角度插值必须走「最短角差」:rootYaw/torsoTwist 是按帧独立算的 (−π,π],
+  // 直接线性插值会在跨 ±π 的那一帧倒着转过一整圈(整条骨盆/胸腔猛甩一下)。
+  const shortAngle = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
   // B-1.1(v2 可选字段插值):肩轴/胸椎扭转/躯干 roll·pitch/手臂轴向扭转。
   // 参考序列(v2)逐帧都带这些字段;插值帧按标量/数组线性过渡,肩轴插值后重新归一化。
@@ -153,7 +156,7 @@ export function sampleFrame(frames, t) {
     });
   };
 
-  const out = { t, bones, rootYaw: yaw0 + (yaw1 - yaw0) * k, conf: f0.conf };
+  const out = { t, bones, rootYaw: yaw0 + shortAngle(yaw0, yaw1) * k, conf: f0.conf };
   if (f0.rootYawConf !== undefined || f1.rootYawConf !== undefined) out.rootYawConf = f0.rootYawConf ?? f1.rootYawConf;
   if (f0.shoulderAxis != null || f1.shoulderAxis != null) {
     const sa = lerpA(f0.shoulderAxis, f1.shoulderAxis);
@@ -162,10 +165,19 @@ export function sampleFrame(frames, t) {
       out.shoulderAxis = l > 1e-9 ? [sa[0] / l, sa[1] / l, sa[2] / l] : sa;
     }
   }
-  if (f0.torsoTwist != null || f1.torsoTwist != null) out.torsoTwist = lerpN(f0.torsoTwist, f1.torsoTwist);
+  // 胸椎扭转同样是角度(−π,π],也走最短角差;roll/pitch 是 atan2 出来的 ±90° 量,不会绕圈。
+  if (f0.torsoTwist != null || f1.torsoTwist != null) {
+    out.torsoTwist = f0.torsoTwist == null ? f1.torsoTwist
+      : f1.torsoTwist == null ? f0.torsoTwist
+        : f0.torsoTwist + shortAngle(f0.torsoTwist, f1.torsoTwist) * k;
+  }
   if (f0.torsoRoll != null || f1.torsoRoll != null) out.torsoRoll = lerpN(f0.torsoRoll, f1.torsoRoll);
   if (f0.torsoPitch != null || f1.torsoPitch != null) out.torsoPitch = lerpN(f0.torsoPitch, f1.torsoPitch);
   if (f0.armTwist != null || f1.armTwist != null) out.armTwist = lerpA(f0.armTwist, f1.armTwist);
+  // 根位移(三维线性)与骨盆倾斜(角度)。旧序列没有这些字段 → 不产出,消费端按存在性回退。
+  if (f0.rootPos != null || f1.rootPos != null) out.rootPos = lerpA(f0.rootPos, f1.rootPos);
+  if (f0.pelvisPitch != null || f1.pelvisPitch != null) out.pelvisPitch = lerpN(f0.pelvisPitch, f1.pelvisPitch);
+  if (f0.pelvisRoll != null || f1.pelvisRoll != null) out.pelvisRoll = lerpN(f0.pelvisRoll, f1.pelvisRoll);
   return out;
 }
 

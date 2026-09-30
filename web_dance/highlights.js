@@ -1,6 +1,8 @@
 // 高光录制与上传。玩家端只负责:录制 → 本地即时回放 → 静默后台上传。
 // 任务列表 / 二维码 / 下载 / 重试 / 删除等工作人员 UI 已移到 /staff 视频管理页(经 /api/highlights 管理)。
-import { copyFor, renderScoreLine, DEFAULT_COPY } from './highlight-copy.js';
+import { selectHighlightSegments, positiveTitleFor } from './highlight-selector.js';
+import { highlightLayout } from './highlight-layout.js';
+import { resultCopyFor } from './result-copy.js';
 const MAX_BYTES = 512 * 1024 * 1024;
 // 9:16 竖屏短视频; 布局坐标按 720×1280 设计空间编写, 再等比放大到 1080×1920。
 const REC_W = 1080, REC_H = 1920, DESIGN_W = 720, DESIGN_H = 1280;
@@ -58,21 +60,39 @@ function drawContained(ctx, source, x, y, w, h, mirror = false, hShift = 0) {
   ctx.save(); ctx.translate(x + w / 2 + hShift * dw, y + h / 2); if (mirror) ctx.scale(-1, 1);
   ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh); ctx.restore();
 }
-function cardBlob(result, copy) {
+function drawCovered(ctx, source, x, y, w, h, mirror = false, hShift = 0, zoom = 1) {
+  const sw = source.videoWidth || source.width, sh = source.videoHeight || source.height;
+  if (!sw || !sh) return;
+  const scale = Math.max(w / sw, h / sh) * zoom, dw = sw * scale, dh = sh * scale;
+  ctx.save(); ctx.translate(x + w / 2 + hShift * dw, y + h / 2); if (mirror) ctx.scale(-1, 1);
+  ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh); ctx.restore();
+}
+function cardBlob(result) {
   const canvas = document.createElement('canvas'); canvas.width = REC_W; canvas.height = REC_H;
   const ctx = canvas.getContext('2d');
+  const resultCopy = resultCopyFor(result.grade);
   ctx.setTransform(REC_W / DESIGN_W, 0, 0, REC_H / DESIGN_H, 0, 0);
-  ctx.fillStyle = '#0a1025'; ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+  const bg = ctx.createLinearGradient(0, 0, 0, DESIGN_H);
+  bg.addColorStop(0, '#11100d'); bg.addColorStop(.55, '#070708'); bg.addColorStop(1, '#030407');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
+  ctx.strokeStyle = 'rgba(231,193,98,.5)'; ctx.lineWidth = 2; ctx.strokeRect(28, 28, 664, 1224);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#52ffd0'; ctx.font = 'bold 34px sans-serif';
-  ctx.fillText(copy.card.eyebrow, 360, 150);
-  ctx.font = 'bold 200px sans-serif'; ctx.fillText(result.grade, 360, 420);
-  ctx.fillStyle = '#ffd54a'; ctx.font = 'bold 60px sans-serif';
-  ctx.fillText(copy.card.gradeTitles[result.grade] || result.grade, 360, 540);
-  ctx.fillStyle = '#ffffff'; ctx.font = '42px sans-serif';
-  ctx.fillText(renderScoreLine(copy.card.scoreLine, result.score, result.maxCombo), 360, 660);
-  ctx.fillStyle = '#52ffd0'; ctx.font = '30px sans-serif';
-  ctx.fillText(copy.card.tagline, 360, 760);
+  ctx.fillStyle = '#d5b45f'; ctx.font = '700 17px sans-serif';
+  ctx.fillText('DANCE ARENA  ·  HIGHLIGHT REPLAY', 360, 122);
+  ctx.fillStyle = '#fff2c7'; ctx.font = 'italic 900 58px sans-serif';
+  ctx.fillText('你的舞台时刻', 360, 230);
+  ctx.fillStyle = '#ffd76d'; ctx.font = 'italic 900 224px sans-serif';
+  ctx.fillText(result.grade, 360, 500);
+  ctx.font = 'italic 900 62px sans-serif'; ctx.fillText(resultCopy.title, 360, 610);
+  ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.font = '24px sans-serif';
+  ctx.fillText(resultCopy.tagline, 360, 662);
+  ctx.strokeStyle = 'rgba(231,193,98,.35)'; ctx.beginPath(); ctx.moveTo(110, 730); ctx.lineTo(610, 730); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = '900 54px sans-serif'; ctx.fillText(String(Math.round(result.score || 0)), 360, 830);
+  ctx.fillStyle = 'rgba(255,255,255,.58)'; ctx.font = '18px sans-serif'; ctx.fillText('SCORE  ·  得分', 360, 870);
+  ctx.fillStyle = '#ffe39a'; ctx.font = '800 31px sans-serif';
+  ctx.fillText(`MAX COMBO  ${Math.round(result.maxCombo || 0)}`, 360, 955);
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '17px sans-serif';
+  ctx.fillText('这一刻，值得被看见', 360, 1140);
   return new Promise((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error('成绩卡生成失败')), 'image/png'));
 }
 
@@ -84,9 +104,6 @@ export class HighlightController {
     this.jobs = new Map(); this.active = null; this.pending = 0;
     // 是否录制由选曲页的「是否录制高光时刻」提示写入 sessionStorage,默认开启。
     this.recordEnabled = sessionStorage.getItem('dance-record-highlight') !== '0';
-    // 文案风格与设备密钥由工作人员在 /settings 页面配置,用 localStorage 跨标签页共享。
-    this.copyId = localStorage.getItem('dance-highlight-copy') || DEFAULT_COPY;
-    this.copy = copyFor(this.copyId);
     this.replayUrl = null; this.replayBlob = null; this.replayResult = null;
     window.addEventListener('beforeunload', e => {
       if (this.active || this.pending || [...this.jobs.values()].some(j => j.blob)) { e.preventDefault(); e.returnValue = ''; }
@@ -108,9 +125,17 @@ export class HighlightController {
     if (this.replayUrl) URL.revokeObjectURL(this.replayUrl);
     this.replayUrl = null; this.replayBlob = null; this.replayResult = null;
   }
-  getReplay() { return this.replayUrl ? { url: this.replayUrl, result: this.replayResult } : null; }
+  getReplay() {
+    return this.replayUrl ? {
+      url: this.replayUrl,
+      result: this.replayResult,
+      segments: this.replayResult?.highlights || [],
+    } : null;
+  }
   async prepare(engine, cancelled = () => false) {
-    if (!this.recordEnabled) return null;
+    // 每次读取最新勾选状态(复选框可能在页面加载后才被取消),并清掉上一次回放,避免「不录屏仍回放」。
+    this.recordEnabled = sessionStorage.getItem('dance-record-highlight') !== '0';
+    if (!this.recordEnabled) { this.clearReplay(); return null; }
     await this.restored;
     this.clearReplay();
     if (this.active || this.pending + [...this.jobs.values()].filter(j => j.blob && !j.running).length >= 3) return null;
@@ -123,7 +148,11 @@ export class HighlightController {
     try {
       job = await api('/api/highlights', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Device-Token': this.deviceToken() },
         body: JSON.stringify({ mime: mime.split(';')[0] }) });
-    } catch { return null; /* 后台未就绪,静默跳过录制,玩家照常跳舞 */ }
+    } catch (e) {
+      // 不能静默:服务端拒绝(429/401/网络)与「浏览器不支持录制」是两种情况,后者本来就该静默。
+      console.warn('[highlight] 本局未录制:', e.message);
+      return null;
+    }
     if (cancelled()) {
       await api(`/api/highlights/${job.id}`, { method: 'DELETE', headers: ownerHeaders(job) }).catch(() => {});
       return null;
@@ -145,7 +174,7 @@ export class HighlightController {
       const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000, audioBitsPerSecond: 160000 });
       const active = { job, canvas, ctx: canvas.getContext('2d'), recorder, stream, audio,
         videoTrack: stream.getVideoTracks()[0],
-        chunks: [], samples: [], bytes: 0, lastDraw: -Infinity, lastSample: -1, started: null };
+        chunks: [], samples: [], markers: [], bytes: 0, lastDraw: -Infinity, lastSample: -1, started: null };
       recorder.ondataavailable = e => {
         if (e.data.size) { active.chunks.push(e.data); active.bytes += e.data.size; }
         if (active.bytes > MAX_BYTES && this.active === active) this.abort();
@@ -164,6 +193,19 @@ export class HighlightController {
     const a = this.active; if (!a) return;
     a.started = performance.now(); a.recorder.start(1000);
   }
+  markJudge(marker) {
+    const a = this.active;
+    if (!a || a.started == null || !Number.isFinite(marker?.time)) return;
+    a.markers.push({
+      time: Math.max(0, marker.time),
+      tier: marker.tier || '',
+      accuracy: Number(marker.accuracy) || 0,
+      combo: Number(marker.combo) || 0,
+      scoreGain: Number(marker.scoreGain) || 0,
+      confidence: Number(marker.confidence) || 0,
+      noteId: marker.noteId || '',
+    });
+  }
   draw() {
     const a = this.active; if (!a || a.started == null) return;
     const now = performance.now(), t = (now - a.started) / 1000;
@@ -172,29 +214,22 @@ export class HighlightController {
     a.lastDraw = now;
     try {
       const ctx = a.ctx, s = this.getState();
-      const overlay = this.copy.overlay;
+      const layout = highlightLayout(DESIGN_W, DESIGN_H);
       ctx.setTransform(REC_W / DESIGN_W, 0, 0, REC_H / DESIGN_H, 0, 0);
-      // 背景
+      // 真人是传播视频的绝对主角：铺满整幅竖屏，画面中心始终留给玩家。
       ctx.fillStyle = '#090c1b'; ctx.fillRect(0, 0, DESIGN_W, DESIGN_H);
-      // 上半:3D 教练(contain 完整入框;pk 分屏时回正,让舞者居中)
-      drawContained(ctx, this.stage, 0, 84, DESIGN_W, 520, false, -this.stageShift());
-      // 下半:真人(contain 完整入框,镜像;不再铺满遮挡)
-      drawContained(ctx, this.camera, 0, 620, DESIGN_W, 560, true);
+      drawCovered(ctx, this.camera, layout.camera.x, layout.camera.y, layout.camera.w, layout.camera.h, true);
+      // 3D 教练只作为动作对照缩在右上角，不再与真人争夺半屏。
+      const p = layout.coach;
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, p.radius); ctx.clip();
+      ctx.fillStyle = 'rgba(5,8,18,.88)'; ctx.fillRect(p.x, p.y, p.w, p.h);
+      drawCovered(ctx, this.stage, p.x, p.y, p.w, p.h, false, -this.stageShift(), p.zoom);
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(255,215,109,.72)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, p.radius); ctx.stroke();
       // 特效叠加
       ctx.drawImage(this.fx, 0, 0, DESIGN_W, DESIGN_H);
-      // 顶栏 + 底栏
-      ctx.fillStyle = '#0a1025'; ctx.fillRect(0, 0, DESIGN_W, 80); ctx.fillRect(0, 1200, DESIGN_W, 80);
-      // 顶栏:钩子 + 得分
-      ctx.fillStyle = '#52ffd0'; ctx.font = 'bold 34px sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(overlay.topTitle, 20, 53);
-      ctx.fillStyle = '#fff'; ctx.font = '28px sans-serif'; ctx.textAlign = 'right';
-      ctx.fillText(`得分 ${Math.round(s.score)}`, 700, 53);
-      // 底栏:连击 + 判定短语
-      ctx.fillStyle = '#fff'; ctx.font = '28px sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(`连击 ${s.combo}`, 20, 1253);
-      ctx.fillStyle = '#52ffd0'; ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'right';
-      ctx.fillText(overlay.tiers[s.tier] || overlay.emptyTier, 700, 1253);
-      ctx.textAlign = 'left';
       if (Math.floor(t) !== a.lastSample) {
         a.lastSample = Math.floor(t);
         a.samples.push({ t, conf: s.conf, acc: s.acc, combo: s.combo, tier: s.tier || '' });
@@ -225,16 +260,29 @@ export class HighlightController {
         a.recorder.onerror = () => reject(new Error('录制未能完成'));
         a.recorder.stop();
       });
-      this.release(a);
       if (duration < 1 || a.bytes > MAX_BYTES) throw new Error('录像太短或文件过大');
       const job = a.job;
       job.blob = new Blob(a.chunks, { type: a.recorder.mimeType });
+      const highlights = selectHighlightSegments(a.markers, { duration });
+      const highlightTitle = positiveTitleFor({
+        perfectCount: result.tallies?.perfect || 0,
+        maxCombo: result.maxCombo || 0,
+        completed: true,
+      });
+      const replayResult = { ...result, highlights, highlightTitle };
       // 本地即时回放:保留 blob 引用并生成 object URL;上传后仍可播放。
       this.replayBlob = job.blob;
       this.replayUrl = URL.createObjectURL(job.blob);
-      this.replayResult = result;
-      job.card = await cardBlob(result, this.copy);
-      job.metadata = { duration, samples: a.samples, result };
+      this.replayResult = replayResult;
+      job.card = await cardBlob(result);
+      job.metadata = {
+        duration,
+        samples: a.samples,
+        markers: a.markers,
+        highlights,
+        highlightTitle,
+        result,
+      };
       try { await this.persist(job); } catch { /* 本地空间不足,直接上传 */ }
       // 上传放后台,不阻塞 finish 返回,让回放尽快可用。
       void this.upload(job);

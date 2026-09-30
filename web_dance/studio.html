@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>作品工坊 · DANCE ARENA</title>
+  <link rel="stylesheet" href="/web_dance/studio.css">
+  <link rel="stylesheet" href="/web_dance/lane.css">
+</head>
+<body>
+  <!-- 顶栏(列表/编辑共用,内容由 JS 切换) -->
+  <header class="topbar">
+    <span class="brand">DANCE ARENA · 作品工坊</span>
+    <a class="back hidden" id="btn-back" href="#">← 返回作品列表</a>
+    <input class="title-input hidden" id="draft-title" placeholder="作品名">
+    <span class="mode-badge hidden" id="mode-badge"></span>
+    <span class="spacer"></span>
+    <span class="progress hidden" id="step-progress"></span>
+    <span class="save-state hidden" id="save-state">已保存</span>
+    <button class="btn primary hidden" id="btn-publish">上架</button>
+    <button class="btn" id="btn-new">+ 新建作品</button>
+  </header>
+
+  <!-- 作品列表 -->
+  <section class="list-view" id="list-view">
+    <div class="list-head">
+      <h1>作品</h1>
+      <span class="spacer"></span>
+      <span id="list-status" style="color:var(--dim)"></span>
+    </div>
+
+    <!-- 模式切换:3D 作品 / 视频作品 -->
+    <div class="seg" id="mode-tabs">
+      <button class="seg-item active" data-mode="">全部</button>
+      <button class="seg-item" data-mode="3d"><span>🧍</span> 3D 作品</button>
+      <button class="seg-item" data-mode="video"><span>🎬</span> 视频作品</button>
+      <span class="seg-count" id="list-count"></span>
+    </div>
+    <button class="btn sm" id="btn-upload-video" style="margin-left:10px;vertical-align:top">+ 上传视频到素材库</button>
+
+    <div id="works-area"></div>
+  </section>
+
+  <!-- 工作台(编辑视图) -->
+  <section class="workbench hidden" id="editor-view">
+    <aside class="left">
+      <div class="steps" id="steps"></div>
+      <div class="assets">
+        <p class="assets-title">素材资产</p>
+        <div id="assets"></div>
+      </div>
+    </aside>
+
+    <main class="center">
+      <div class="stage" id="stage"></div>
+    </main>
+
+    <aside class="right">
+      <div class="props" id="props"></div>
+    </aside>
+  </section>
+
+  <div class="bottom" id="bottom-bar"></div>
+
+  <!-- 新建作品弹窗 -->
+  <div class="modal-mask hidden" id="new-modal">
+    <div class="modal-box">
+      <h3>新建作品</h3>
+      <div class="mode-options">
+        <div class="mode-option" data-mode="video">
+          <span class="icon">🎬</span>
+          <div class="name">视频模式</div>
+          <div class="desc">上传舞蹈视频 → 抽音频 → 动捕成序列 → 制谱 → 上架</div>
+        </div>
+        <div class="mode-option" data-mode="3d">
+          <span class="icon">🧍</span>
+          <div class="name">3D 角色模式</div>
+          <div class="desc">上传 Rokoko FBX + 音频 → 采样成序列 → 制谱 → 上架</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end">
+        <button class="btn ghost" id="btn-cancel-new">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" hidden>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="/web_dance/studio.js"></script>
+</body>
+</html>

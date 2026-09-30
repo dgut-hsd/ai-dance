@@ -340,7 +340,7 @@ $("model-brightness").addEventListener("input", () => {
 refreshModels();
 
 // ---------------------------------------------------------------------------
-// 右侧画面:3D 模型 / 视频(3:4 MP4)。模式写入 localStorage;每首舞曲的视频绑定存服务端 videos/index.json。
+// 右侧画面:3D 模型 / 视频(3:4 MP4)。模式写入 localStorage;每首舞曲绑定一个视频,存服务端 videos/index.json。
 // ---------------------------------------------------------------------------
 const SIDE_KEY = "dance-side-mode";
 let sideVideos = [];   // { name, url }
@@ -367,7 +367,7 @@ function sideRow(dance) {
   const label = el("label", "side-video-row", dance.label);
   const sel = document.createElement("select");
   sel.dataset.danceId = dance.id;
-  const none = el("option", "", "（不绑定 · 回退 3D 教练）");
+  const none = el("option", "", "（不绑定 · 视频模式不显示）");
   none.value = "";
   sel.appendChild(none);
   for (const v of sideVideos) {

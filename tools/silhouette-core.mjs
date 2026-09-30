@@ -30,11 +30,13 @@ function harnessHtml({ model, size, color }) {
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
 </head><body style="margin:0;background:#111">
 <script type="module">
+import * as THREE from "three";
 import { loadAvatar } from "/web_dance/avatar.js";
 import { loadSongIndex, loadSequence, dances, songById } from "/web_dance/song-library.js";
 import { resolveMode } from "/pose_capture/contract.js";
 import { reconstructJoints } from "/pose_capture/playback.js";
-import { createSilhouetteRenderer, renderSilhouetteFrame, canvasToPng, pickSignatureTimes } from "/web_dance/silhouette.js";
+import { createSilhouetteRenderer, renderSilhouetteFrame, renderSilhouetteShot, canvasToPng, pickSignatureTimes, alphaCropBox, unionCropBox, applySequenceFrame } from "/web_dance/silhouette.js";
+import { laneNoteTimes } from "/web_dance/lane-assets.js";
 
 const SIZE = ${size};
 await loadSongIndex();   // 歌单(用于 __dances 探测;渲染本身只依赖 loadSequence)
@@ -42,6 +44,27 @@ const sil = createSilhouetteRenderer({ size: SIZE, color: ${color} });
 const model = await loadAvatar(${JSON.stringify(model)});
 sil.attach(model.object);
 const whitened = sil.whiten(model.object);
+
+// 箭头锚点用的关节 → 模型骨骼名(Mixamo 命名;找不到的关节就不写进 manifest)
+const ARROW_BONES = {
+  left_wrist: ["LeftHand"], right_wrist: ["RightHand"],
+  left_elbow: ["LeftForeArm"], right_elbow: ["RightForeArm"],
+  left_ankle: ["LeftFoot"], right_ankle: ["RightFoot"],
+  left_knee: ["LeftLeg"], right_knee: ["RightLeg"],
+  hips_center: ["Hips"], nose: ["Head"],
+};
+// renderSilhouetteShot 会把 { retargeter, object3D, seq, t } 传进来
+function jointPointsOf({ retargeter } = {}) {
+  const out = {};
+  if (!retargeter?.findBone) return out;
+  for (const [name, cands] of Object.entries(ARROW_BONES)) {
+    const bone = retargeter.findBone(cands);
+    if (!bone) continue;
+    const p = bone.getWorldPosition(new THREE.Vector3());
+    out[name] = [p.x, p.y, p.z];
+  }
+  return out;
+}
 
 const seqCache = new Map();
 async function seqOf(danceId) {
@@ -63,10 +86,38 @@ window.__shots = async (jobs) => {
   for (const job of jobs) {
     try {
       const danceId = job.danceId;
+      const seq = await seqOf(danceId);
+      const bones = resolveMode(seq.meta?.danceType || "full-body").bones;
+
+      // notes:true = 逐判定点出图(判定轨道用)
+      // 两遍渲染:第一遍量所有动作的 alpha 包围盒求并集,第二遍按这个共用裁剪框出图 ——
+      // 剪影填满画面,且同一支舞里所有动作比例一致;关节像素也跟着裁剪框走。
+      if (job.notes) {
+        const times = laneNoteTimes(seq);
+        const boxes = [];
+        for (const nt of times) {
+          applySequenceFrame(seq, nt.t, model.retargeter, bones, { mirror: false, rootMotion: false });
+          model.skeletons?.forEach((s) => s.update());
+          model.object.updateMatrixWorld(true);
+          boxes.push(alphaCropBox(sil.renderRaw(), { alphaThreshold: sil.opts.alphaThreshold }));
+        }
+        const crop = unionCropBox(boxes, { size: SIZE, padFrac: sil.opts.padFrac });
+        for (const nt of times) {
+          const shot = renderSilhouetteShot({
+            sil, object3D: model.object, skeletons: model.skeletons, retargeter: model.retargeter,
+            seq, t: nt.t, boneDefs: bones, crop, jointPoints: jointPointsOf,
+          });
+          out.push({
+            name: job.name, danceId, t: nt.t, key: nt.key, moveId: nt.moveId,
+            width: shot.width, height: shot.height, joints: shot.joints, crop,
+            dataUrl: canvasToPng(shot.canvas),
+          });
+        }
+        continue;
+      }
+
       const tl = await timesFor(danceId, job);
       for (const t of tl) {
-        const seq = await seqOf(danceId);
-        const bones = resolveMode(seq.meta?.danceType || "full-body").bones;
         const canvas = renderSilhouetteFrame({
           sil, object3D: model.object, skeletons: model.skeletons,
           retargeter: model.retargeter, seq, t, boneDefs: bones,
@@ -105,8 +156,32 @@ export async function launchChrome({ headless = true } = {}) {
 }
 
 /**
+ * 读歌单里的舞曲元数据(复用同一个 harness 页面,只取 window.__dances)。
+ * 各生成脚本(招牌动作 / 逐判定点)共用,避免各写一份歌单读取。
+ */
+export async function fetchDanceMeta({ base = DEFAULT_BASE } = {}) {
+  const browser = await launchChrome();
+  try {
+    const page = await browser.newPage({ viewport: { width: 256, height: 256 } });
+    await page.route("**/silhouette-harness", (r) =>
+      r.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><script type="module">
+import { loadSongIndex, dances } from "/web_dance/song-library.js";
+await loadSongIndex();
+window.__dances = dances().map(d => ({ id: d.id, danceId: d.danceId, label: d.label }));
+window.__ready = true;
+</script>` }));
+    await page.goto(`${base}/silhouette-harness`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.__ready, null, { timeout: 60000 });
+    return await page.evaluate(() => window.__dances);
+  } finally {
+    await browser.close();
+  }
+}
+
+/**
  * 跑一批剪影任务。
- * @param jobs [{ name, danceId, times?: number[], count?: number }]
+ * @param jobs [{ name, danceId, times?: number[], count?: number, notes?: boolean }]
+ *        notes:true = 逐判定点出图(判定轨道用),返回项额外带 key/joints
  * @returns [{ name, danceId, t, width, height, buffer }]
  */
 export async function renderSilhouetteBatch(jobs, {

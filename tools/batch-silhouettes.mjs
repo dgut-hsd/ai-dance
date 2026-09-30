@@ -22,7 +22,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderSilhouetteBatch, DEFAULT_BASE } from "./silhouette-core.mjs";
+import { renderSilhouetteBatch, fetchDanceMeta, DEFAULT_BASE } from "./silhouette-core.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -138,25 +138,7 @@ async function main() {
   if (failures.length) process.exit(1);
 }
 
-// 单独拎出来:空任务那次跑只为了拿歌单(harness 里 window.__dances)
-async function getDanceMeta(args) {
-  const { launchChrome } = await import("./silhouette-core.mjs");
-  const browser = await launchChrome();
-  try {
-    const page = await browser.newPage({ viewport: { width: 256, height: 256 } });
-    await page.route("**/silhouette-harness", (r) =>
-      r.fulfill({ contentType: "text/html; charset=utf-8", body: `<!doctype html><script type="module">
-import { loadSongIndex, dances } from "/web_dance/song-library.js";
-await loadSongIndex();
-window.__dances = dances().map(d => ({ id: d.id, danceId: d.danceId, label: d.label }));
-window.__ready = true;
-</script>` }));
-    await page.goto(`${args.base}/silhouette-harness`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => window.__ready, null, { timeout: 60000 });
-    return await page.evaluate(() => window.__dances);
-  } finally {
-    await browser.close();
-  }
-}
+// 歌单元数据(从 songs/index.json 读,与服务同源;实现见 silhouette-core.mjs)
+const getDanceMeta = (args) => fetchDanceMeta({ base: args.base });
 
 main().catch((e) => { console.error("失败:", e.message); process.exit(1); });

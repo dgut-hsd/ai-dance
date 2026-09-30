@@ -54,11 +54,6 @@
         </div>
       </div>
 
-      <!-- 右上:节拍点(4 拍指示,由 updateChallengeProgress 点亮) -->
-      <div id="beats">
-        <span></span><span></span><span></span><span></span>
-      </div>
-
       <!-- 右下:计分(挑战) -->
       <div id="score-panel" class="panel hidden">
         <div id="grade">-</div>
@@ -117,30 +112,34 @@
       <div id="combo-badge-label">COMBO</div>
     </div>
 
-    <!-- 选曲(整合进 PK 页):大标语 + 海报卡片条 -->
+    <!-- 选曲:3D / 视频模式统一使用单按钮 + 左侧抽屉 -->
     <div id="song-pick" class="hidden">
       <div id="song-pick-title">来跳舞！</div>
-      <div id="song-pick-hint">单击预览 · 双击准备开始</div>
-      <div id="song-pick-strip"></div>
+      <button id="song-pick-open" type="button" aria-controls="song-pick-drawer" aria-expanded="false">选择舞曲</button>
+      <div id="song-pick-shade" aria-hidden="true"></div>
+      <section id="song-pick-drawer" aria-label="选择舞曲">
+        <div class="song-pick-head">
+          <h2>选择你要挑战的舞曲</h2>
+          <button id="song-pick-close" type="button" aria-label="关闭选曲"></button>
+        </div>
+        <div class="song-pick-browser">
+          <button id="song-pick-prev" class="song-pick-arrow" type="button" aria-label="上一首舞曲"></button>
+          <div id="song-pick-strip"></div>
+          <button id="song-pick-next" class="song-pick-arrow" type="button" aria-label="下一首舞曲"></button>
+        </div>
+        <div id="song-pick-current">—</div>
+        <label class="ready-consent"><input id="highlight-record-consent" type="checkbox" checked> 录制我的高光时刻</label>
+        <button id="song-pick-start" type="button">开始挑战</button>
+      </section>
     </div>
 
-    <!-- 右下:判定轨道(Just Dance 式:剪影从右往左流入判定平台,到达平台即消失) -->
+    <!-- 右下:判定轨道(Just Dance 式:剪影从右往左流入判定平台,到达平台即消失)
+         只有剪影 + 平台:无卡片外框、无进度条、无文字 --> 
     <div id="pose-hint" class="hidden">
       <div id="judge-lane">
-        <div id="judge-stage"><i id="judge-stage-ring"></i></div>
+        <div id="judge-stage"></div>
         <div id="judge-track"></div>
       </div>
-      <div id="pose-hint-bar"><i id="pose-hint-fill"></i></div>
-      <div id="pose-hint-name"></div>
-    </div>
-
-    <!-- 准备开始(选中卡片后弹出) -->
-    <div id="ready-backdrop" class="hidden" aria-hidden="true"></div>
-    <div id="ready" class="hidden" role="dialog" aria-modal="true" aria-labelledby="ready-title">
-      <div class="ready-title" id="ready-title">准备开始</div>
-      <div class="ready-song" id="ready-song">—</div>
-      <label class="ready-consent"><input id="highlight-record-consent" type="checkbox" checked> 录制我的高光时刻</label>
-      <button id="ready-go">开始挑战</button>
     </div>
 
     <!-- 中央提示:倒计时 -->
@@ -158,8 +157,8 @@
           <i class="rays" aria-hidden="true"></i>
           <span id="result-grade">S</span>
         </div>
-        <h2 id="result-title">封神舞者</h2>
-        <p id="result-tagline">DANCE LEGEND</p>
+        <h2 id="result-title"></h2>
+        <p id="result-tagline"></p>
         <div id="result-song"></div>
         <div id="result-score">
           <div class="score-num" id="stat-score">0</div>
@@ -186,7 +185,6 @@
             <div class="stat-label">节拍命中</div>
           </div>
         </div>
-        <p id="result-next" class="result-next"></p>
         <div id="result-actions">
           <button id="result-again" class="btn primary lg">再来一次</button>
           <button id="result-exit" class="btn ghost lg">换一首</button>
@@ -196,8 +194,21 @@
 
     <!-- 高光回放(本地即时播放) -->
     <div id="replay" class="overlay hidden">
-      <video id="replay-video" controls playsinline></video>
-      <button id="replay-close" class="btn ghost">关闭回放</button>
+      <div class="replay-frame">
+        <video id="replay-video" playsinline></video>
+        <div class="replay-head">
+          <div class="replay-title-lockup">
+            <small>HIGHLIGHT REPLAY</small>
+            <span id="replay-title">你的舞台时刻</span>
+          </div>
+          <strong id="replay-count">1 / 3</strong>
+        </div>
+        <div class="replay-badge">
+          <strong id="replay-tier">PERFECT</strong>
+          <span id="replay-combo" hidden></span>
+        </div>
+      </div>
+      <button id="replay-close" class="replay-close" aria-label="结束高光回放">结束回放</button>
     </div>
 
     <script type="importmap">
@@ -208,6 +219,6 @@
         }
       }
     </script>
-    <script type="module" src="./main.js"></script>
+    <script type="module" src="./main.js?v=video-drawer-1"></script>
   </body>
 </html>

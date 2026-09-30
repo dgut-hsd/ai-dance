@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>源 vs 管线 对比</title>
+<style>
+  html,body{margin:0;background:#0a0a0a;height:100%}
+  canvas{display:block}
+  #labels{position:fixed;top:10px;left:0;right:0;display:flex;justify-content:space-around;
+    color:#eee;font:14px/1.4 sans-serif;pointer-events:none;z-index:9}
+  #labels span{padding:4px 12px;border-radius:6px;background:rgba(0,0,0,.45)}
+</style>
+</head>
+<body>
+<div id="labels">
+  <span>左 · 源动作直接套上(未重定向)</span>
+  <span>右 · 当前管线(重定向 + 碰撞 + 走位)</span>
+</div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./compare-source.js"></script>
+</body>
+</html>

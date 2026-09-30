@@ -14,6 +14,7 @@ import * as THREE from "three";
 import { reconstructJoints } from "../pose_capture/playback.js";
 import { solveTwoBone } from "./ik.js";
 import { separateCapsulePairs } from "./collision.js";
+import { collisionRadiiFor } from "./mesh-collision-radii.js";
 import {
   ARM_LIMITS,
   LEG_LIMITS,
@@ -71,8 +72,19 @@ export class Retargeter {
   /**
    * @param {THREE.Object3D} root 模型根节点(已缩放、已摆好,且 updateMatrixWorld 已调用)
    */
-  constructor(root) {
+  constructor(root, opts = {}) {
     this.root = root;
+    // 骨盆倾斜的施加符号(实测标定:见 applyFrame 里的注释)。pitch 绕右轴取负、roll 绕前轴取正,
+    // 判据是「骨盆朝向误差的波动」:关掉 4.05° → 这组 2.20°(倾斜跟上了源),其它组合反而变大。
+    this.pelvisTiltSign = { pitch: -1, roll: 1, ...(opts.pelvisTiltSign || {}) };
+    // 碰撞代理半径(默认按蒙皮网格实测;测试里可注入旧的比例式,或用 radiiMode="formula" 做 A/B)
+    this.collisionRadii = opts.collisionRadii ?? null;
+    // 教练路径默认用**旧的按骨长估算**半径:它的手臂天生贴近躯干(契约帧重建出来的姿势),
+// 放大半径会让肘/腕被持续推开 —— 实测上臂方向误差 30°(表演路径同样的设置只花 1.5°)。
+// 表演路径(showcase)才用放大后的远端半径。URL 的 ?collisionradii= 可以两边一起强制。
+    this.collisionRadiiMode = opts.collisionRadiiMode ?? "formula";
+    // 允许量:放过正常贴合,只压深层穿透(单位=模型单位,dancer_girl 身高 2.2)
+    this.collisionAllowance = opts.collisionAllowance ?? 0.05;
     this.bones = {}; // 归一化名 -> bone
     root.updateMatrixWorld(true);
     root.traverse((o) => {
@@ -117,6 +129,9 @@ export class Retargeter {
     // 脚踝休息高度 = 髋→脚踝的腿长(负值)。与 reconstructJoints 的「髋为原点」口径自洽,
     // 避免用「髋离地高度」导致脚踝/脚掌整体下陷(差一个脚踝离地高度 + 骨盆偏移)。
     this.ankleYRest = -(this.dims.thigh + this.dims.shin);
+    // 髋高(世界单位):序列里的根位移按「源髋高」归一化过,这里乘目标自己的髋高换算回来。
+    // 模型在构造前已经贴地,所以髋的休息世界 Y 就是髋高。
+    this._hipUnit = Math.max(0.05, Math.abs(hips.getWorldPosition(new THREE.Vector3()).y));
     this.rootBasePos = root.position.clone(); // 根基准位(布局 x/z + 贴地 y)
     this._hipShift = 0;                        // 垂直位移(蹲/跳)
     this._rootDisp = new THREE.Vector3();      // 水平位移积分(前后/左右)
@@ -145,6 +160,8 @@ export class Retargeter {
     }
 
     // ---- 头 ----
+    this.neckBone = this.findBone(["Neck"]);
+    if (this.neckBone) this.neckRestLocalQuat = this.neckBone.quaternion.clone();
     this.headBone = this.findBone(["Head"]);
     if (this.headBone) {
       this.headRestQuat = this.headBone.getWorldQuaternion(new THREE.Quaternion()).clone();
@@ -274,6 +291,24 @@ export class Retargeter {
     return this._indexCache.get(boneDefs);
   }
 
+  // 脊柱各段的「长度加权平均因子」= 整条链合成方向的等效因子(几何:各段方向按骨长加权求和)。
+  // 用来把配置因子归一化,使净方向等于源方向。骨长不变,算一次即可。
+  _spineFactorMean() {
+    if (this._spineK != null) return this._spineK;
+    let wsum = 0;
+    let wlen = 0;
+    for (const s of this.spineDriven) {
+      const child = s.bone.children.find((c) => c.isBone);
+      const len = child
+        ? s.bone.getWorldPosition(new THREE.Vector3()).distanceTo(child.getWorldPosition(new THREE.Vector3()))
+        : 0;
+      wsum += len * s.f;
+      wlen += len;
+    }
+    this._spineK = wlen > 1e-9 ? wsum / wlen : 1;
+    return this._spineK;
+  }
+
   // 方向对齐:把某骨骼的休息方向转到 target 方向(带四元数平滑,消除高频抖动)
   _applyDir(cap, target) {
     const rest = cap.rest.clone().applyQuaternion(this.bodyYaw);
@@ -337,8 +372,16 @@ export class Retargeter {
       const kinTarget = this.ankleYRest - ankleY; // 脚踝反推髋高(蹲下正确)
       const hasRoot = rootMotion &&
         Array.isArray(frame.rootVel) && frame.rootVel.length >= 3;
+      const hasRootPos = rootMotion &&
+        Array.isArray(frame.rootPos) && frame.rootPos.length >= 3;
 
-      if (hasRoot) {
+      if (hasRootPos) {
+        // 序列直接给了根位移(相对 bind 位置、已按源髋高归一化)→ 乘目标髋高、映射到世界即可。
+        // 比速度积分准:没有死区/回中带来的滞后与漂移,源怎么走就怎么走。
+        const world = toWorld(frame.rootPos).multiplyScalar(this._hipUnit || 1);
+        this._rootDisp.set(world.x, 0, world.z);
+        this._hipShift = world.y;
+      } else if (hasRoot) {
         const dt = this._lastT != null
           ? Math.min(Math.max(frame.t - this._lastT, 0), 0.1)
           : 0;
@@ -414,18 +457,38 @@ export class Retargeter {
       this.hips.updateWorldMatrix(true, true);
     }
 
+    // ---- 骨盆倾斜(可选字段 pelvisPitch / pelvisRoll)----
+    // 只做偏航时,「髋→脊柱」这段**固定偏移**的方向是错的(长度 0.098 几乎等于脊柱骨长,
+    // 实测该段方向误差 8.6°,是教练脊柱误差的最后一块)。这两个角由源骨盆自身的上轴分解而来、
+    // 休息姿态≈0,所以直接当作「相对直立休息姿态的旋转」叠加在 bodyYaw 之后即可。
+    if (Number.isFinite(frame.pelvisPitch) || Number.isFinite(frame.pelvisRoll)) {
+      const sign = mirror ? -1 : 1;
+      const bodyR2 = this.basis.right.clone().applyQuaternion(this.bodyYaw);
+      const bodyF2 = this.basis.forward.clone().applyQuaternion(this.bodyYaw);
+      if (Number.isFinite(frame.pelvisPitch)) {
+        this._twistWorld(this.hips, bodyR2, sign * this.pelvisTiltSign.pitch * frame.pelvisPitch); // 前倾:绕右轴
+      }
+      if (Number.isFinite(frame.pelvisRoll)) {
+        this._twistWorld(this.hips, bodyF2, sign * this.pelvisTiltSign.roll * frame.pelvisRoll); // 侧倾:绕前轴
+      }
+    }
+
     // ---- 脊柱(方向对齐 + 曲率分布) ----
     const spineI = idx["spine"];
     if (spineI != null && bones[spineI] && (conf[spineI] ?? 1) >= minConf) {
       const spineDir = new THREE.Vector3(bones[spineI][0], bones[spineI][1], bones[spineI][2])
         .applyMatrix3(m).normalize();
       const up = this.basis.up;
+      // 各段按 lerp(up, spineDir, f) 摆方向(下段更竖直 → S 曲线)。但「髋→肩」的合成方向是
+      // 各段的长度加权平均 ≈ 平均因子(0.78)→ 整条脊柱的净弯折只有源的 ~78%(实测脊柱方向误差 5.2°)。
+      // 把因子整体归一化到「加权平均 = 1」:S 曲线形状不变,净方向对上(扭转同样归一化)。
+      const k = this._spineFactorMean();
       for (const s of this.spineDriven) {
-        // 下段更贴近竖直、上段更跟随躯干方向 → 自然 S 曲线
-        const target = up.clone().lerp(spineDir, s.f).normalize();
+        const f = k > 1e-6 ? s.f / k : s.f;
+        const target = up.clone().lerp(spineDir, f).normalize();
         this._applyDir(s, target);
         // 胸椎扭转:沿脊柱分布(下段≈0、胸/颈≈全量),骨盆已固定为 rootYaw。
-        if (torsoTwist) this._twistWorld(s.bone, up, torsoTwist * s.f);
+        if (torsoTwist) this._twistWorld(s.bone, up, k > 1e-6 ? (torsoTwist * s.f) / k : torsoTwist * s.f);
       }
     }
 
@@ -439,8 +502,18 @@ export class Retargeter {
       const endName = mirror ? limb.endR : limb.endL;
       const end = joints[endName];
       if (!end) continue;
-      let targetEnd = toWorld(end).add(hipWorld);
       const p0 = limb.upper.bone.getWorldPosition(new THREE.Vector3());
+      // 末端目标 = 骨骼原点 + (重建末端 − 重建根关节) 的世界偏移,而不是「重建末端的绝对世界位置」。
+      // 为什么:重建关节的肩/髋点是按 dims 摆出来的合成点,与模型实际的骨骼原点平均差 0.139 单位
+      // (≈臂长的 29%,主要来自锁骨偏移)。用绝对位置会让腕部目标超出臂长(腕距/臂长 = 1.13~1.24),
+      // IK 只能把手臂拉直 → 教练肘弯角平均差 30°(源 52° 的肘弯被抹成 13°)。相对偏移则保住源的相对几何。
+      const rootJointKey = limb.leg
+        ? (endName.startsWith("left") ? "left_hip" : "right_hip")
+        : (endName.startsWith("left") ? "left_shoulder" : "right_shoulder");
+      const rootJoint = joints[rootJointKey];
+      let targetEnd = rootJoint
+        ? p0.clone().add(toWorld([end[0] - rootJoint[0], end[1] - rootJoint[1], end[2] - rootJoint[2]]))
+        : toWorld(end).add(hipWorld);
       const l1 = this.dims[limb.l1];
       const l2 = this.dims[limb.l2];
       const poleDir = limb.pole === "front" ? f : f.clone().negate();
@@ -468,7 +541,13 @@ export class Retargeter {
       const midBone = limb.leg ? `thigh_${side}` : `upper_arm_${side}`;
       const midConf = idx[midBone] != null ? (conf[idx[midBone]] ?? 1) : 1;
       const mid = midConf >= minConf ? joints[midName] : null;
-      let pole = mid ? toWorld(mid).add(hipWorld) : p0.clone().add(poleDir);
+      // pole 必须与 targetEnd 用同一套口径:都以「骨骼原点 + 相对重建根关节的偏移」表达。
+      // 之前 pole 用的是重建肘/膝的**绝对**位置(toWorld(mid) + hipWorld),与 targetEnd 的
+      // 相对口径错开一个「重建肩点 vs 实际骨骼原点」的位移(≈0.14 单位)→ 弯折平面被转掉:
+      // 实测肘平面法向误差 18°(是方向误差的 1.7 倍),统一口径后降到几度。
+      let pole = mid && rootJoint
+        ? p0.clone().add(toWorld([mid[0] - rootJoint[0], mid[1] - rootJoint[1], mid[2] - rootJoint[2]]))
+        : p0.clone().add(poleDir);
       // 肘/膝 pole 时序距离钳(根因:弯曲过大/抽搐):在肩/髋局部坐标系下做(相对 p0 的偏移),
       // 避免全身位移(root 移动/下蹲)被误判成 pole 跳远。限速 + 死区:未超阈值零干预。
       if (limb._prevMid && limb._prevRoot) {
@@ -545,10 +624,15 @@ export class Retargeter {
   // 仅当胶囊重叠时触发;共享「中」关节(肘/膝)用同一 Vector3 引用,推开后相邻段自动一致。
   _resolveCollisions() {
     const dims = this.dims;
-    const torsoR = (dims.shoulderWidth || 0) * 0.32 || 0.10; // 躯干半厚(前后/侧向)
-    const headR = (dims.headLen || 0) * 0.45 || 0.08;        // 头部球半径
-    const armR = (dims.shoulderWidth || 0) * 0.11 || 0.035;  // 手臂胶囊半径
-    const legR = (dims.hipWidth || 0) * 0.14 || 0.04;        // 腿部胶囊半径
+    // 半径按**蒙皮网格实测**(见 mesh-collision-radii.js):原来按骨长估算的半径比真实表面
+    // (宽松袖子的外套)小 1.4~7 倍,所以"骨架不重叠"但手/前臂照样插进身体。
+    const R = this.collisionRadii ?? collisionRadiiFor(this.root, dims, { mode: this.collisionRadiiMode });
+    const torsoR = R.torsoR;
+    const headR = R.headR;
+    const armUpperR = R.armUpperR;
+    const armLowerR = Math.max(R.armLowerR, R.handR); // 手掌并入前臂段(否则手会直接插进躯干)
+    const legUpperR = R.legUpperR;
+    const legLowerR = R.legLowerR;
 
     // 刷新整棵骨骼世界矩阵,保证关节世界位置是当前姿态。
     this.root.updateMatrixWorld(true);
@@ -570,13 +654,16 @@ export class Retargeter {
     }
 
     // 每个本帧驱动的肢体两段:上段(根→中,根固定)、下段(中→末,两端可动)。共享「中」关节引用。
+    // 手臂的「末」取到**手尖**(手骨 → 子骨),让手掌参与碰撞。
     const limbCaps = [];
     for (const limb of this.limbs) {
       if (!limb._mid || !limb._end || !limb._root) continue; // 本帧未驱动(如 gesture 模式跳过腿)
-      const r = limb.leg ? legR : armR;
-      const upper = { p0: limb._root, p1: limb._mid, r, movable0: false, movable1: true };
-      const lower = { p0: limb._mid, p1: limb._end, r, movable0: true, movable1: true };
-      limbCaps.push({ limb, upperIdx: capsules.length, lowerIdx: capsules.length + 1 });
+      // 手臂的「末」保持在腕(不延到手尖):延到手尖会让写回时前臂被拽着手尖转,
+      // 方向误差从 ~2° 飙到 19°。手部用半径补偿即可。
+      const end = limb._end;
+      const upper = { p0: limb._root, p1: limb._mid, r: limb.leg ? legUpperR : armUpperR, movable0: false, movable1: true };
+      const lower = { p0: limb._mid, p1: end, r: limb.leg ? legLowerR : armLowerR, movable0: true, movable1: true };
+      limbCaps.push({ limb, upperIdx: capsules.length, lowerIdx: capsules.length + 1, end });
       capsules.push(upper, lower);
     }
 
@@ -608,13 +695,14 @@ export class Retargeter {
     // 手臂 vs 大腿:手臂下垂贴腿、摸膝、抱膝等手腿交叠。
     for (const a of arms) for (const l of legs) pairsOf([a], [l]);
 
-    separateCapsulePairs(capsules, pairs, { iterations: 3, pushFactor: 0.6 });
+    separateCapsulePairs(capsules, pairs, { iterations: 8, pushFactor: 0.6, margin: this.collisionAllowance }); // 见 skeleton-collision.js 的同处说明
 
     // 把(可能被推开)的中/末关节写回上/下骨方向。
+    // 手臂的「末」是手尖(手掌并进前臂段),写回时同样用它 —— 前臂+手掌当一个刚体段,方向仍自洽。
     for (const lc of limbCaps) {
       const { limb } = lc;
       const upperDir = limb._mid.clone().sub(limb._root);
-      const lowerDir = limb._end.clone().sub(limb._mid);
+      const lowerDir = (lc.end ?? limb._end).clone().sub(limb._mid);
       if (upperDir.lengthSq() < 1e-12 || lowerDir.lengthSq() < 1e-12) continue;
       this._applyDir(limb.upper, upperDir.normalize());
       this._applyDir(limb.lower, lowerDir.normalize());
@@ -639,6 +727,7 @@ export class Retargeter {
       this.headBone.quaternion.copy(this.headRestLocalQuat);
       this._headNeutral = null;
     }
+    if (this.neckBone) this.neckBone.quaternion.copy(this.neckRestLocalQuat);
     for (const ft of this.feet) ft.bone.quaternion.copy(ft.restLocalQuat);
     // 撤销我们施加的根位移(布局 x/z 由外部控制,这里只去掉水平漂移)
     this.root.position.x -= this._rootDisp.x;

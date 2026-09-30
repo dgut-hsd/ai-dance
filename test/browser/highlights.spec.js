@@ -87,10 +87,10 @@ test('real browser recording becomes playable MP4 with score card and download',
     return { duration: v.duration, width: v.videoWidth, height: v.videoHeight };
   });
   expect(media.width).toBe(1080); expect(media.height).toBe(1920);
-  expect(media.duration).toBeGreaterThan(6); expect(media.duration).toBeLessThan(12);
+  expect(media.duration).toBeGreaterThan(12); expect(media.duration).toBeLessThan(16);
   const download = await page.request.get(base + `/api/highlights/${id}/media?download=1`);
   expect(download.headers()['content-disposition']).toContain('attachment');
-  await copyFile(path.join(data, id, 'highlight.mp4'), testInfo.outputPath('highlight-demo.mp4'));
+  await copyFile(path.join(data, id, 'short.mp4'), testInfo.outputPath('highlight-demo.mp4'));
   await page.screenshot({ path: testInfo.outputPath('claim-page.png'), fullPage: true });
 });
 

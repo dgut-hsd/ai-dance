@@ -11,7 +11,8 @@
     <h1>DANCE ARENA 后台</h1>
     <nav class="nav">
       <a href="/settings" class="nav-link">游戏设置</a>
-      <a href="/staff" class="nav-link active">视频管理</a>
+      <a href="/studio" class="nav-link">作品工坊</a>
+      <a href="/staff" class="nav-link active">高光视频</a>
       <a href="/editor" class="nav-link">谱面编辑</a>
     </nav>
     <a id="back" href="/web_dance/">返回游戏</a>
@@ -24,14 +25,25 @@
 
   <main id="jobs"></main>
 
-  <!-- 下载弹窗:扫码下载(需点击「下载」才出现) -->
+  <!-- 两个直下二维码：short 高光版 / long 完整版 -->
   <div id="download-modal" class="modal hidden">
     <div class="modal-mask" data-close></div>
     <div class="modal-box">
-      <div class="modal-head"><span>扫码下载</span><button class="modal-close" data-close>✕</button></div>
-      <p class="modal-hint">请用户用手机扫下方二维码下载视频</p>
-      <img id="download-qr" class="qr" alt="扫码下载">
-      <a id="download-link" class="btn" href="#" target="_blank" rel="noopener">在电脑上下载</a>
+      <div class="modal-head"><span>选择视频版本</span><button class="modal-close" data-close>✕</button></div>
+      <p class="modal-hint">两个二维码都会直接下载，请按需要扫码</p>
+      <div class="qr-options">
+        <section class="qr-option">
+          <strong>SHORT · 传播高光版</strong><span>约 20 秒，适合分享</span>
+          <img id="short-qr" class="qr" alt="高光版直接下载二维码">
+          <a id="short-link" class="btn" href="#" target="_blank" rel="noopener">电脑下载高光版</a>
+        </section>
+        <section class="qr-option">
+          <strong>LONG · 完整纪念版</strong><span>保留整段真人录像</span>
+          <img id="long-qr" class="qr" alt="完整版直接下载二维码">
+          <a id="long-link" class="btn" href="#" target="_blank" rel="noopener">电脑下载完整版</a>
+          <p id="long-waiting" class="long-waiting" hidden></p>
+        </section>
+      </div>
     </div>
   </div>
 

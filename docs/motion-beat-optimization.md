@@ -762,12 +762,24 @@ license 门槛——只差把 FBX 里被 `fbxClipToSequence` 压缩掉的朝向�
 | `shoulderAxis` | [x,y,z] | 肩轴单位向量（右肩−左肩，canonical） |
 | `torsoTwist` | number | **胸椎扭转** = 肩轴偏航 − 髋轴偏航（绕脊柱轴的反向旋转，salsa 关键） |
 | `torsoRoll` / `torsoPitch` | number | 躯干侧倾 / 前倾（由脊柱方向分解，显式标量） |
-| `armTwist` | [4] | 手臂轴向扭转 `[左上臂,右上臂,左前臂,右前臂]`（肩内/外旋 + 前臂旋前/旋后） |
+| `armTwist` | [4] | 手臂轴向扭转 `[左上臂,右上臂,左前臂,右前臂]`（肩内/外旋 + 前臂旋前/旋后）**当前无消费端** |
+| `rootPos` | [x,y,z] | **根位移**：(髋世界位置 − bind 位置) 投到 canonical 基、再除以「髋高（髋到最低脚踝）」→ 与骨架绝对尺寸无关 |
+| `pelvisPitch` / `pelvisRoll` | number | **骨盆前倾/侧倾**，由骨盆自身 +Y 轴（骨长轴）分解，**相对 bind 姿态的增量**（源 T-pose 骨盆基本竖直，所以增量≈绝对角，但目标休息姿态自带倾斜，必须用增量否则重复计入） |
+
+> `rootPos` / `pelvisPitch` / `pelvisRoll` 是后补的三个字段（2026-09-30），用来解决两个具体问题：
+> 教练路径不消费根运动（走位完全不体现）与只做偏航（「髋→脊柱」这段固定偏移方向错，实测该段误差 8.6°）。
+> 实测：`rootPos` 消费后教练髋部 X/Z 摆幅 1.08 / 3.19 单位（与序列理论值 1.10 / 3.22 一致）；
+> `pelvisPitch/Roll` 用「骨盆朝向误差的**波动**」标定符号（pitch 取负、roll 取正：波动 4.05°→2.20°，
+> 其它符号组合反而变大），脊柱方向误差 5.1°→4.8°。
+
 
 **改动落地**（三处，均向后兼容）：
 
-1. `scoring/examples/song-sources.js`：`fbxClipToSequence` 每帧补导上述字段；新增 `wrapAngle` 与
-   `computeArmTwist`（`2·atan2(旋转向量·长轴, w)` 的 swing-twist 轴向投影）。
+1. `scoring/src/fbxToSequence.js`：新增 `sampleFbxFrames`（FBX → 契约帧的唯一采样实现，
+   浏览器谱面编辑器与 Node 的 `export-songs` 共用），每帧补导上述字段；新增 `wrapAngle` 与
+   「长轴」投影的 swing-twist（`2·atan2(旋转向量·长轴, w)`，长轴在休息姿态下按骨长轴采样）。
+   `scoring/examples/song-sources.js` 的 `fbxClipToSequence` 只包一层本模块的序列框架
+   （`chart/v1` + `lane:body`），不再各留一份采样实现。
 2. `pose_capture/playback.js`：`sampleFrame` 插值帧携带并线性插值这些字段（肩轴插值后重归一化），
    否则教练走 `sampleFrame` 会把新字段剥掉。
 3. `web_dance/retarget.js`：新增 `_twistWorld`（世界系绕轴转骨）；当帧含 `torsoTwist` 时——

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>舞曲视频 · DANCE ARENA</title>
+  <link rel="stylesheet" href="/web_dance/staff.css">
+  <style>
+    main.layout {
+      display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      gap: 16px; align-items: start;
+    }
+    @media (max-width: 960px) { main.layout { grid-template-columns: 1fr; } }
+    .panel {
+      background: #ffffff; border: 1px solid #e1e4e8; padding: 14px 16px;
+    }
+    .panel-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .panel-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: #111827; }
+    .panel-head .count { font-size: 13px; color: #6b7280; }
+    .panel-head .spacer { flex: 1; }
+
+    /* 视频库 */
+    .video-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px;
+    }
+    .video-card {
+      display: flex; flex-direction: column; gap: 8px;
+      background: #ffffff; border: 1px solid #e1e4e8;
+    }
+    .video-card .thumb {
+      position: relative; display: block; width: 100%;
+      aspect-ratio: 3 / 4; background: #0f1322; overflow: hidden; cursor: pointer;
+    }
+    .video-card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .video-card .thumb .placeholder {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      color: #6b7280; font-size: 12px;
+    }
+    .video-card .meta { padding: 0 10px; font-size: 13px; color: #111827; }
+    .video-card .meta .name {
+      display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600;
+    }
+    .video-card .meta .info { font-size: 12px; color: #9ca3af; }
+    .video-card .actions { padding: 0 10px 10px; display: flex; gap: 8px; }
+    .video-card .actions .btn { height: 28px; padding: 0 10px; font-size: 12px; }
+    .video-card .actions .btn:last-child { margin-left: auto; }
+    .video-card.bound { border-color: #2563eb; }
+    .video-card .badge {
+      position: absolute; left: 6px; top: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600;
+      color: #fff; background: #2563eb; border-radius: 3px;
+    }
+
+    /* 舞曲绑定 */
+    .dance-list { display: flex; flex-direction: column; gap: 10px; }
+    .dance-row {
+      display: grid; grid-template-columns: 64px minmax(140px, 1fr) 150px 190px; gap: 10px; align-items: end;
+      border: 1px solid #e1e4e8; padding: 10px;
+    }
+    @media (max-width: 720px) { .dance-row { grid-template-columns: 64px 1fr; } }
+    .dance-row .thumb {
+      width: 64px; aspect-ratio: 3 / 4; background: #0f1322; overflow: hidden; border-radius: 4px;
+    }
+    .dance-row .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .dance-row .thumb .placeholder {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      color: #6b7280; font-size: 11px;
+    }
+    .dance-row .field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .dance-row .field label { font-size: 11px; color: #9ca3af; }
+    .dance-row input[type=text], .dance-row select {
+      background: #ffffff; color: #1a1d24; border: 1px solid #cbd5e1;
+      padding: 6px 10px; font-size: 13px; border-radius: 0; outline: none; width: 100%;
+    }
+    .dance-row input:focus, .dance-row select:focus { border-color: #2563eb; }
+    .dance-row.unbound .thumb { opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DANCE ARENA 后台</h1>
+    <nav class="nav">
+      <a href="/settings" class="nav-link">游戏设置</a>
+      <a href="/studio" class="nav-link">作品工坊</a>
+      <a href="/staff" class="nav-link">高光视频</a>
+      <a href="/dance-videos" class="nav-link active">舞曲视频</a>
+      <a href="/editor" class="nav-link">谱面编辑</a>
+    </nav>
+    <a id="back" href="/web_dance/">返回游戏</a>
+  </header>
+
+  <section class="toolbar">
+    <label class="btn">上传视频<input id="upload" type="file" accept="video/mp4,.mp4" multiple hidden></label>
+    <button id="refresh" class="btn ghost">刷新</button>
+    <span id="status"></span>
+  </section>
+
+  <main class="layout">
+    <section class="panel">
+      <div class="panel-head"><h2>视频库</h2><span class="count" id="video-count"></span><span class="spacer"></span></div>
+      <div id="video-grid" class="video-grid"></div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>舞曲绑定</h2><span class="count" id="dance-count"></span><span class="spacer"></span><button id="save-all" class="btn">保存</button></div>
+      <div id="dance-list" class="dance-list"></div>
+    </section>
+  </main>
+
+  <script type="module" src="/web_dance/dance-videos.js"></script>
+</body>
+</html>

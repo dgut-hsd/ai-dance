@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import { FBXLoader } from "three/examples/jsm/loaders/FBXLoader.js";
 import { BONE_DEFS } from "../../pose_capture/contract.js";
-import { DIMS, fbxClipToSequence as fbxClipToSequenceCore, makeSequence as makeSequenceCore } from "../src/fbxToSequence.js";
+import { DIMS, SAMPLING_FPS, sampleFbxFrames as sampleFbxFramesCore } from "../src/fbxToSequence.js";
 
 export const FBX_DANCES = [
   { id: "hiphop", label: "Hip Hop Dancing", fbx: "Hip Hop Dancing.fbx" },
@@ -146,83 +146,8 @@ export function buildDemoSequence() {
 }
 
 // ---- FBX 转换(原 challenge-library.js) -----------------------------------------
-
-function normalizeBoneName(name) {
-  return String(name).toLowerCase().replace(/^mixamorig/i, "").replace(/^[:._\s-]+/, "");
-}
-
-// 契约关节 → Mixamo 骨骼(取该骨头的原点作为关节点)
-const JOINT_BONES = {
-  hips_center: ["hips"],
-  left_shoulder: ["leftarm"],
-  right_shoulder: ["rightarm"],
-  left_elbow: ["leftforearm"],
-  right_elbow: ["rightforearm"],
-  left_wrist: ["lefthand"],
-  right_wrist: ["righthand"],
-  left_hip: ["leftupleg"],
-  right_hip: ["rightupleg"],
-  left_knee: ["leftleg"],
-  right_knee: ["rightleg"],
-  left_ankle: ["leftfoot"],
-  right_ankle: ["rightfoot"],
-  nose: ["head"],
-};
-
-function collectBones(root) {
-  const map = new Map();
-  root.traverse((o) => { if (o.isBone) map.set(normalizeBoneName(o.name), o); });
-  return map;
-}
-
-// 在 FBX 休息姿态里测 canonical 基(right/up/forward),forward 用脚趾校正符号
-function computeCanonicalBasis(root) {
-  root.updateMatrixWorld(true);
-  const B = collectBones(root);
-  const pos = (keys) => {
-    for (const k of keys) { const b = B.get(k); if (b) return b.getWorldPosition(new THREE.Vector3()); }
-    return null;
-  };
-
-  const hips = pos(["hips"]);
-  const larm = pos(["leftarm"]);
-  const rarm = pos(["rightarm"]);
-  let chest = pos(["spine2", "chest", "neck", "spine1"]);
-  if (!chest && larm && rarm) chest = larm.clone().add(rarm).multiplyScalar(0.5);
-
-  const up = chest && hips ? chest.clone().sub(hips).normalize() : new THREE.Vector3(0, 1, 0);
-  const right = larm && rarm ? rarm.clone().sub(larm).normalize() : new THREE.Vector3(1, 0, 0);
-  const forward = new THREE.Vector3().crossVectors(right, up).normalize();
-  if (forward.lengthSq() < 0.5) forward.set(0, 0, 1);
-
-  // 脚趾永远朝前
-  let toe = new THREE.Vector3();
-  let ok = false;
-  const lf = pos(["leftfoot"]), lt = pos(["lefttoebase", "lefttoe_end"]);
-  const rf = pos(["rightfoot"]), rt = pos(["righttoebase", "righttoe_end"]);
-  if (lf && lt) { toe.add(lt.clone().sub(lf)); ok = true; }
-  if (rf && rt) { toe.add(rt.clone().sub(rf)); ok = true; }
-  if (ok) {
-    toe.y = 0;
-    if (toe.lengthSq() > 1e-8) {
-      toe.normalize();
-      if (toe.dot(forward) < 0) forward.negate();
-    }
-  }
-  return { right, up, forward };
-}
-
-// 把世界坐标转到 canonical(x=右,y=上,z=朝镜头),髋为原点
-function toCanonical(p, hips, basis) {
-  const d = p.clone().sub(hips);
-  return [d.dot(basis.right), d.dot(basis.up), d.dot(basis.forward)];
-}
-
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const norm = (v) => {
-  const l = Math.hypot(v[0], v[1], v[2]);
-  return l < 1e-6 ? [0, 0, 0] : [v[0] / l, v[1] / l, v[2] / l];
-};
+// 采样逻辑已收归 ../src/fbxToSequence.js 的 sampleFbxFrames(v2 朝向字段的补导也在那里),
+// 这里只包一层本模块的序列框架(chart/v1 + lane:body),两条路径不再各留一份实现。
 
 /** 一个序列的基础框架 + 每 2 拍一个 pose 音符的谱面(音符轨道判定)。 */
 export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
@@ -252,7 +177,7 @@ export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
     },
     bones: BONE_DEFS.map(({ name, parent, child }) => ({ name, parent, child })),
     frames,
-    chart: { version: "chart/v1", audio, notes },
+    chart: { version: "chart/v2", audio, notes },
   };
 }
 
@@ -263,51 +188,8 @@ export function makeSequence(frames, { bpm, audio, danceId, durationSec }) {
  * @param {{ bpm?: number, audio?: string, danceId?: string, loopTo?: number }} opts
  */
 export function fbxClipToSequence(clip, root, { bpm = 120, audio = "pop-demo.wav", danceId = "fbx-dance", loopTo = 24 } = {}) {
-  const basis = computeCanonicalBasis(root);
-  const B = collectBones(root);
-
-  const jointBone = {};
-  for (const [joint, keys] of Object.entries(JOINT_BONES)) {
-    for (const k of keys) { if (B.has(k)) { jointBone[joint] = B.get(k); break; } }
-  }
-
-  const mixer = new THREE.AnimationMixer(root);
-  const action = mixer.clipAction(clip);
-  action.play();
-  mixer.update(0);
-
-  const clipDur = Math.max(0.001, clip.duration || 0);
-  const dur = Math.max(clipDur, loopTo);
-  const total = Math.max(2, Math.round(dur * SAMPLING_FPS));
-  const dt = dur / total;
-  const frames = [];
-
-  for (let i = 0; i <= total; i++) {
-    const t = i * dt;
-    if (i > 0) mixer.update(dt);
-    root.updateMatrixWorld(true);
-
-    const hips = jointBone.hips_center?.getWorldPosition(new THREE.Vector3());
-    if (!hips) continue;
-    const J = {};
-    for (const [joint, bone] of Object.entries(jointBone)) {
-      J[joint] = toCanonical(bone.getWorldPosition(new THREE.Vector3()), hips, basis);
-    }
-
-    const joints = {
-      ...J,
-      shoulders_center: J.left_shoulder && J.right_shoulder
-        ? [(J.left_shoulder[0] + J.right_shoulder[0]) / 2,
-           (J.left_shoulder[1] + J.right_shoulder[1]) / 2,
-           (J.left_shoulder[2] + J.right_shoulder[2]) / 2]
-        : [0, 0, 0],
-    };
-    const bones = BONE_DEFS.map((b) => norm(sub(joints[b.child], joints[b.parent])));
-
-    frames.push({ t: +t.toFixed(3), bones, conf: new Array(BONE_DEFS.length).fill(1) });
-  }
-
-  return makeSequence(frames, { bpm, audio, danceId, durationSec: dur });
+  const { frames, durationSec } = sampleFbxFramesCore(THREE, clip, root, { loopTo });
+  return makeSequence(frames, { bpm, audio, danceId, durationSec });
 }
 
 /** 用 FBXLoader 离线解析一份 FBX(ArrayBuffer)。 */
