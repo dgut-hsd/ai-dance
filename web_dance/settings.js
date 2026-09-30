@@ -1,4 +1,9 @@
 // 游戏设置:设备密钥、文案风格、摄像头切换,全部写入 localStorage,与游戏页/视频管理页(同源)共享。
+import {
+  SCORING_KNOBS, KNOB_GROUPS, loadConfig, saveConfig, resetConfig,
+  enforceOrdering, formatKnob, STORAGE_KEY as SCORING_KEY,
+} from "./scoring-config.js";
+
 const $ = (id) => document.getElementById(id);
 
 $("device-token").value = localStorage.getItem("dance-device-token") || "";
@@ -429,3 +434,130 @@ $("side-map-save").addEventListener("click", async () => {
 
 applySideModeUI();
 refreshSideMap();
+
+// ---------------------------------------------------------------------------
+// 评分规则旋钮:实时调判定手感 + 评级/得分。写入 localStorage,游戏页读取生效。
+//
+// 控件只创建一次,之后靠 syncValues() 增量改 value/读数。
+// 早期版本在 commit() 里 renderScoringKnobs() 整体重建 DOM,把用户正拖动的
+// <input> 换掉了 —— 松手后 change 事件的 target 已脱离文档,旋钮从此"拉不动"。
+// ---------------------------------------------------------------------------
+const scoringStatus = (msg) => { $("scoring-status").textContent = msg; };
+let scoringCfg = loadConfig();
+// key -> { input, val }:增量同步用
+const knobRefs = new Map();
+
+function scoringKnobRow(key, meta) {
+  const label = document.createElement("label");
+  label.className = "scoring-knob";
+  if (meta.hint) label.title = meta.hint;
+  const name = document.createElement("span");
+  name.className = "scoring-knob-name";
+  name.textContent = meta.label;
+  label.appendChild(name);
+
+  const ref = {};
+  knobRefs.set(key, ref);
+
+  // 勾选框:朝向对齐这类开关
+  if (meta.widget === "toggle") {
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = scoringCfg[key] !== false;
+    cb.addEventListener("change", () => commit(key, cb.checked));
+    ref.input = cb;
+    label.appendChild(cb);
+    return label;
+  }
+
+  // 数字框:分数量级这类跨度极大的参数,滑块不好精确拖
+  if (meta.widget === "number") {
+    const box = document.createElement("input");
+    box.type = "number";
+    box.min = String(meta.min);
+    box.max = String(meta.max);
+    box.step = String(meta.step);
+    box.value = String(scoringCfg[key]);
+    const clamp = () => {
+      const n = Number(box.value);
+      return Number.isFinite(n) ? Math.min(meta.max, Math.max(meta.min, n)) : scoringCfg[key];
+    };
+    box.addEventListener("change", () => commit(key, clamp()));
+    ref.input = box;
+    label.appendChild(box);
+    return label;
+  }
+
+  // 默认:滑块
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = String(meta.min);
+  input.max = String(meta.max);
+  input.step = String(meta.step);
+  input.value = String(scoringCfg[key]);
+  const val = document.createElement("span");
+  val.className = "param-val";
+  val.textContent = formatKnob(key, scoringCfg[key]);
+  // input 事件只更新读数;change(松手)才落盘,避免拖动时每帧写 localStorage。
+  input.addEventListener("input", () => { val.textContent = formatKnob(key, input.value); });
+  input.addEventListener("change", () => commit(key, Number(input.value)));
+  ref.input = input;
+  ref.val = val;
+  label.append(input, val);
+  return label;
+}
+
+// 交叉约束(档位单调等)可能改动别的旋钮,所以提交后同步所有控件的读数。
+// 只改 value 不重建节点:重建会杀死正在拖动的元素。
+function syncValues() {
+  for (const [key, ref] of knobRefs) {
+    const v = scoringCfg[key];
+    if (ref.input.type === "checkbox") ref.input.checked = v !== false;
+    else if (ref.input.type === "number") ref.input.value = String(v);
+    else ref.input.value = String(v);
+    if (ref.val) ref.val.textContent = formatKnob(key, v);
+  }
+}
+
+function commit(key, value) {
+  scoringCfg = saveConfig({ ...scoringCfg, [key]: value });
+  syncValues();
+  scoringStatus("已保存");
+}
+
+function buildScoringKnobs() {
+  const wrap = $("scoring-knobs");
+  wrap.innerHTML = "";
+  knobRefs.clear();
+  for (const g of KNOB_GROUPS) {
+    const block = document.createElement("div");
+    block.className = "scoring-group";
+    const h = document.createElement("h3");
+    h.textContent = g.title;
+    const d = document.createElement("p");
+    d.className = "camera-hint";
+    d.textContent = g.desc;
+    block.append(h, d);
+    for (const [key, meta] of Object.entries(SCORING_KNOBS)) {
+      if (meta.group === g.id) block.appendChild(scoringKnobRow(key, meta));
+    }
+    wrap.appendChild(block);
+  }
+}
+
+$("scoring-reset").addEventListener("click", () => {
+  scoringCfg = resetConfig();
+  syncValues();
+  scoringStatus("已恢复默认");
+});
+
+// 另一标签页改了设置(游戏页)时同步读数,避免两边显示不一致。
+window.addEventListener("storage", (e) => {
+  if (e.key !== SCORING_KEY) return;
+  scoringCfg = enforceOrdering(loadConfig());
+  syncValues();
+  scoringStatus("已同步外部修改");
+});
+
+buildScoringKnobs();
+scoringStatus("共 " + Object.keys(SCORING_KNOBS).length + " 项可调");

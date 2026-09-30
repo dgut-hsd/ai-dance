@@ -36,6 +36,9 @@ export async function createApp(options = {}) {
   await mkdir(draftsDir, { recursive: true });
   const draftStore = createDraftStore({ draftsDir });
   const videosDir = path.resolve(options.videosDir || process.env.VIDEOS_DIR || path.join(root, 'videos'));
+  // 评分监测日志:跟跳挑战每帧的 acc/conf/perBone,落盘供分析评级/得分规则是否合理。
+  const scoringLogsDir = path.resolve(options.scoringLogsDir || process.env.SCORING_LOGS_DIR || path.join(root, 'data', 'scoring-logs'));
+  await mkdir(scoringLogsDir, { recursive: true });
   const highlightIntro = path.resolve(options.highlightIntro || process.env.HIGHLIGHT_INTRO ||
     path.join(videosDir, 'rokoko导入视频', '开场.mp4'));
   const highlightIntroDuration = Number(options.highlightIntroDuration || process.env.HIGHLIGHT_INTRO_DURATION) || 3.6;
@@ -445,6 +448,22 @@ export async function createApp(options = {}) {
     const j = owner(req);
     await exclusive(j.id, async () => { j.status = 'deleted'; await save(j); });
     res.json({ ok: true }); void cleanup();
+  });
+  // 评分监测日志:跟跳结算时上报每帧 acc/conf/perBone(JSON 走 text/plain 原始流,避免 256kb 上限),
+  // 落盘到 data/scoring-logs/ 供分析评级/得分规则。字段受限、数值被规整,仅内部使用。
+  app.post('/api/scoring-log', device, async (req, res) => {
+    let text = '';
+    for await (const chunk of req) {
+      text += chunk;
+      if (text.length > 4 * 1024 * 1024) throw fail(413, '评分日志过大');
+    }
+    let data;
+    try { data = JSON.parse(text); } catch { throw fail(400, '评分日志不是合法 JSON'); }
+    if (!data || !Array.isArray(data.frames)) throw fail(400, '缺少 frames');
+    const name = `${Date.now()}-${token().slice(0, 8)}.json`;
+    const file = path.join(scoringLogsDir, name);
+    await writeFile(file, text);
+    res.json({ ok: true, file: path.relative(root, file) });
   });
   // 服务端 3D 动捕(MeTRAbs):收视频 → 调 tools/pose3d.py → 返回 dance-sequence/v1 序列。
   // 供 lab.html 的「服务端 3D 模型」通路使用,替代浏览器端 MediaPipe 单目深度(膝盖反向根因)。
