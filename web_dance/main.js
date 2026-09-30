@@ -22,6 +22,9 @@ import { SongSession, AudioEngine } from "./audio.js";
 import { SelectionPreviewAudio } from "./selection-preview-audio.js";
 import { HighlightController } from "./highlights.js";
 import { HighlightReplayController } from "./highlight-replay.js";
+// 参考视频的加载时序与诊断:把"改 src → 等元数据 → seek → play"四步排好,
+// 并把 play() 失败原因(DOMException.name / MediaError.code)留在日志里,不再静默。
+import { VideoSource, videoHealth, videoErrorSummary } from "./video-source.js";
 import { resultCopyFor } from "./result-copy.js";
 import { BUILTIN_DANCES, loadDanceClips, retargetClipToSkeleton, captureRestPose } from "./dance-library.js";
 import { loadSongIndex, dances, songs, danceById, songById, loadSequence } from "./song-library.js";
@@ -65,6 +68,7 @@ const state = {
   sideMode: "model",         // model | video:右侧显示 3D 模型还是教学视频
   videoMap: {},              // danceId -> 视频文件名(来自 /api/videos-map)
   refVideoUrl: null,         // 当前 <video id=ref-video> 的 src,避免重复加载
+  refVideoWanted: false,     // 本局"右侧应该在放视频":看门狗据此判断该不该在播
 };
 
 const $ = (id) => document.getElementById(id);
@@ -176,6 +180,8 @@ const highlights = new HighlightController({
   stage: dom.stage, camera: dom.cam, fx: dom.fx,
   // 高光合成时把 pk 分屏里被推到右侧的 3D 教练重新居中。
   stageShift: () => scene.getSplitXOffset(),
+  // 特效层完全静止时跳过合成:省掉每帧一次全屏空画布的混合(见 highlights.draw)
+  fxIsIdle: () => juice.isIdle(),
   getState: () => ({
     score: state.challenge?.scorer.score || 0, combo: state.challenge?.scorer.combo || 0,
     tier: state.challenge?.scorer.lastTier || '', acc: state.challenge?.previewAcc || 0,
@@ -391,6 +397,9 @@ function renderLoop() {
       // 兼容两种 scene 版本:合成器版走 scene.render(),老版直接渲染
       if (scene.render) scene.render();
       else scene.renderer.render(scene.scene, scene.camera);
+    } else if (state.phase === "playing") {
+      // 本局进行中:参考视频自检(停了就补 play 并留日志)
+      watchRefVideo();
     }
     highlights.draw(); // Copy WebGL immediately, before its drawing buffer can be cleared.
   } catch (e) {
@@ -442,40 +451,96 @@ async function loadModel(url, type) {
 
 // ---------------------------------------------------------------------------
 // 视频参考模式(右侧 3:4 MP4 替换 3D 教练/舞台)
+//
+// 现场故障「视频突然不播了」的四个真实成因,都在这一层被挡住:
+//   1. 改完 src 立刻 pause/play → 加载请求被 abort,play() 抛 AbortError(以前被 catch 吞掉);
+//   2. 元数据没到就写 currentTime → 留下 pending seek,画面停住不报错;
+//   3. 同一地址被重复 setRefVideo → 反复打断正在播的画面;
+//   4. 中途 return(倒计时被打断、切模式)后没人再调 play → 一直静止。
+// 现在:切源/等待/seek/重试由 VideoSource 统一管,状态不对时看门狗会补一次 play 并留日志。
 // ---------------------------------------------------------------------------
 function videoUrlFor(danceId) {
   const name = state.videoMap[danceId];
   return name ? `/videos/${encodeURIComponent(name)}` : null;
 }
 
-// 设置 ref-video 的 src;只在地址变化时重载,避免反复打断播放。
+const refVideoSource = new VideoSource(dom.refVideo, {
+  preload: "auto",
+  loadTimeoutMs: 15000,
+  log: (line) => console.debug(`[ref-video] ${line}`),
+  warn: (line) => console.warn(`[ref-video] ${line}`),
+});
+
+// 供现场一键取证:控制台执行 __danceVideo.export() 拿完整快照
+globalThis.__danceVideo = {
+  source: refVideoSource,
+  health: () => videoHealth(dom.refVideo),
+  report: () => refVideoSource.report(state.challengeDanceId),
+  export: () => {
+    const text = refVideoSource.exportText(state.challengeDanceId);
+    console.info(text);
+    return text;
+  },
+  log: () => refVideoSource.entries.slice(-60),
+};
+
+/** 切到某支舞绑定的参考视频(幂等:同地址不重新加载,免得打断正在播的画面) */
 function setRefVideo(url) {
+  if (!url) { state.refVideoUrl = null; refVideoSource.clear("没有可播地址"); return Promise.resolve(null); }
+  state.refVideoUrl = new URL(url, location.href).href;
+  // 立刻置 preload,让浏览器在"选曲预览"阶段就开始缓冲,正式开局不用等首帧
+  refVideoSource.setPreload("auto");
+  return refVideoSource.load(state.refVideoUrl);
+}
+
+/** 备好视频(等元数据),不播 —— 用于点「开始挑战」后、倒计时之前 */
+async function prepareRefVideo(danceId = state.challengeDanceId) {
+  const url = videoUrlFor(danceId);
+  state.refVideoWanted = Boolean(url);
   if (!url) {
-    if (state.refVideoUrl) {
-      dom.refVideo.removeAttribute("src");
-      dom.refVideo.load();
-      state.refVideoUrl = null;
-    }
-    return;
+    refVideoSource.clear("这支舞没有绑定视频");
+    state.refVideoUrl = null;
+    return false;
   }
-  const abs = new URL(url, location.href).href;
-  if (state.refVideoUrl !== abs) {
-    dom.refVideo.src = abs;
-    state.refVideoUrl = abs;
+  try {
+    await setRefVideo(url);
+    return true;
+  } catch (e) {
+    // 关键:把失败原因(错误码/超时)打到控制台,现场一眼能看出是哪一类
+    console.warn(`[ref-video] 准备失败:${e.message} → ${videoErrorSummary({ health: videoHealth(dom.refVideo), url, log: refVideoSource.entries })}`);
+    return false;
   }
 }
 
-function playRefVideo({ restart = false } = {}) {
-  if (!state.refVideoUrl) return;
-  dom.refVideo.muted = true;
-  dom.refVideo.loop = true;
-  if (restart) dom.refVideo.currentTime = 0;
-  dom.refVideo.play().catch(() => {});
+async function playRefVideo({ restart = false } = {}) {
+  const result = await refVideoSource.play({ restart, loop: true });
+  if (!result.ok) console.warn(`[ref-video] 播放未成功:${result.reason}`);
+  return result;
 }
 
-function stopRefVideo() {
-  dom.refVideo.pause();
-  if (state.refVideoUrl) dom.refVideo.currentTime = 0;
+function stopRefVideo({ clear = false } = {}) {
+  state.refVideoWanted = false;
+  refVideoSource.pause();
+  if (clear) {
+    refVideoSource.clear("停止本局");
+    state.refVideoUrl = null;
+  }
+}
+
+/**
+ * 看门狗:本局进行中、右侧本该在放视频,却处于暂停/卡住状态 → 补一次 play 并留日志。
+ * 这是"突然不播了"的最后一道保险:即使某条异步路径提前 return(倒计时被打断、切歌、
+ * 反复开停),画面也能在 1 秒内自己回来,并且控制台留下确切的失败原因。
+ * 由 renderLoop 每帧驱动(而不是 challengeTimer),这样它覆盖正式局与任何半途返回的路径。
+ */
+let lastRefVideoCheck = 0;
+function watchRefVideo() {
+  if (!state.running || !state.refVideoWanted || !state.refVideoUrl) return;
+  const now = performance.now() * 0.001;
+  if (refVideoSource.health().ok) { lastRefVideoCheck = now; return; }
+  if (now - lastRefVideoCheck < 1) return;   // ≤1 秒的短暂停顿(换源/缓冲)不当作故障
+  lastRefVideoCheck = now;
+  refVideoSource.ensurePlaying();
 }
 
 async function loadVideoMap() {
@@ -734,38 +799,65 @@ function inPageSilhouette(entry) {
 // 选曲卡剪影:优先用「判定轨道白影」(assets/lane/,模型离屏渲染的 3D 白影)——
 // 每支舞都已经逐判定点生成好了,和右下角判定轨道用的是同一批图,天然「所见即所得」。
 // 从中挑关节铺得最开的一帧当招牌动作(与 tools/gen-silhouettes.mjs 的挑法同一个思路)。
+// 结果是纯函数(只依赖 laneManifest),缓存起来:选曲页每次重建卡片都要算,内层是 O(n²)。
+const laneCardCache = new Map();
 function laneCardSilhouette(danceId) {
+  if (laneCardCache.has(danceId)) return laneCardCache.get(danceId);
   const notes = laneManifest?.dances?.[danceId]?.notes;
-  if (!Array.isArray(notes) || !notes.length) return null;
-  let best = null, bestSpread = -1;
-  for (const n of notes) {
-    const pts = Object.values(n.joints || {});
-    let m = 0;
-    for (let i = 0; i < pts.length; i++) {
-      for (let j = i + 1; j < pts.length; j++) {
-        const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
-        if (d > m) m = d;
+  let url = null;
+  if (Array.isArray(notes) && notes.length) {
+    let best = null, bestSpread = -1;
+    for (const n of notes) {
+      const pts = Object.values(n.joints || {});
+      let m = 0;
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+          if (d > m) m = d;
+        }
       }
+      if (m > bestSpread) { bestSpread = m; best = n; }
     }
-    if (m > bestSpread) { bestSpread = m; best = n; }
+    url = best ? laneAssetUrl(best) : null;
   }
-  return best ? laneAssetUrl(best) : null;
+  laneCardCache.set(danceId, url);
+  return url;
 }
 
 // 白影是「固定取景、不裁剪」渲染的,单张里人物只占中间一条;
 // 直接贴到卡片上会显得又细又小 —— 先按 alpha 裁到人物再显示。
+//
+// 注意:fetch + createImageBitmap + drawImage + toDataURL 是同步重活(几百 KB 的 PNG 编码),
+// 原来在选曲首帧里同步跑,是 LCP 3.77s / 点不动 240ms 的主要来源之一。
+// 现在:① 放到空闲时段再跑;② 结果按 url 缓存,重复进选曲页不再重算。
+const croppedSilhouetteCache = new Map();
 async function setCroppedSilhouette(img, url) {
   try {
-    const bitmap = await createImageBitmap(await (await fetch(url)).blob());
-    const c = document.createElement("canvas");
-    c.width = bitmap.width;
-    c.height = bitmap.height;
-    c.getContext("2d").drawImage(bitmap, 0, 0);
-    bitmap.close?.();
-    img.src = canvasToPng(cropToAlpha(c, { padFrac: 0.08 }));
+    let dataUrl = croppedSilhouetteCache.get(url);
+    if (!dataUrl) {
+      const bitmap = await createImageBitmap(await (await fetch(url)).blob());
+      const c = document.createElement("canvas");
+      c.width = bitmap.width;
+      c.height = bitmap.height;
+      c.getContext("2d").drawImage(bitmap, 0, 0);
+      bitmap.close?.();
+      // 让步给主线程:编码前先歇一个空闲片,避免和点击/布局抢时间
+      await idleSlice();
+      dataUrl = canvasToPng(cropToAlpha(c, { padFrac: 0.08 }));
+      croppedSilhouetteCache.set(url, dataUrl);
+    }
+    img.src = dataUrl;
   } catch {
     img.src = url; // 裁剪失败就原样用原图
   }
+}
+
+/** 让出一次主线程(优先空闲回调,兜底一帧) */
+function idleSlice() {
+  return new Promise((resolve) => {
+    if (globalThis.requestIdleCallback) globalThis.requestIdleCallback(() => resolve(), { timeout: 400 });
+    else setTimeout(resolve, 0);
+  });
 }
 
 // 循环播放序列(吸引态 / 试跳),教练原地跟跳不消费根运动
@@ -891,11 +983,11 @@ function layoutCards() {
       if (off < -n / 2) off += n;
     }
     const distance = Math.abs(off);
-    const x = off * 132;
     const y = distance * 10;
     const scale = Math.max(0.72, 1 - distance * 0.16);
     const rotate = off * -13;
-    e.el.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) rotateY(${rotate}deg) scale(${scale})`;
+    // 横向步距交给 CSS(--sc-step):抽屉变宽时卡片要跟着散开,不然两侧会空一大片。
+    e.el.style.transform = `translate(calc(-50% + var(--sc-step, 148px) * ${off}), calc(-50% + ${y}px)) rotateY(${rotate}deg) scale(${scale})`;
     e.el.style.zIndex = String(n + 2 - distance);
     e.el.style.opacity = distance > 2 ? "0" : String(Math.max(0.34, 1 - distance * 0.28));
     e.el.style.pointerEvents = distance > 2 ? "none" : "auto";
@@ -949,25 +1041,81 @@ async function enterSelect() {
   const list = isVideoSide()
     ? dances().filter((d) => videoUrlFor(d.id))
     : dances().filter((d) => d.mode !== "video" || !videoUrlFor(d.id));
+  // 视频模式下一支舞都没绑视频:这是配置问题,不是运行时故障。
+  // 必须在这里收手 —— 否则后面"摄像头预热完"会把这条提示覆盖成「模型就绪」,
+  // 工作人员看不到真正的原因(以前的现场表现就是"黑着,什么都不说")。
   if (isVideoSide() && !list.length) {
-    setStatus("没有已绑定视频的舞曲（请在后台「右侧画面」为舞曲绑定视频）");
+    state.select.entries = [];
+    dom.songPick.classList.remove("hidden");
+    setSongPickerOpen(false);
+    if (dom.songPickCurrent) dom.songPickCurrent.textContent = "没有已绑定视频的舞曲";
+    if (dom.songPickStart) dom.songPickStart.disabled = true;
+    setStatus("没有已绑定视频的舞曲（请在后台 /studio「右侧画面」为舞曲绑定视频）");
+    return;
   }
   const entries = list.map((dance) => {
     const song = songById(dance.defaultSongId) || songs()[0];
-    return { dance, song, skin: SELECT_SKIN[dance.id] || SELECT_SKIN.demo, seq: null, el: null };
+    return {
+      dance, song, skin: SELECT_SKIN[dance.id] || SELECT_SKIN.demo,
+      seq: null, el: null, laneSilhouetteUrl: null, silhouetteApplied: false,
+    };
   });
-  await Promise.all(entries.map(async (e) => { e.seq = await seqFor(e); }));
-  // 选曲卡的剪影来自判定轨道白影清单,先确保它到手(通常早就加载完了)
-  await ensureLaneManifest();
+  // 序列是"点开始才要用"的东西,不是首屏要用的东西:放到空闲时段加载,别跟首帧抢主线程。
+  const sequencesReady = Promise.all(entries.map(async (e) => { e.seq = await seqFor(e); }));
+  // 选曲卡的剪影来自判定轨道白影清单 —— 同上,清单到了再补图,不阻塞抽屉出现。
+  void ensureLaneManifest().then(() => { if (state.phase === "select") refreshCardSilhouettes(); });
 
   state.select.entries = entries;
   state.select.selected = 0;
   buildSelectCards();
   dom.songPick.classList.remove("hidden");
   setSongPickerOpen(false);
-  startAttract(0);
-  await startCamera();
+  // 首屏可交互了:先把抽屉亮出来,再去做下面这些慢活。
+  // 以前这里 await startCamera()(MediaPipe Worker + 9MB wasm + 摄像头)导致
+  // 选曲标题 3.7 秒才成为 LCP、抽屉出现后 240ms 点不动 —— 都是这几百毫秒级长任务造成的。
+  await nextFrame();
+  startAttractDeferred(0);
+  scheduleCameraWarmup();
   setStatus("选一支舞");
+  // 序列加载完再刷新一次:点「开始挑战」时 seq 一定就绪(没有就在 startSong 里等)。
+  await sequencesReady.catch((e) => console.warn("序列加载失败:", e));
+}
+
+/** 等一帧:让浏览器先把选曲 UI 画出来 */
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+}
+
+/**
+ * 选曲态延迟启动摄像头:先让选曲首屏画完、可点,再加载 MediaPipe。
+ * 玩家从"看到抽屉"到"点开始"通常有好几秒,这段时间足够初始化完成;
+ * 真来不及也没关系 —— startChallenge 里会 await startCamera()。
+ */
+let cameraWarmupStarted = false;
+function scheduleCameraWarmup() {
+  if (cameraWarmupStarted || state.stream) return;
+  cameraWarmupStarted = true;
+  const start = () => { startCamera().catch((e) => console.warn("摄像头初始化失败:", e)); };
+  if (globalThis.requestIdleCallback) globalThis.requestIdleCallback(start, { timeout: 1500 });
+  else setTimeout(start, 600);
+}
+
+/** 首屏先放牌面,白影图等清单到手后再逐张补上(裁剪最开的那一帧) */
+function startAttractDeferred(i) {
+  startAttract(i);
+  refreshCardSilhouettes();
+}
+
+/** 用判定轨道白影刷新选曲卡剪影(清单到货时调用;已有图就不重复处理) */
+function refreshCardSilhouettes() {
+  state.select.entries.forEach((e) => {
+    if (!e.el || e.silhouetteApplied) return;
+    const laneUrl = e.laneSilhouetteUrl || laneCardSilhouette(e.dance.danceId);
+    if (!laneUrl) return;
+    e.silhouetteApplied = true;
+    const silImg = e.el.querySelector(".sc-sil");
+    if (silImg) void setCroppedSilhouette(silImg, laneUrl);
+  });
 }
 
 function buildSelectCards() {
@@ -989,13 +1137,17 @@ function buildSelectCards() {
     // 剪影优先级:判定轨道白影(模型渲染) → 老的预生成 PNG → 页面内实时渲染 → demo 兜底。
     // 注意别再把 demo.png 当默认值:它总能加载成功,error 回调永远不触发,
     // 新舞曲会一直顶着同一张通用剪影(这正是之前 pose 卡不走模型通道的原因)。
+    //
+    // 白影图(需 fetch + 裁剪)不在这里处理 —— 那会拖住选曲首帧;
+    // 先给出无需解码的兜底图,清单到手后由 refreshCardSilhouettes() 换成白影。
     const silImg = card.querySelector(".sc-sil");
     const fallbackSil = () => { silImg.src = inPageSilhouette(e) || SILHOUETTES.demo; };
     silImg.addEventListener("error", fallbackSil, { once: true });
     const laneUrl = laneCardSilhouette(e.dance.danceId);
-    if (laneUrl) setCroppedSilhouette(silImg, laneUrl);
-    else if (SILHOUETTES[e.dance.id]) silImg.src = SILHOUETTES[e.dance.id];
-    else fallbackSil();
+    if (laneUrl) e.laneSilhouetteUrl = laneUrl;
+    // 立即给一张不需要解码/裁剪的兜底图(白影图稍后由 refreshCardSilhouettes 换上)
+    if (SILHOUETTES[e.dance.id]) silImg.src = SILHOUETTES[e.dance.id];
+    else if (!laneUrl) fallbackSil();
     card.addEventListener("click", () => {
       selectCard(i);
       preview(i);
@@ -1084,29 +1236,54 @@ dom.songPickDrawer?.addEventListener("wheel", (event) => {
 
 function preview(i) {
   const e = state.select.entries[i];
-  if (!e?.seq) return;
+  if (!e) return;
   playSelectionPreview(e);
-  if (isVideoSide()) {
-    setRefVideo(videoUrlFor(e.dance.id));
-    playRefVideo({ restart: true });
-  } else {
-    const coach = state.coach;
-    if (!coach) return;
-    state.select.clock = 0;
-    state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
-    animateCardPose(i);
-  }
   clearTimeout(state.select.revertTimer);
   state.select.revertTimer = setTimeout(() => startAttract(state.select.selected), 5000);
+  // 视频预览不依赖序列:序列改成空闲加载后,不能因为 seq 还没到就不放预览
+  if (isVideoSide()) {
+    // 预览态一律走 restart:快速翻卡时后一次切源会作废前一次,只有最后一次的 play 生效
+    previewRefVideo(e.dance.id);
+    return;
+  }
+  if (!e.seq) return;
+  const coach = state.coach;
+  if (!coach) return;
+  state.select.clock = 0;
+  state.select.player = makeLoopCoachPlayer(e.seq, coach.retargeter, resolveMode(state.danceType).bones);
+  animateCardPose(i);
+}
+
+/** 选曲预览播放某支舞的视频:切源→等元数据→play(restart),失败留日志 */
+function previewRefVideo(danceId) {
+  const url = videoUrlFor(danceId);
+  if (!url) return;
+  state.refVideoWanted = false; // 预览态不算"本局在放",否则看门狗会误报
+  setRefVideo(url)
+    .then(() => playRefVideo({ restart: true }))
+    .catch((e) => console.warn(`[ref-video] 预览失败:${e.message}`));
 }
 
 function startAttract(i) {
   const e = state.select.entries[i];
   clearInterval(cardAnimTimer);
-  if (!e?.seq) return;
+  if (!e) return;
   if (isVideoSide()) {
-    setRefVideo(videoUrlFor(e.dance.id));
-    playRefVideo();
+    // 吸引态:同地址不重新加载(继续播),换曲才切源,避免每 5 秒打断一次画面
+    const url = videoUrlFor(e.dance.id);
+    if (url) {
+      setRefVideo(url)
+        .then(() => playRefVideo())
+        .catch((err) => console.warn(`[ref-video] 吸引态播放失败:${err.message}`));
+    }
+    return;
+  }
+  if (!e.seq) {
+    // 序列还在空闲加载:到了再补一次吸引态试跳
+    void seqFor(e).then((seq) => {
+      e.seq = seq;
+      if (state.phase === "select" && state.select.selected === i) startAttract(i);
+    }).catch(() => {});
     return;
   }
   const coach = state.coach;
@@ -1134,9 +1311,17 @@ function startSong(i) {
   dom.songSelect.value = e.song.id;
   // 直接用预载序列,免重载
   if (state.challenge?.session) state.challenge.session.stop();
-  state.challenge = { seq: e.seq, scorer: new ScoringAdapter(e.seq), running: false };
   state.coachPlayer = null;
-  startChallenge().catch((err) => { stopAll(); setStatus("启动失败: " + err.message); });
+  // 序列改成空闲加载之后,极快点击「开始挑战」时它可能还没到 —— 等一次,不重新加载
+  startWithSequenceFor(e).catch((err) => { stopAll(); setStatus("启动失败: " + err.message); });
+}
+
+/** 确保这张卡的序列就绪再开局(空闲加载还没轮到就补一次;失败就是真失败) */
+async function startWithSequenceFor(entry) {
+  if (!entry.seq) entry.seq = await seqFor(entry);
+  if (!entry.seq) throw new Error("舞曲序列不可用");
+  state.challenge = { seq: entry.seq, scorer: new ScoringAdapter(entry.seq), running: false };
+  await startChallenge();
 }
 // ---------------------------------------------------------------------------
 // 表演模式:播放 FBX/GLB 内嵌动画(AnimationMixer)
@@ -1425,9 +1610,11 @@ async function startChallenge() {
   if (generation !== startGeneration) return;
 
   if (isVideoSide()) {
-    // 视频模式:备好当前舞曲绑定的参考视频,GO 时同步开播(循环)。
-    setRefVideo(videoUrlFor(state.challengeDanceId));
-    if (state.refVideoUrl) dom.refVideo.pause();
+    // 视频模式:先把参考视频备到"能播"(等元数据完成),倒计时结束后再开播。
+    // 关键区别:这里只 prepare 不 play,而且不再对刚改完 src 的元素调 pause() ——
+    // 那句 pause 会把加载/播放请求打断,是「倒计时结束画面不动」的主要成因。
+    await prepareRefVideo(state.challengeDanceId);
+    if (generation !== startGeneration) return;
   } else {
     // 3D 教练(同模型第二实例)跳参考舞,玩家跟着跳
     const coach = await ensureCoach();
@@ -1455,7 +1642,11 @@ async function startChallenge() {
   await session.start(goAt); // 预调度音频与时钟
   ch.scorer.latency.outputLatencySec = ctx.outputLatency || 0;
   if (!await countdownTo(goAt, generation)) return;
-  if (isVideoSide()) playRefVideo({ restart: true });
+  if (isVideoSide()) {
+    // GO:视频从 0 开始播。await 结果会给出失败原因(而不是静默停住)。
+    await playRefVideo({ restart: true });
+    if (generation !== startGeneration) return;
+  }
   highlights.start();
   ch.running = true;
   challengeTimer = setInterval(() => {
@@ -1487,6 +1678,23 @@ function readCameraParams() {
   try { return JSON.parse(localStorage.getItem("dance-camera-params") || "null"); } catch { return null; }
 }
 
+// ---------------------------------------------------------------------------
+// 火柴人骨架显示开关(后台 /settings「摄像头」里的复选框,key = dance-camera-stick)
+// 只影响"画不画骨架"这一层显示:识别、跟跳、评分走的是同一条数据管线,关掉完全不影响。
+// 未设置过 = 显示(保持老现场行为)。
+// ---------------------------------------------------------------------------
+const CAMERA_STICK_KEY = "dance-camera-stick";
+function stickFigureEnabled() {
+  return localStorage.getItem(CAMERA_STICK_KEY) !== "0";
+}
+
+/** 立即生效:切换骨架画布的 hidden 属性(样式见 style.css 的 #cam-stick[hidden]) */
+function applyStickFigureUI() {
+  const on = stickFigureEnabled();
+  if (dom.camStick) dom.camStick.hidden = !on;
+  return on;
+}
+
 function readModelBrightness() {
   const v = parseFloat(localStorage.getItem("dance-model-brightness"));
   return Number.isFinite(v) ? Math.max(0.2, Math.min(3, v)) : 1;
@@ -1495,10 +1703,12 @@ function readModelBrightness() {
 function startCamera() {
   if (state.stream) { state.running = true; return Promise.resolve(); }
   const boneDefs = resolveMode(state.danceType).bones;
+  // 骨架关掉时连画布都不传:省掉每帧一次清屏+绘制,把这点预算留给视频解码与渲染
+  const stickFigure = applyStickFigureUI() ? dom.camStick : null;
   setStatus("加载 MediaPipe 模型…");
   return startPoseStream({
     video: dom.cam,
-    canvas: dom.camStick,
+    canvas: stickFigure,
     mode: state.danceType,
     // 后台 /staff 选择的摄像头;为空则用默认前置
     deviceId: localStorage.getItem("dance-camera-device-id") || null,
@@ -1906,12 +2116,19 @@ async function init() {
   await loadVideoMap();
   await applyLaunchParams();
 }
+// 火柴人骨架开关:进页面就应用一次;后台改了设置(另一个标签页)也立刻跟上,不用刷新游戏页。
+applyStickFigureUI();
+window.addEventListener("storage", (e) => {
+  if (e.key === CAMERA_STICK_KEY) applyStickFigureUI();
+});
 init();
 
 // Operators can export anonymous timing metrics; no images or poses are included.
 document.getElementById("export-perf").onclick = () => {
   const report = { version: 1, createdAt: new Date().toISOString(), userAgent: navigator.userAgent,
     pose: state.stream?.perf.report() ?? null, rendering: renderPerf.report(),
+    // 视频模式现场问题单的关键证据:加载/seek/play 每一步的事件与失败原因
+    video: state.refVideoUrl || refVideoSource.entries.length ? refVideoSource.report(state.challengeDanceId) : null,
     note: "captureToResult starts at camera captureTime when available, otherwise video callback; excludes unreported sensor latency. Render submit is not display/photon latency." };
   const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
   const a = document.createElement("a"); a.href = url; a.download = "dance-performance.json"; a.click();
@@ -1922,4 +2139,4 @@ document.addEventListener("visibilitychange", () => {
     stopAll(); setStatus("页面已离开，本局已停止；返回后可重新开始");
   }
 });
-window.addEventListener("pagehide", () => stopAll());
+window.addEventListener("pagehide", () => { stopAll(); refVideoSource.clear("页面卸载"); });

@@ -17,9 +17,29 @@ function el(tag, cls, text) {
 // 摄像头扫描 / 切换:选择的 deviceId 写入 localStorage,游戏页 startCamera 读取后使用。
 // ---------------------------------------------------------------------------
 const CAMERA_KEY = "dance-camera-device-id";
+// 火柴人骨架开关:游戏页与设置页共用同一个 key。默认开(与历史行为一致)。
+// 只控制"画不画骨架"这一层显示 —— 姿态识别/跟跳评分走的是同一条数据管线,不受影响。
+const STICK_KEY = "dance-camera-stick";
 let cameraPreviewStream = null;
 
 function cameraStatus(msg) { $("camera-status").textContent = msg; }
+
+/** 读"是否显示火柴人":未设置过 = 显示(保持老现场的行为) */
+function stickVisible() { return localStorage.getItem(STICK_KEY) !== "0"; }
+
+// 开关初值 + 写回。storage 事件只在本页之外的改动里触发,
+// 所以另一个标签页改了设置时这里能立刻同步。
+{
+  const cb = $("camera-stick");
+  cb.checked = stickVisible();
+  cb.addEventListener("change", () => {
+    localStorage.setItem(STICK_KEY, cb.checked ? "1" : "0");
+    cameraStatus(cb.checked ? "已开启火柴人骨架" : "已关闭火柴人骨架（不影响识别与评分）");
+  });
+  window.addEventListener("storage", (e) => {
+    if (e.key === STICK_KEY) cb.checked = stickVisible();
+  });
+}
 
 async function requestCameraPermission() {
   // 先申请一次权限并立即释放,浏览器才会在 enumerateDevices 里返回设备标签。

@@ -419,6 +419,9 @@ html, body {
 }
 .video-side #stage { display: none; }
 .video-side #stage-bridge { display: none; }
+/* 视频模式不渲染 3D 舞台,全屏特效画布也没有内容:留一个全屏 canvas 参与合成
+   只会白白吃掉每帧的栅格化预算,和解码器抢资源(表现就是"视频突然卡住")。 */
+.video-side #fx { display: none; }
 .video-side #ref-panel { display: none; }
 .video-side::before {
   content: "";
@@ -492,6 +495,10 @@ html, body {
   background: #000;
 }
 #cam-stick { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* 骨架开关(后台「游戏设置 → 摄像头」)关掉时整个画布不参与合成。
+   必须写成 #cam-stick[hidden]:ID 选择器的优先级高于 [hidden] 的默认 display:none,
+   只写 hidden 属性是藏不住的。 */
+#cam-stick[hidden] { display: none; }
 .cam-corner {
   position: absolute; width: 22px; height: 22px;
   border: 2px solid rgba(226, 196, 112, 0.9);
@@ -1024,17 +1031,18 @@ html, body {
   left: 0;
   top: 0;
   bottom: 0;
-  width: min(44vw, 620px);
-  padding: clamp(24px, 5vh, 54px) clamp(20px, 3vw, 44px) 30px;
+  width: min(92vw, clamp(620px, 52vw, 1080px));
+  padding: clamp(24px, 5vh, 54px) clamp(22px, 3.4vw, 64px) 30px;
   flex-direction: column;
-  gap: 12px;
+  justify-content: center;
+  gap: clamp(14px, 2.6vh, 30px);
   color: #f8edca;
   background:
     repeating-linear-gradient(135deg, rgba(226,196,112,0.035) 0 2px, transparent 2px 11px),
     radial-gradient(circle at 18% 8%, rgba(223,185,94,0.12), transparent 32%),
     linear-gradient(105deg, rgba(12,11,9,0.99), rgba(7,6,5,0.975) 62%, rgba(4,3,3,0.94));
   border-right: 1px solid rgba(209,170,74,0.72);
-  box-shadow: 30px 0 80px rgba(0,0,0,0.55), 0 0 32px rgba(223,185,94,0.12), inset -1px 0 rgba(255,240,200,0.07);
+  box-shadow: inset -1px 0 rgba(255,240,200,0.07);
   backdrop-filter: blur(16px);
   transform: translateX(-105%);
   transition: transform 0.38s cubic-bezier(0.2,0.85,0.25,1);
@@ -1105,29 +1113,47 @@ html, body {
 }
 #song-pick-close:active { transform: scale(0.92); background: rgba(223,185,94,0.18); }
 #song-pick-close:focus-visible { outline: 2px solid rgba(255,222,126,0.8); outline-offset: 3px; }
-.song-pick-browser { display: grid; grid-template-columns: 34px minmax(0,1fr) 34px; align-items: center; gap: 7px; min-height: 0; flex: 1; }
+.song-pick-browser {
+  display: grid; grid-template-columns: 34px minmax(0,1fr) 34px; align-items: center; gap: 7px;
+  min-height: 0;
+  max-height: calc(100vh - 400px); /* 矮屏时卡片先让位,保证标题与「开始挑战」都在抽屉内 */
+  flex: 0 1 auto;
+}
 #song-pick-strip {
   position: relative;
   display: block;
   width: 100%;
-  height: min(44vh, 390px);
+  height: min(48vh, 620px);
   overflow: hidden;
   perspective: 1100px;
+  --sc-step: 148px; /* 卡片横向步距,由 main.js 的 layoutCards() 读取 */
 }
 #song-pick-strip .song-card {
   position: absolute;
   left: 50%; top: 50%; right: auto; bottom: auto;
-  width: clamp(154px, 16vw, 192px);
-  height: clamp(216px, 22.4vw, 269px);
+  width: clamp(168px, 12.6vw, 264px);
+  height: clamp(224px, 16.8vw, 352px);
   transform: translate(-50%, -50%);
   transform-origin: center center;
   opacity: 0.68;
   transition: transform 0.48s cubic-bezier(0.2,0.9,0.25,1.08), opacity 0.4s ease, filter 0.4s ease, border-color 0.3s, box-shadow 0.4s;
 }
 #song-pick-strip .song-card.selected { filter: saturate(1.06) brightness(1.04); }
+/* 大屏：抽屉变宽后卡片、步距、箭头一起放大，不然中间与两侧都是空的 */
+@media (min-width: 1500px) {
+  #song-pick-strip { height: min(50vh, 600px); --sc-step: 190px; }
+  #song-pick-strip .song-card {
+    width: clamp(240px, 12vw, 330px);
+    height: clamp(320px, 16vw, 440px);
+  }
+  .song-pick-browser { grid-template-columns: 44px minmax(0,1fr) 44px; gap: 12px; }
+  .song-pick-arrow { width: 44px; height: 78px; }
+  .sc-title { font-size: 24px; }
+  .sc-meta { font-size: 14px; }
+}
 .song-pick-arrow {
   position: relative;
-  width: 34px; height: 58px;
+  width: 36px; height: 64px;
   padding: 0;
   overflow: hidden;
   border: 1px solid rgba(209,170,74,0.5);
@@ -1210,7 +1236,19 @@ html, body {
       linear-gradient(0deg, rgba(4,7,16,0.45), transparent 30%);
   }
   .video-side #song-pick-title, .video-side #song-pick-open { left: 31%; }
-  #song-pick-drawer { width: min(92vw, 520px); }
+  /* 手机上抽屉直接铺满:min(92vw, 520px) 在窄屏下反而是「又窄又缩」 */
+  #song-pick-drawer { width: 100vw; padding: clamp(20px, 4vh, 40px) clamp(18px, 5vw, 34px) 24px; }
+  #song-pick-drawer::before { inset: 7px; }
+  #song-pick-drawer::after { inset: 11px; }
+}
+
+/* 矮屏(横屏手机 / 小笔记本):先压缩卡片区与间距,别把「开始挑战」顶出抽屉 */
+@media (max-height: 620px) {
+  #song-pick-drawer { padding-top: clamp(16px, 3.4vh, 30px); gap: 10px; }
+  #song-pick-strip { height: min(34vh, 216px); }
+  #song-pick-strip .song-card { width: clamp(132px, 15vw, 176px); height: clamp(180px, 21vw, 240px); }
+  .song-pick-head h2 { font-size: clamp(18px, 2vw, 26px); }
+  #song-pick-start { padding: 10px 0; font-size: 16px; }
 }
 .ready-consent {
   display: flex; align-items: center; gap: 8px;

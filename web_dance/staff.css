@@ -105,6 +105,9 @@ h1 { margin: 0; font-size: 20px; font-weight: 700; color: #111827; }
 .camera-head h2 { margin: 0; font-size: 15px; font-weight: 700; color: #111827; }
 .camera-status { font-size: 13px; color: #6b7280; }
 .camera-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* 火柴人骨架开关:与「扫描摄像头」同一行的行内 checkbox */
+.stick-toggle { margin-top: 10px; font-size: 13px; color: #374151; cursor: pointer; user-select: none; }
+.stick-toggle input { width: 16px; height: 16px; accent-color: #2563eb; cursor: pointer; }
 .camera-controls select {
   min-width: 220px; background: #ffffff; color: #1a1d24; border: 1px solid #cbd5e1;
   padding: 8px 10px; font-size: 14px; border-radius: 0; outline: none;

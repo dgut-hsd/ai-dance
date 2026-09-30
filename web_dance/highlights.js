@@ -4,8 +4,17 @@ import { selectHighlightSegments, positiveTitleFor } from './highlight-selector.
 import { highlightLayout } from './highlight-layout.js';
 import { resultCopyFor } from './result-copy.js';
 const MAX_BYTES = 512 * 1024 * 1024;
-// 9:16 竖屏短视频; 布局坐标按 720×1280 设计空间编写, 再等比放大到 1080×1920。
-const REC_W = 1080, REC_H = 1920, DESIGN_W = 720, DESIGN_H = 1280;
+// 9:16 竖屏短视频。三个尺寸各司其职,别互相混:
+//   DESIGN_W/H  布局设计空间 —— 所有绘制坐标都按它写
+//   REC_W/H     录制画布(= 设计空间)。摄像头 720p、参考视频 832×1108,录到 720×1280
+//               已经没有信息损失,再放大只是让文件更大(实测降低录制尺寸对帧率几乎无影响,
+//               因为开销在合成器重绘而不是像素数 —— 但更小的文件对上传/转码都更友好)
+//   CARD_W/H    成绩卡画布 —— 必须是 1080×1920(server/media.js 的 validPng 会校验),
+//               画完再缩放进录制画布,相当于超采样,字更干净
+// 最终成片仍是 1080×1920:由 server/media.js 的 ffmpeg scale=1080:1920 放大,片头/成绩卡也是同一处理。
+const DESIGN_W = 720, DESIGN_H = 1280;
+const REC_W = DESIGN_W, REC_H = DESIGN_H;
+const CARD_W = 1080, CARD_H = 1920;
 let dbPromise;
 function database() {
   return dbPromise ||= new Promise((resolve, reject) => {
@@ -97,8 +106,8 @@ function cardBlob(result) {
 }
 
 export class HighlightController {
-  constructor({ stage, camera, fx, getState, stageShift }) {
-    Object.assign(this, { stage, camera, fx, getState });
+  constructor({ stage, camera, fx, getState, stageShift, fxIsIdle }) {
+    Object.assign(this, { stage, camera, fx, getState, fxIsIdle });
     // pk 分屏录制时舞台画面把舞者推到右侧;stageShift 返回需要回正的水平比例(0 表示无需回正)。
     this.stageShift = stageShift || (() => 0);
     this.jobs = new Map(); this.active = null; this.pending = 0;
@@ -158,25 +167,36 @@ export class HighlightController {
       return null;
     }
     job.status = 'uploading'; this.jobs.set(job.id, job);
+    // 先把任务写进 IndexedDB:这一段之后才开始占用画布/编码器,
+    // 中途失败或被刷新打断时,"续传"依赖的就是这条记录(必须早于创建画布)。
     await this.persist(job).catch(() => {});
     const canvas = document.createElement('canvas'); canvas.width = REC_W; canvas.height = REC_H;
-    // A detached canvas has no render surface, so captureStream emits no frames.
-    // Keep it in the document but invisible (in-viewport + opacity:0) so the
-    // compositor keeps painting it in both headed and headless Chrome.
+    // 录制画布放哪里:实测(1080×1920、同一台机器、中位数)
+    // 脱离文档更快 —— 放在文档里时它每帧都要被合成器整张重绘一次,而这块画面本来就看不见:
+    //   in-DOM   :46.0 fps / 1029 kbps
+    //   detached :54.0 fps / 1251 kbps   (+17% 帧率,+22% 编码产出)
+    // 代价是"脱离文档可能不产帧"这个真实存在的浏览器行为差异,所以不硬切:
+    //   - 不支持 requestFrame → 直接留在文档里(老路:靠合成器绘制);
+    //   - 支持但推帧抛错且 1.2 秒无任何数据 → 看门狗挂回文档(见 ensureRecordingOutput)。
     Object.assign(canvas.style, { position: 'fixed', left: '0', top: '0', width: `${REC_W}px`, height: `${REC_H}px`,
       opacity: '0', pointerEvents: 'none', zIndex: '-1' });
-    document.body.appendChild(canvas);
     const stream = canvas.captureStream(60);
     let audio;
     try {
       audio = engine.createRecordingTap();
       for (const track of audio.stream.getAudioTracks()) stream.addTrack(track);
       const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000, audioBitsPerSecond: 160000 });
-      const active = { job, canvas, ctx: canvas.getContext('2d'), recorder, stream, audio,
-        videoTrack: stream.getVideoTracks()[0],
+      const videoTrack = stream.getVideoTracks()[0];
+      const canPushFrames = typeof videoTrack?.requestFrame === 'function';
+      if (!canPushFrames) document.body.appendChild(canvas); // 不能推帧:只能依赖合成器绘制
+      const active = { job, canvas, ctx: canvas.getContext('2d'), recorder, stream, audio, videoTrack,
+        detached: canPushFrames, pushWorked: false,
         chunks: [], samples: [], markers: [], bytes: 0, lastDraw: -Infinity, lastSample: -1, started: null };
       recorder.ondataavailable = e => {
-        if (e.data.size) { active.chunks.push(e.data); active.bytes += e.data.size; }
+        if (e.data.size) {
+          active.chunks.push(e.data); active.bytes += e.data.size;
+          active.firstChunkAt ??= performance.now();
+        }
         if (active.bytes > MAX_BYTES && this.active === active) this.abort();
       };
       recorder.onerror = () => this.abort();
@@ -192,6 +212,12 @@ export class HighlightController {
   start() {
     const a = this.active; if (!a) return;
     a.started = performance.now(); a.recorder.start(1000);
+    // 兜底:如果这一局里推帧一次都没成功过(旧版浏览器),第一秒后仍然把画布挂回文档。
+    // 只要推帧成功过,这里就不会动它 —— 让更快的脱离文档路径保住。
+    a.watchdog = setInterval(() => {
+      if (a.pushWorked || a.firstChunkAt) { clearInterval(a.watchdog); return; }
+      this.ensureRecordingOutput(a, { pushFailed: true });
+    }, 1000);
   }
   markJudge(marker) {
     const a = this.active;
@@ -228,18 +254,44 @@ export class HighlightController {
       ctx.restore();
       ctx.strokeStyle = 'rgba(255,215,109,.72)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, p.radius); ctx.stroke();
-      // 特效叠加
-      ctx.drawImage(this.fx, 0, 0, DESIGN_W, DESIGN_H);
+      // 特效叠加。fx 绝大多数帧是空的,而它和录制画布几乎 1:1(1080×1920),
+      // 把一张全屏空画布混进来是这一层最贵的固定开销之一 —— 静止时直接跳过。
+      // 传入的 fxIsIdle 在未提供时返回 false,即保持"永远合成"的老行为。
+      if (!this.fxIsIdle?.()) ctx.drawImage(this.fx, 0, 0, DESIGN_W, DESIGN_H);
       if (Math.floor(t) !== a.lastSample) {
         a.lastSample = Math.floor(t);
         a.samples.push({ t, conf: s.conf, acc: s.acc, combo: s.combo, tier: s.tier || '' });
       }
-      // Headless/compositor-less contexts never repaint the canvas, so captureStream
-      // would otherwise emit no video frames and MediaRecorder no data at all.
-      try { a.videoTrack?.requestFrame(); } catch { /* capture already stopped */ }
+      // 主动推帧:本帧是否被浏览器接受,是"这张画布还在正常产出"的直接证据。
+      // 抛错(取样已停止/不被支持)才值得怀疑,交给 ensureRecordingOutput 判断。
+      try { a.videoTrack?.requestFrame(); a.pushWorked = true; }
+      catch { this.ensureRecordingOutput(a, { pushFailed: true }); }
     } catch { this.abort(); }
   }
-  release(a) { a.audio.disconnect(); a.stream.getTracks().forEach(t => t.stop()); a.canvas.remove(); }
+
+  /**
+   * 录制健康看门狗:只有拿到"推帧这条路走不通"的证据才把画布挂回文档。
+   *
+   * 判据刻意收得很紧 —— 首发分片晚到(实测健康录制也可能到 ~1.9s)绝不能算失败,
+   * 否则会把本来更快的脱离文档路径误降级:
+   *   - 能力判据(构造时):没有 requestFrame → 直接留在文档里,不走这条路;
+   *   - 失败判据(推帧抛错 + 1.2 秒内确实一个分片都没有)→ 挂回文档重试。
+   * 判断一次就定论,不反复抖动。
+   */
+  ensureRecordingOutput(a, { pushFailed = false } = {}) {
+    if (!a || a.started == null) return;                 // 还没开始录
+    if (a.firstChunkAt) return;                          // 有数据产出,健康
+    if (!a.detached) return;                             // 已经挂回文档了
+    if (!pushFailed) return;                             // 没有失败证据,不动它
+    if (performance.now() - a.started < 1200) return;    // 给第一片数据留出时间
+    a.detached = false;
+    document.body.appendChild(a.canvas);
+    console.warn('[highlight] 推帧失败且无数据产出,录制画布已挂回文档重试');
+  }
+  release(a) {
+    clearInterval(a.watchdog);
+    a.audio.disconnect(); a.stream.getTracks().forEach(t => t.stop()); a.canvas.remove();
+  }
   abort() {
     const a = this.active; if (!a) return;
     this.active = null;

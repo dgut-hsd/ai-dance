@@ -12,26 +12,6 @@
       "mode": "3d"
     },
     {
-      "id": "salsa",
-      "label": "Salsa Dancing",
-      "danceId": "salsa",
-      "defaultSongId": "samba-demo",
-      "chartFile": "salsa.chart.json",
-      "musicFile": "samba-demo.wav",
-      "fbxFile": "salsa.fbx",
-      "mode": "3d"
-    },
-    {
-      "id": "demo-arena-loop",
-      "label": "合成示例舞",
-      "danceId": "demo-arena-loop",
-      "defaultSongId": "demo-arena-loop",
-      "chartFile": "demo-arena-loop.chart.json",
-      "musicFile": "demo-beat.wav",
-      "fbxFile": null,
-      "mode": "3d"
-    },
-    {
       "id": "copydance1",
       "label": "风萧萧雨萧萧",
       "danceId": "copydance1",
@@ -63,12 +43,6 @@
     }
   ],
   "songs": [
-    {
-      "id": "demo-arena-loop",
-      "label": "合成示例舞",
-      "file": "demo-beat.wav",
-      "bpm": 120
-    },
     {
       "id": "copydance1",
       "label": "Copy Dance 1",

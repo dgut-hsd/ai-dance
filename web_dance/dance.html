@@ -67,8 +67,10 @@
         <div id="progress"><div id="progress-fill"></div></div>
       </div>
 
-      <!-- 右侧:参考视频(3:4 MP4,视频模式替换 3D 教练) -->
-      <video id="ref-video" class="hidden" playsinline muted loop></video>
+      <!-- 右侧:参考视频(3:4 MP4,视频模式替换 3D 教练)
+           preload=auto:选曲阶段就开始缓冲,正式开局不用等首帧(现场"视频突然不动"的常见成因) -->
+      <video id="ref-video" class="hidden" playsinline muted loop preload="auto"
+             disablepictureinpicture disableremoteplayback></video>
 
       <!-- 底部控制条(工作人员调试用,默认隐藏) -->
       <div id="controls" class="hidden">
@@ -214,8 +216,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+          "three": "./vendor/three.module.min.js",
+          "three/addons/": "./vendor/three-addons/"
         }
       }
     </script>

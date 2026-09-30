@@ -84,6 +84,10 @@
       <select id="camera-select" title="选择游戏页使用的摄像头"></select>
       <button id="camera-preview-toggle" class="btn ghost">预览</button>
     </div>
+    <label class="camera-controls stick-toggle">
+      <input id="camera-stick" type="checkbox" checked>
+      <span>显示火柴人骨架（游戏页摄像头画面上的白色骨架）</span>
+    </label>
     <div id="camera-preview-wrap" class="camera-preview-wrap hidden">
       <video id="camera-preview" autoplay playsinline muted></video>
     </div>
@@ -95,7 +99,7 @@
       <div id="camera-params-controls" class="camera-params-controls"></div>
       <p id="camera-params-status" class="camera-hint"></p>
     </div>
-    <p class="camera-hint">选择后，游戏页点击「开始」将使用该摄像头；选「默认」则用前置摄像头。点「预览」后可调节 USB 相机参数。</p>
+    <p class="camera-hint">选择后，游戏页点击「开始」将使用该摄像头；选「默认」则用前置摄像头。点「预览」后可调节 USB 相机参数。火柴人骨架只影响画面显示，关掉不影响跟跳识别与评分；对正在进行的那一局，从下一局开始生效。</p>
   </section>
 
   <script type="module" src="/web_dance/settings.js"></script>

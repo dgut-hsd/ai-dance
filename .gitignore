@@ -41,3 +41,8 @@ videos/.posters/
 # 走查记录(本地归档)
 作品工坊实操走查记录_*.docx
 make_walkthrough_doc.py
+
+#摆摊物资
+摆摊物资/
+摆摊物资.zip
+作品工坊使用手册.docx
