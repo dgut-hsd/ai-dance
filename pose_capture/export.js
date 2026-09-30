@@ -20,6 +20,17 @@ import { PoseSmoother, HandSmoother } from "./filters.js";
 import { RootMotionTracker } from "./root-motion.js";
 import { computeDimensions } from "./playback.js";
 
+// fps 必须由帧自身的 PTS 跨度推导,不能用 video.duration:
+// duration 是容器标称值,而 requestVideoFrameCallback 只回调解码器实际呈现的帧。
+// 抖音这类 VFR 转码常丢帧,两者不一致时按 duration 算会把 fps 算小,
+// 令下游 refFrameIdx = round(t * fps) 整体前移(实测可偏 3s+)。
+function deriveFps(frames) {
+  if (frames.length < 2) return 30;
+  const span = frames[frames.length - 1].t - frames[0].t;
+  if (!(span > 1e-6)) return 30;
+  return Math.round((frames.length - 1) / span);
+}
+
 export async function exportVideoToSequence({
   file,
   onProgress = () => {},
@@ -169,7 +180,7 @@ export async function exportVideoToSequence({
     schema: "dance-sequence/v1",
     danceId: file.name.replace(/\.[^.]+$/, ""),
     meta: {
-      fps: frames.length > 1 ? Math.round((frames.length - 1) / duration) : 30,
+      fps: deriveFps(frames),
       durationSec: +duration.toFixed(3),
       numFrames: frames.length,
       boneCount: m.bones.length,

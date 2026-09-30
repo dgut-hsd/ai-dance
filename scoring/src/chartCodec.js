@@ -58,6 +58,23 @@ function clampIdx(idx, len) {
   return Math.min(len - 1, Math.max(0, idx));
 }
 
+// 帧下标不能靠 t*fps 反推:抽帧间隔未必均匀(VFR 转码、解码丢帧都会让实际 PTS
+// 偏离标称帧率),按标量算出的下标会随时间线性漂移(实测可达数秒)。
+// 帧自带 t,直接找时间最近的那一帧。
+export function nearestFrameIdx(frames, t) {
+  if (!Array.isArray(frames) || frames.length === 0) return 0;
+  let best = 0;
+  let bestD = Math.abs(frames[0].t - t);
+  for (let i = 1; i < frames.length; i++) {
+    const d = Math.abs(frames[i].t - t);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 export function parseChart(sequence, chart) {
   const src = chart ?? sequence?.chart ?? null;
   if (!src) return [];
@@ -70,7 +87,6 @@ export function parseChart(sequence, chart) {
   if (!Array.isArray(frames) || frames.length === 0) {
     err("参考序列 frames 为空,无法解析谱面");
   }
-  const fps = sequence.meta?.fps || 30;
   const globalWindow = src.judgeWindow ?? DEFAULT_WINDOW;
   const globalDifficulty = src.difficulty ?? sequence.meta?.difficulty ?? 2;
   const events = [];
@@ -83,10 +99,9 @@ export function parseChart(sequence, chart) {
       console.warn(`[chartCodec] note#${i}(t=${note.t}) gesture 型跳过:引擎暂无手部模型`);
       return;
     }
-    const idx = clampIdx(
-      Number.isInteger(note.refFrameIdx) ? note.refFrameIdx : Math.round(note.t * fps),
-      frames.length
-    );
+    const idx = Number.isInteger(note.refFrameIdx)
+      ? clampIdx(note.refFrameIdx, frames.length)
+      : nearestFrameIdx(frames, note.t);
     const frame = frames[idx];
     events.push({
       t: note.t,
@@ -142,7 +157,6 @@ function attachWeights(note, event, candidate) {
 
 export function serializeChart(events, opts = {}) {
   const seq = opts.seq;
-  const fps = opts.fps ?? seq?.meta?.fps ?? 30;
   const candidate = opts.boneWeights ?? DEFAULT_BONE_WEIGHTS;
   const globalDifficulty = opts.difficulty ?? seq?.meta?.difficulty ?? 2;
   const notes = events.map((e) => {
@@ -150,7 +164,9 @@ export function serializeChart(events, opts = {}) {
       id: e.moveId,
       t: +e.t.toFixed(3),
       type: e.noteType ?? "pose",
-      refFrameIdx: e.refFrameIdx ?? (Number.isFinite(e.targetT) ? Math.round(e.targetT * fps) : undefined),
+      refFrameIdx: e.refFrameIdx ?? (Number.isFinite(e.targetT) && seq?.frames
+        ? nearestFrameIdx(seq.frames, e.targetT)
+        : undefined),
       difficulty: e.difficulty && Math.abs(e.difficulty - globalDifficulty) > 1e-9 ? e.difficulty : undefined,
       window: e.window ? { early: e.window.early, late: e.window.late } : undefined
     });

@@ -213,7 +213,14 @@ test("坑1 已修复: 任何时刻的标签都指向「下一个待做动作」,
 });
 
 test("坑1 数据核查: 曲库三支舞的首个动作都在 t=0(修复前后行为一致,不会改变现有手感)", () => {
+  // 作品工坊里铺点的新舞曲可以故意留前奏(songs/dance 前 3s 是给玩家的缓冲,
+  // 开局不该就进判定),那种歌走 beforeFirst 分支是预期行为。所以"首个动作在 0"
+  // 只对下面这几支断言 —— 否则每加一支带前奏的新舞曲都会误报。
+  const NO_LEAD_IN = new Set([
+    "hiphop", "salsa", "demo-arena-loop", "copydance1", "dance3-mixamo", "dance1-video",
+  ]);
   for (const { id, seq } of songs()) {
+    if (!NO_LEAD_IN.has(id.split("/")[0])) continue;
     const t0 = seq.chart.notes[0].t;
     assert.equal(t0, 0, `${id} 首个音符 t=${t0}`);
     const events = parseChart(seq, seq.chart);
@@ -226,8 +233,45 @@ test("坑1 数据核查: 曲库三支舞的首个动作都在 t=0(修复前后�
 });
 
 // ---------------------------------------------------------------------------
-// 4. 坑2:标签文字 = 谱面 note.id(机器串)
+// 参考帧寻址不变量:判定音符的时间必须落在它所绑定的那一帧上
 // ---------------------------------------------------------------------------
+
+test("不变量: 每个判定音符的参考帧时间与 note.t 相差 <= 0.05s", () => {
+  // 这条守的是「帧下标怎么算」。帧自带 t,按 t 找最近帧即可;
+  // 一旦有人用 t*fps 反推下标,遇到抽帧不均匀的序列(视频工坊导入的 VFR 源)
+  // 下标会随时间线性漂移 —— songs/dance 曾整体偏早 3.2s,中位 2.0s,
+  // 玩家等于在跟三秒前的姿态比对,但运行时没有任何异常,只能靠肉眼看分数不对。
+  // 阈值 0.05s:现有曲库实测最大 0.0333s(末音符越界钳位所致),留约 50% 余量。
+  const TOLERANCE_SEC = 0.05;
+  for (const { id, seq } of songs()) {
+    for (const e of parseChart(seq, seq.chart)) {
+      const frame = seq.frames[e.refFrameIdx];
+      assert.ok(frame, `${id}: t=${e.t} 的 refFrameIdx=${e.refFrameIdx} 越界`);
+      const drift = Math.abs(e.t - frame.t);
+      assert.ok(
+        drift <= TOLERANCE_SEC,
+        `${id}: t=${e.t} 的参考帧在 ${frame.t.toFixed(3)}s,偏 ${drift.toFixed(3)}s —— ` +
+        `refFrameIdx 绑错了帧(阈值 ${TOLERANCE_SEC}s)`,
+      );
+    }
+  }
+});
+
+test("不变量: 无 refFrameIdx 的谱面按最近帧解析,不按 t*fps 反推", () => {
+  // 抽帧不均匀的序列:meta.fps 是个骗人的标量,只有帧自己的 t 可信。
+  const frames = [
+    { t: 0, bones: ["a0"] },
+    { t: 0.033, bones: ["a1"] },
+    { t: 0.067, bones: ["a2"] },
+    { t: 0.5, bones: ["b0"] },   // 这里丢了一堆帧,间隔 0.43s
+    { t: 0.533, bones: ["b1"] },
+  ];
+  const seq = { frames, meta: { fps: 30 } };
+  const chart = { version: "chart/v2", notes: [{ t: 0.52 }] };
+  // t*fps 反推会得到 round(0.52*30)=16 -> 越界;按 t 查最近帧应命中 t=0.533
+  assert.equal(parseChart(seq, chart)[0].refFrameIdx, 4);
+  assert.equal(parseChart(seq, chart)[0].targetBones[0], "b1");
+});
 
 test("坑2(确认): 标签文字就是 note.id;缺 id 时回退成 type-下标(不是人类可读动作名)", () => {
   const seq = makeReference(STANDARD_BEATS, "unit", 30);

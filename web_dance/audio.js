@@ -14,6 +14,22 @@
 // ---------------------------------------------------------------------------
 const clamp = (x, lo, hi) => (x < lo ? lo : x > hi ? hi : x);
 
+// 帧自带 t,按时间找最近的一帧:抽帧间隔未必均匀(VFR、丢帧),
+// 用 t*fps 反推下标会随时间线性漂移。
+function nearestFrameIdx(frames, t) {
+  if (!frames?.length) return -1;
+  let best = 0;
+  let bestD = Math.abs(frames[0].t - t);
+  for (let i = 1; i < frames.length; i++) {
+    const d = Math.abs(frames[i].t - t);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 // 升序 number 数组中「最后一个 <= x」的下标;无则 -1(二分)
 function lowerBoundIdx(arr, x) {
   let lo = 0, hi = arr.length - 1, ans = -1;
@@ -749,11 +765,12 @@ export class SongSession {
 
     if (this.sequence.chart) {
       this.chart = new NoteChart(this.sequence.chart, durationSec);
-      const fps = meta.fps || 30;
       const frames = this.sequence.frames || [];
       const refAt = (t, note) => {
-        const idx = note?.refFrameIdx != null ? note.refFrameIdx : Math.round(t * fps);
-        return frames[clamp(idx, 0, frames.length - 1)] ?? null;
+        const idx = note?.refFrameIdx != null
+          ? clamp(note.refFrameIdx, 0, frames.length - 1)
+          : nearestFrameIdx(frames, t);
+        return frames[idx] ?? null;
       };
       if (this.enableJudge) this.judge = new NoteJudge(this.sequence.chart, this.similarity, {
         latency: this.latency,
