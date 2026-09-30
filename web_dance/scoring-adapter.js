@@ -22,7 +22,7 @@ const JUDGE_BANDS = [
 ];
 // eventScorer 的 minPoseScore 缺省 0.55:姿态分被跨源/遮挡压到 0.55 以下会静默判 miss。
 const MIN_POSE_SCORE = 0.4;
-const gradeFor = (value) => value >= .9 ? "S" : value >= .8 ? "A" : value >= .7 ? "B" : value >= .6 ? "C" : "D";
+const gradeFor = (value) => value >= .85 ? "S" : value >= .65 ? "A" : value >= .5 ? "B" : value >= .4 ? "C" : "D";
 export class ScoringAdapter {
   constructor(sequence) {
     this.seq = sequence;
@@ -134,7 +134,7 @@ export class ScoringAdapter {
     }
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     const mult = 1 + Math.min(this.combo, 50) * 0.01;
-    const addend = Math.round(r.eventScore * 100 * mult * (TIER_MULT[tier] ?? 0));
+    const addend = Math.round(r.eventScore * 100000 * mult * (TIER_MULT[tier] ?? 0));
     this.score += addend;
     this.lastTier = tier;
     this.tallies[r.grade] = (this.tallies[r.grade] ?? 0) + 1;

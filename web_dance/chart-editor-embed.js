@@ -137,7 +137,9 @@ export async function mountChartEditorEmbed(container, { draftId = null, onSaved
   container.appendChild(style);
   container.insertAdjacentHTML("beforeend", HTML);
   // 先注入结构,再 import:chart-editor.js 的模块顶层会绑定各按钮事件(靠 id 找元素)
-  const { mountChartEditor } = await import("./chart-editor.js");
+  // 版本号必须带:static 挂载没发 Cache-Control,浏览器会走启发式缓存(文件年龄的 10%),
+  // 改完 chart-editor.js 不动这个 ?v= 就会继续跑旧代码(内嵌模式尤其容易踩)。
+  const { mountChartEditor } = await import("./chart-editor.js?v=20260930d");
   await mountChartEditor(container, { draftId, onSaved });
   return container;
 }

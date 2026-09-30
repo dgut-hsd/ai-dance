@@ -6,7 +6,7 @@ import { parseChart, serializeChart } from "../scoring/src/chartCodec.js";
 import { DEFAULT_BONE_WEIGHTS, BONE_DEFS } from "../scoring/src/schema.js";
 import { wavPeaks } from "./wav-peaks.js";
 // 判定轨道预览:与游戏页共用同一套"计划 → DOM"实现,保证所见即所得
-import { beatDurFor, planPoseLaneFrame } from "./pose-lane.js";
+import { planPoseLaneFrame } from "./pose-lane.js";
 import { createLaneView } from "./lane-view.js";
 import { buildLaneFigure } from "./lane-figure.js";
 import { laneAssetFor, loadLaneManifest } from "./lane-assets.js";
@@ -161,8 +161,12 @@ function setSeq(seq, key, notesOverride) {
   $("bpm").value = state.bpm;
   $("offset").value = state.offset;
   const draft = loadDraft();
-  if (draft && draft.key === key && draft.notes) {
-    state.notes = draft.notes;
+  if (draft && draft.key === key && (draft.notes || Number.isFinite(draft.offset))) {
+    if (draft.notes) state.notes = draft.notes;
+    if (Number.isFinite(draft.bpm)) state.bpm = draft.bpm;
+    if (Number.isFinite(draft.offset)) state.offset = draft.offset;
+    $("bpm").value = state.bpm;
+    $("offset").value = state.offset;
     $("info").textContent = "已恢复草稿（点「放弃草稿」回到音符起点）";
   }
   fitWindow();
@@ -182,7 +186,8 @@ function loadDraft() {
 }
 function saveDraft() {
   if (!state.sourceKey) return;
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ key: state.sourceKey, notes: state.notes })); } catch { /* noop */ }
+  // bpm/offset 一起存:原来只存 notes,重开页面时这两项又回到序列里的旧值/0
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ key: state.sourceKey, notes: state.notes, bpm: state.bpm, offset: state.offset })); } catch { /* noop */ }
 }
 
 // ---- 姿态预览 ---------------------------------------------------------------
@@ -224,7 +229,8 @@ function renderLanePreview() {
     events: previewEvents(),
     t: state.playhead,
     trackW: $("judge-track")?.clientWidth || 0,
-    beatDur: beatDurFor(state.seq),
+    // 拍长跟编辑器上的 BPM 走(而不是序列里那份旧的),否则改完 BPM 网格变了、轨道律动还是老拍长
+    beatDur: 60 / Math.max(1, state.bpm),
     trackedKeys: laneView.trackedKeys(),
     arrivedKeys: laneView.arrivedKeys(),
     hasSource: true,
@@ -488,6 +494,9 @@ function bindTimeline() {
   const TIMELINE = $("timeline");
   TIMELINE.addEventListener("pointerdown", (e) => {
     if (!state.seq) return;
+    // 只认左键:右键/中键会带着原生 contextmenu 一起来,若也走这里就会先起一次"选中+拖拽",
+    // 而右键真正的意图是删除 —— 选中+拖拽这套副作用跟着一次误删一起发生,手感就是"点一下跳一下"。
+    if (e.button !== 0) return;
     const rect = TIMELINE.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const t = tFromEvent(e);
@@ -561,35 +570,63 @@ window.addEventListener("pointerup", () => {
 
 // ---- 音符操作 ----------------------------------------------------------------
 
+/**
+ * 执行 fn,并锁住时间轴的横向视野。
+ *
+ * 判定点的增/删/选都只该改"点本身"(列表高亮 + 属性面板 + 轴上的高亮块),
+ * 绝不该把用户正在看的位置拽走。scrollLeft 的唯一写点是 setPlayhead,而它每次都会把
+ * 目标时刻顶到左侧那根钉死的播放头上 —— 于是一条 20s 的轴能被横向拽走几百像素;
+ * 浏览器在内容尺寸变化时也会自行夹取 scrollLeft,且 scroll 事件是异步的,一并兜住。
+ */
+function keepingView(fn) {
+  const scroll = $("timelineScroll");
+  const keepLeft = scroll.scrollLeft;
+  try {
+    fn();
+  } finally {
+    if (scroll.scrollLeft !== keepLeft) scroll.scrollLeft = keepLeft;
+  }
+}
+
 function addNote(t) {
-  const n = { id: `动作 ${state.notes.length + 1}`, t: +t.toFixed(3), type: "pose",
-    difficulty: state.seq?.meta?.difficulty ?? 2, window: null, bones: null };
-  state.notes.push(n);
-  selectNote(state.notes.length - 1);   // 选中 → 播放头跳过去 → 卡片预览立刻展示它
-  saveDraft();
-  redraw();
-  renderNoteList();
-  renderProps();
+  keepingView(() => {
+    const n = { id: `动作 ${state.notes.length + 1}`, t: +t.toFixed(3), type: "pose",
+      difficulty: state.seq?.meta?.difficulty ?? 2, window: null, bones: null };
+    state.notes.push(n);
+    // 只选中,不挪播放头:用户本来就在盯着这一块,跳过去等于把整条轴从手里抽走。
+    // 列表和属性面板照样选中它;轨道预览跟播放头走,那才是它该有的语义。
+    state.sel = state.notes.length - 1;
+    saveDraft();
+    redraw();
+    renderNoteList();
+    renderProps();
+    renderLanePreview();   // 预览的取点来自 state.notes,加点后要重排
+  });
 }
 
 function selectNote(i) {
-  state.sel = i;
-  const n = state.notes[i];
-  if (n) setPlayhead(n.t);   // 点判定点就跳到它的时刻,姿势/卡片预览跟着它
-  renderNoteList();
-  renderProps();
-  redraw();
+  // 选中不挪播放头。播放头是钉在左边那条线上的,它的时刻就等于滚动位置(scroll 事件里
+  // state.playhead = scrollLeft / PX_PER_SEC),所以"把播放头移到判定点"和"把时间轴拽过去"
+  // 根本是同一个操作,没法只要一个。选中只改列表高亮和属性面板,想看姿态就自己拖播放头。
+  keepingView(() => {
+    state.sel = i;
+    renderNoteList();
+    renderProps();
+    redraw();
+  });
 }
 
 function deleteNote(i) {
-  state.notes.splice(i, 1);
-  if (state.sel >= state.notes.length) state.sel = state.notes.length - 1;
-  if (state.sel === i) state.sel = -1;
-  saveDraft();
-  redraw();
-  renderNoteList();
-  renderProps();
-  renderLanePreview();
+  keepingView(() => {
+    state.notes.splice(i, 1);
+    if (state.sel >= state.notes.length) state.sel = state.notes.length - 1;
+    if (state.sel === i) state.sel = -1;
+    saveDraft();
+    redraw();
+    renderNoteList();
+    renderProps();
+    renderLanePreview();
+  });
 }
 
 function fillEveryN(step) {
@@ -671,6 +708,13 @@ function renderProps() {
     };
     bonesBox.appendChild(btn);
   }
+  // 选中不动播放头(见 selectNote),所以"想看这个点的姿态"要有个明确的显式入口,
+  // 否则就只剩拖播放头一条路。做成按钮而不是双击:双击在时间轴上容易和拖动/框选撞车。
+  const jump = document.createElement("button");
+  jump.textContent = "跳到该点 ▶";
+  jump.title = "把播放头移到这个判定点的时刻(选中判定点本身不会动)";
+  jump.onclick = () => setPlayhead(n.t);
+  box.appendChild(jump);
   const del = document.createElement("button");
   del.textContent = "删除此判定点";
   del.style.marginTop = "8px";
@@ -927,6 +971,25 @@ function audioFileName() {
   return audio.startsWith(base) ? audio.slice(base.length) : audio;
 }
 
+/**
+ * 编辑器上的 BPM/偏移 → 序列 meta.timing(timing/v1)。
+ *
+ * 保存时必须写回,否则重开编辑器 offset 又从 0 起判(音画错位,判定点全偏)。
+ * tempoMap[0].bpm 跟着一起改:游戏端 TimingMap 用 tempoMap 算拍间距、用 offsetSec 定起点
+ * (web_dance/audio.js),只改 bpm 会让编辑器网格和游戏拍栅格对不上。
+ */
+function timingFor(bpm, offsetSec) {
+  const t = state.seq?.meta?.timing || {};
+  const base = Array.isArray(t.tempoMap) && t.tempoMap.length ? t.tempoMap : [{ t: 0, bpm }];
+  return {
+    ...t,
+    version: t.version || "timing/v1",
+    bpm,
+    offsetSec,
+    tempoMap: base.map((p, i) => (i === 0 ? { ...p, bpm } : p)),
+  };
+}
+
 function chartContent() {
   const seq = state.seq;
   const events = state.notes.map((n) => ({
@@ -976,7 +1039,7 @@ function bindSave() {
     btn.disabled = true; btn.textContent = "保存中…";
     try {
       const headers = { ...deviceHeaders(), "Content-Type": "text/plain" };
-      const merged = { ...state.seq, chart: content };
+      const merged = { ...state.seq, chart: content, meta: { ...state.seq.meta, timing: timingFor(state.bpm, state.offset) } };
       const r1 = await fetch(`/api/drafts/${state.draftId}/sequence`, { method: "PUT", headers, body: JSON.stringify(merged) });
       if (!r1.ok) throw new Error(`保存序列失败 (${r1.status})`);
       const r2 = await fetch(`/api/drafts/${state.draftId}/chart`, { method: "PUT", headers, body: JSON.stringify(content) });
@@ -1010,7 +1073,7 @@ function bindSave() {
     const token = created.ownerToken;
     if (state.folder.fbx) await putRaw(`/api/songs/${danceId}/fbx`, state.folder.fbx, token);
     if (state.folder.audio) await putRaw(`/api/songs/${danceId}/audio`, state.folder.audio, token);
-    const merged = { ...state.seq, chart: content, meta: { ...state.seq.meta, audio: audioFileName() } };
+    const merged = { ...state.seq, chart: content, meta: { ...state.seq.meta, audio: audioFileName(), timing: timingFor(state.bpm, state.offset) } };
     await putRaw(`/api/songs/${danceId}/chart`, new Blob([JSON.stringify(merged, null, 2)], { type: "text/plain" }), token);
     await apiJson(`/api/songs/${danceId}/complete`, "POST", {}, token);
     await reloadSongIndex();
@@ -1039,6 +1102,11 @@ $("btnReset").onclick = () => {
   localStorage.removeItem(DRAFT_KEY);
   state.notes = copyNotes(state.baseNotes);
   state.sel = -1;
+  // BPM/偏移也回到载入时序列里的值(草稿里那两个字段一起被丢弃了)
+  state.bpm = state.seq?.meta?.timing?.bpm ?? state.seq?.meta?.bpm ?? 120;
+  state.offset = state.seq?.meta?.timing?.offsetSec ?? 0;
+  $("bpm").value = state.bpm;
+  $("offset").value = state.offset;
   redraw();
   renderNoteList();
   renderProps();
@@ -1049,6 +1117,7 @@ $("btnReset").onclick = () => {
   ["bpm", "offset"].forEach((id) => $(id).addEventListener("change", () => {
     state.bpm = Math.max(20, Number($("bpm").value) || 120);
     state.offset = Number($("offset").value) || 0;
+    saveDraft();
     redraw();
     drawPose();
     renderLanePreview();   // 拍长变了 → 平台律动也跟着变
