@@ -1682,10 +1682,10 @@ function drawAccRing(acc) {
 }
 
 function gradeFor(avg) {
-  if (avg >= 0.9) return "S";
-  if (avg >= 0.8) return "A";
-  if (avg >= 0.7) return "B";
-  if (avg >= 0.6) return "C";
+  if (avg >= 0.85) return "S";
+  if (avg >= 0.65) return "A";
+  if (avg >= 0.5) return "B";
+  if (avg >= 0.4) return "C";
   return "D";
 }
 
