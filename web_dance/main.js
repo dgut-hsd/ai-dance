@@ -18,6 +18,8 @@ import { loadAvatar, DEFAULT_MODEL, detectExt, realignRetargeter } from "./avata
 import { createCoachGrounding } from "./coach-grounding.js";
 import { recenterSequenceTravel } from "./root-travel.js";
 import { ScoringAdapter } from "./scoring-adapter.js";
+import { postScoringLog } from "./scoring-log.js";
+import { loadConfig as loadScoringConfig, gradeFor as gradeForShared, STORAGE_KEY as SCORING_KEY } from "./scoring-config.js";
 import { SongSession, AudioEngine } from "./audio.js";
 import { Sfx } from "./sfx.js";
 import { SampleHitSound, HitSound } from "./hitsound.js";
@@ -73,6 +75,15 @@ const state = {
   refVideoUrl: null,         // 当前 <video id=ref-video> 的 src,避免重复加载
   refVideoWanted: false,     // 本局"右侧应该在放视频":看门狗据此判断该不该在播
 };
+
+// HUD 用的评级线缓存:设置页改评分旋钮时,由 storage 事件刷新并热更新进行中的对局。
+let scoringCfg = loadScoringConfig();
+window.addEventListener("storage", (e) => {
+  if (e.key !== SCORING_KEY) return;
+  scoringCfg = loadScoringConfig();
+  // 已结算的事件不回溯,只影响此后 ingest/advance 的判定。
+  state.challenge?.scorer?.applyConfig?.(scoringCfg);
+});
 
 const $ = (id) => document.getElementById(id);
 const dom = {
@@ -2258,11 +2269,8 @@ function drawAccRing(acc) {
 }
 
 function gradeFor(avg) {
-  if (avg >= 0.85) return "S";
-  if (avg >= 0.65) return "A";
-  if (avg >= 0.5) return "B";
-  if (avg >= 0.4) return "C";
-  return "D";
+  // 评级线走设置页旋钮(实时可调),与结算 gradeFor 同源。
+  return gradeForShared(avg, scoringCfg);
 }
 
 function resetScoreHUD() {
@@ -2382,6 +2390,15 @@ async function finishChallenge() {
   if (!ch || !ch.running) return;
   ch.running = false;
   const r = ch.scorer.finalize();
+  // 评分监测:每帧 acc/conf/perBone 落盘到服务端,供分析评级/得分规则(静默,不阻塞结算)。
+  if (r.log) {
+    r.log.context = {
+      dance: state.challengeDanceId, song: state.challengeSongId,
+      mode: state.mode, fps: ch.seq?.meta?.fps ?? null,
+    };
+    void postScoringLog(r.log);
+    delete r.log;
+  }
   showResult(r);
   const replayReady = highlights.finish(r);
   stopAll({ keepCamera: true });

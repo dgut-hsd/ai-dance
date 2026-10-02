@@ -53,7 +53,12 @@ function scoreEvent(event, best, opts) {
   const completeness = frameCompleteness(weights, best.conf);
   const inWindow = Math.abs(deltaT) <= windowEdge && best.poseScore >= (opts.minPoseScore ?? 0.55) && completeness >= (opts.minCompleteness ?? 0.5);
   const timingGrade = gradeOf(deltaT, opts.bands, windowEdge);
-  const poseGrade = best.poseScore >= .8 ? "perfect" : best.poseScore >= .65 ? "great" : "good";
+  // 姿态档位线可配(opts 缺省保持 .8/.65,行为与旧版一致)。
+  // 取大者作 perfect、小者作 great:旋钮完全独立,用户可能把两条线拖反,
+  // 不归一化的话其中一档会永不可达。
+  const poseGreatLine = Math.min(opts.poseGreat ?? 0.65, opts.posePerfect ?? 0.8);
+  const posePerfectLine = Math.max(opts.poseGreat ?? 0.65, opts.posePerfect ?? 0.8);
+  const poseGrade = best.poseScore >= posePerfectLine ? "perfect" : best.poseScore >= poseGreatLine ? "great" : "good";
   const ranks = ["miss", "good", "great", "perfect"];
   const grade = ranks[Math.min(ranks.indexOf(timingGrade), ranks.indexOf(poseGrade))];
   const timing = opts.timingFn === "exponential" ? expTimingValue(deltaT, opts.timingSigma ?? 0.2) : timingValue(deltaT, opts.bands, windowEdge);

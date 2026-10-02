@@ -19,6 +19,8 @@ class ScoringEngine {
       refYaw: opts.refYaw ?? 0,
       minPoseScore: opts.minPoseScore,
       minCompleteness: opts.minCompleteness,
+      posePerfect: opts.posePerfect,
+      poseGreat: opts.poseGreat,
       weights: opts.weights
     };
     this.pending = events.map((event) => ({

@@ -128,6 +128,18 @@
     <p class="camera-hint">选择后，游戏页点击「开始」将使用该摄像头；选「默认」则用前置摄像头。点「预览」后可调节 USB 相机参数。火柴人骨架只影响画面显示，关掉不影响跟跳识别与评分；对正在进行的那一局，从下一局开始生效。视频模式下左侧摄像头预览是第二路实时视频，关掉可显著省显卡（实测帧率约 +50%），识别与评分不受影响。</p>
   </section>
 
+  <section class="scoring-panel">
+    <div class="camera-head">
+      <h2>评分规则</h2>
+      <span id="scoring-status" class="camera-status"></span>
+    </div>
+    <p class="camera-hint">实时生效:改完直接开始下一局,正在进行的对局也会热更新(评级/得分档立即改,采样窗下一帧起算)。用于现场调「组员普遍落 D」这类手感问题。</p>
+    <div id="scoring-knobs" class="scoring-knobs"></div>
+    <div class="camera-controls scoring-actions">
+      <button id="scoring-reset" class="btn ghost">恢复默认</button>
+    </div>
+  </section>
+
   <script type="module" src="/web_dance/settings.js"></script>
 </body>
 </html>
